@@ -1,22 +1,35 @@
 openapi: 3.1.0
 info:
-  # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: My Skins API specification
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: auth
+    description: Authentication operations
+  - name: projects
+    description: Project management
+  - name: ai
+    description: AI generation features
+  - name: exports
+    description: Export operations
+  - name: roblox
+    description: Roblox integration
+  - name: share
+    description: Sharing features
+  - name: dashboard
+    description: Dashboard aggregates
+
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,6 +37,394 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /auth/me:
+    get:
+      operationId: getMe
+      tags: [auth]
+      summary: Get current user
+      responses:
+        "200":
+          description: Current user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /auth/logout:
+    post:
+      operationId: logout
+      tags: [auth]
+      summary: Log out current user
+      responses:
+        "200":
+          description: Logged out
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  /auth/profile:
+    patch:
+      operationId: updateProfile
+      tags: [auth]
+      summary: Update user profile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateProfileRequest"
+      responses:
+        "200":
+          description: Updated user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+
+  /projects:
+    get:
+      operationId: getProjects
+      tags: [projects]
+      summary: List user's projects
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: number
+        - name: limit
+          in: query
+          schema:
+            type: number
+        - name: type
+          in: query
+          schema:
+            type: string
+            enum: [shirt, pants]
+      responses:
+        "200":
+          description: List of projects
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectList"
+    post:
+      operationId: createProject
+      tags: [projects]
+      summary: Create a new project
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateProjectRequest"
+      responses:
+        "201":
+          description: Created project
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+
+  /projects/{id}:
+    get:
+      operationId: getProject
+      tags: [projects]
+      summary: Get a specific project
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Project
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    patch:
+      operationId: updateProject
+      tags: [projects]
+      summary: Update a project
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateProjectRequest"
+      responses:
+        "200":
+          description: Updated project
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+    delete:
+      operationId: deleteProject
+      tags: [projects]
+      summary: Delete a project
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  /projects/{id}/duplicate:
+    post:
+      operationId: duplicateProject
+      tags: [projects]
+      summary: Duplicate a project
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "201":
+          description: Duplicated project
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+
+  /projects/{id}/canvas:
+    put:
+      operationId: saveCanvas
+      tags: [projects]
+      summary: Save canvas state for a project
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SaveCanvasRequest"
+      responses:
+        "200":
+          description: Saved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  /dashboard/summary:
+    get:
+      operationId: getDashboardSummary
+      tags: [dashboard]
+      summary: Get dashboard summary stats
+      responses:
+        "200":
+          description: Dashboard summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardSummary"
+
+  /dashboard/recent:
+    get:
+      operationId: getRecentProjects
+      tags: [dashboard]
+      summary: Get recent projects for dashboard
+      responses:
+        "200":
+          description: Recent projects
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Project"
+
+  /ai/generate:
+    post:
+      operationId: generateAiDesign
+      tags: [ai]
+      summary: Generate design idea from prompt
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AiGenerateRequest"
+      responses:
+        "200":
+          description: AI generation result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiGenerateResponse"
+
+  /ai/palette:
+    post:
+      operationId: generateColorPalette
+      tags: [ai]
+      summary: Generate color palette from prompt
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AiPaletteRequest"
+      responses:
+        "200":
+          description: Color palette
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiPaletteResponse"
+
+  /ai/history:
+    get:
+      operationId: getAiHistory
+      tags: [ai]
+      summary: Get AI generation history
+      responses:
+        "200":
+          description: AI generation history
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AiGeneration"
+
+  /exports:
+    post:
+      operationId: createExport
+      tags: [exports]
+      summary: Export a project as PNG
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateExportRequest"
+      responses:
+        "200":
+          description: Export result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExportResult"
+    get:
+      operationId: getExports
+      tags: [exports]
+      summary: Get export history
+      responses:
+        "200":
+          description: Export history
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ExportResult"
+
+  /roblox/connect:
+    get:
+      operationId: getRobloxConnection
+      tags: [roblox]
+      summary: Get Roblox connection status
+      responses:
+        "200":
+          description: Roblox connection status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RobloxConnection"
+
+  /roblox/disconnect:
+    delete:
+      operationId: disconnectRoblox
+      tags: [roblox]
+      summary: Disconnect Roblox account
+      responses:
+        "200":
+          description: Disconnected
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  /share:
+    post:
+      operationId: createShareLink
+      tags: [share]
+      summary: Create a share link for a project
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateShareRequest"
+      responses:
+        "201":
+          description: Share link
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ShareLink"
+
+  /share/{token}:
+    get:
+      operationId: getSharedProject
+      tags: [share]
+      summary: Get a shared project by token
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Shared project
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SharedProjectView"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
 components:
   schemas:
     HealthStatus:
@@ -34,3 +435,372 @@ components:
       required:
         - status
 
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+        message:
+          type: string
+      required:
+        - error
+
+    SuccessResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
+      required:
+        - success
+
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+        email:
+          type: string
+        username:
+          type: string
+        displayName:
+          type: string
+        avatarUrl:
+          type: string
+        language:
+          type: string
+        timezone:
+          type: string
+        plan:
+          type: string
+          enum: [free, pro]
+        aiCredits:
+          type: number
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - email
+        - plan
+        - aiCredits
+        - createdAt
+
+    UpdateProfileRequest:
+      type: object
+      properties:
+        displayName:
+          type: string
+        language:
+          type: string
+        timezone:
+          type: string
+
+    Project:
+      type: object
+      properties:
+        id:
+          type: string
+        userId:
+          type: string
+        title:
+          type: string
+        type:
+          type: string
+          enum: [shirt, pants]
+        thumbnailUrl:
+          type: string
+        canvasData:
+          type: string
+        isPublic:
+          type: boolean
+        isAiGenerated:
+          type: boolean
+        tags:
+          type: array
+          items:
+            type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - userId
+        - title
+        - type
+        - isPublic
+        - isAiGenerated
+        - createdAt
+        - updatedAt
+
+    ProjectList:
+      type: object
+      properties:
+        projects:
+          type: array
+          items:
+            $ref: "#/components/schemas/Project"
+        total:
+          type: number
+        page:
+          type: number
+        limit:
+          type: number
+      required:
+        - projects
+        - total
+        - page
+        - limit
+
+    CreateProjectRequest:
+      type: object
+      properties:
+        title:
+          type: string
+        type:
+          type: string
+          enum: [shirt, pants]
+        isAiGenerated:
+          type: boolean
+      required:
+        - title
+        - type
+
+    UpdateProjectRequest:
+      type: object
+      properties:
+        title:
+          type: string
+        isPublic:
+          type: boolean
+        tags:
+          type: array
+          items:
+            type: string
+
+    SaveCanvasRequest:
+      type: object
+      properties:
+        canvasData:
+          type: string
+        thumbnailUrl:
+          type: string
+      required:
+        - canvasData
+
+    DashboardSummary:
+      type: object
+      properties:
+        totalProjects:
+          type: number
+        shirtProjects:
+          type: number
+        pantsProjects:
+          type: number
+        totalExports:
+          type: number
+        aiGenerations:
+          type: number
+        robloxConnected:
+          type: boolean
+      required:
+        - totalProjects
+        - shirtProjects
+        - pantsProjects
+        - totalExports
+        - aiGenerations
+        - robloxConnected
+
+    AiGenerateRequest:
+      type: object
+      properties:
+        prompt:
+          type: string
+        type:
+          type: string
+          enum: [shirt, pants]
+        style:
+          type: string
+        language:
+          type: string
+      required:
+        - prompt
+        - type
+
+    AiGenerateResponse:
+      type: object
+      properties:
+        id:
+          type: string
+        prompt:
+          type: string
+        result:
+          type: string
+        suggestedTitle:
+          type: string
+        suggestedTags:
+          type: array
+          items:
+            type: string
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - prompt
+        - result
+        - createdAt
+
+    AiPaletteRequest:
+      type: object
+      properties:
+        prompt:
+          type: string
+        style:
+          type: string
+      required:
+        - prompt
+
+    AiPaletteResponse:
+      type: object
+      properties:
+        colors:
+          type: array
+          items:
+            type: string
+        name:
+          type: string
+        description:
+          type: string
+      required:
+        - colors
+        - name
+
+    AiGeneration:
+      type: object
+      properties:
+        id:
+          type: string
+        prompt:
+          type: string
+        result:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - prompt
+        - result
+        - createdAt
+
+    CreateExportRequest:
+      type: object
+      properties:
+        projectId:
+          type: string
+        format:
+          type: string
+          enum: [png]
+        quality:
+          type: string
+          enum: [standard, high]
+      required:
+        - projectId
+        - format
+
+    ExportResult:
+      type: object
+      properties:
+        id:
+          type: string
+        projectId:
+          type: string
+        url:
+          type: string
+        format:
+          type: string
+        size:
+          type: number
+        width:
+          type: number
+        height:
+          type: number
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - projectId
+        - format
+        - createdAt
+
+    RobloxConnection:
+      type: object
+      properties:
+        connected:
+          type: boolean
+        robloxUserId:
+          type: string
+        robloxUsername:
+          type: string
+        connectedAt:
+          type: string
+          format: date-time
+      required:
+        - connected
+
+    CreateShareRequest:
+      type: object
+      properties:
+        projectId:
+          type: string
+        isPublic:
+          type: boolean
+      required:
+        - projectId
+
+    ShareLink:
+      type: object
+      properties:
+        id:
+          type: string
+        token:
+          type: string
+        projectId:
+          type: string
+        isPublic:
+          type: boolean
+        url:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - token
+        - projectId
+        - isPublic
+        - createdAt
+
+    SharedProjectView:
+      type: object
+      properties:
+        project:
+          $ref: "#/components/schemas/Project"
+        author:
+          type: object
+          properties:
+            displayName:
+              type: string
+            username:
+              type: string
+          required:
+            - displayName
+      required:
+        - project
+        - author

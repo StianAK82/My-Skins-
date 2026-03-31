@@ -1,0 +1,385 @@
+Build a full production-ready web app in Replit called “My Skins”.
+
+CORE IDEA
+My Skins is a global Roblox clothing creation platform where users can design, preview, and export Roblox skins (starting with classic shirts and pants), with built-in AI tools and Roblox integration.
+
+This must be built as a GLOBAL product from day one:
+- multilingual support
+- timezone handling
+- scalable architecture
+- privacy-ready system
+
+Focus MVP on Roblox classic clothing first (shirts + pants).
+
+--------------------------------------------------
+
+BRAND
+Name: My Skins  
+Style: modern, dark, gaming + creator aesthetic  
+Colors: black / dark gray base, electric blue accents, white text  
+Feel: premium, simple, fast, creator-first  
+
+--------------------------------------------------
+
+TECH STACK
+
+Frontend:
+- Next.js (App Router)
+- TypeScript (strict)
+- Tailwind CSS
+- shadcn/ui
+
+State:
+- Zustand
+
+Canvas editor:
+- Fabric.js (preferred for layered editing)
+
+3D preview:
+- react-three-fiber + drei
+
+Backend:
+- Next.js API routes / server actions
+
+Database:
+- PostgreSQL + Prisma
+
+Image processing:
+- Sharp
+
+Validation:
+- Zod
+
+AI:
+- OpenAI API
+
+Storage:
+- abstraction layer (local + future cloud-ready)
+
+--------------------------------------------------
+
+ARCHITECTURE
+
+Clean structure:
+- app/
+- components/
+- features/
+  - editor/
+  - ai/
+  - projects/
+  - roblox/
+  - auth/
+  - i18n/
+- lib/
+- prisma/
+
+Requirements:
+- modular code
+- reusable services
+- error handling
+- loading states
+- empty states
+- toast system
+- responsive layout
+
+--------------------------------------------------
+
+INTERNATIONALIZATION (CRITICAL)
+
+This app MUST support global users.
+
+Requirements:
+- no hardcoded UI text
+- all text in translation files
+- default language: English
+- include example locales:
+  - en
+  - no
+  - es
+
+Features:
+- language switcher (navbar + settings)
+- save user language preference
+- support longer translated text
+
+Localization:
+- format dates, numbers, currency based on locale
+- store timestamps in UTC
+- display in user timezone
+
+AI:
+- AI responds in selected language
+- user can choose output language
+
+Compliance-ready:
+- GDPR-ready structure
+- cookie consent hook
+- data deletion flow
+- data export flow
+
+--------------------------------------------------
+
+MAIN FEATURES
+
+1. LANDING PAGE
+- hero
+- CTA: Start Designing
+- features
+- how it works
+- FAQ
+- footer
+- login button
+
+--------------------------------------------------
+
+2. AUTH
+- email login (basic)
+- Roblox login (structure ready)
+- user session system
+- profile page
+
+--------------------------------------------------
+
+3. DASHBOARD
+- recent projects
+- create shirt
+- create pants
+- AI generate
+- Roblox connection status
+
+--------------------------------------------------
+
+4. TEMPLATE SYSTEM
+
+Templates:
+- Roblox Shirt
+- Roblox Pants
+
+Features:
+- guides overlay
+- safe zones
+- lock template layer
+- correct proportions
+
+--------------------------------------------------
+
+5. EDITOR (CORE FEATURE)
+
+Must feel like a real tool (like Canva/Customuse)
+
+Features:
+- layers panel
+- add image
+- add text
+- shapes
+- brush + eraser
+- color picker
+- gradients
+- transform tools
+- opacity
+- reorder layers
+- rename layer
+- hide/show
+- lock
+- undo/redo
+- zoom + pan
+- grid toggle
+- template toggle
+- autosave
+
+UI layout:
+- left: tools/assets/AI
+- right: properties
+- top: save/export/preview
+
+--------------------------------------------------
+
+6. AI FEATURES
+
+Integrate OpenAI:
+
+Tools:
+- generate design idea from prompt
+- suggest styles (streetwear, anime, cyber, etc.)
+- color palette generator
+- design improvement suggestions
+- generate title + description
+
+Rules:
+- AI must not take unsafe actions
+- include moderation-safe prompts
+- mark AI-generated content
+
+--------------------------------------------------
+
+7. IMAGE UPLOADS
+
+- drag & drop
+- resize/rotate
+- auto layer creation
+- background remover (hook ready)
+
+--------------------------------------------------
+
+8. PREVIEW SYSTEM
+
+- 2D preview
+- Roblox-style avatar preview
+- apply texture to model
+
+--------------------------------------------------
+
+9. PROJECT SYSTEM
+
+Users can:
+- create
+- save
+- rename
+- duplicate
+- delete
+
+Database models:
+- User
+- Project
+- Asset
+- Export
+- RobloxConnection
+- AIGeneration
+
+--------------------------------------------------
+
+10. EXPORT SYSTEM
+
+- export PNG (Roblox-ready)
+- validate size/format
+- export history
+
+--------------------------------------------------
+
+11. ROBLOX INTEGRATION
+
+Build full architecture:
+
+Features:
+- connect Roblox account (OAuth structure)
+- token handling
+- upload draft UI
+- publish flow UI
+- status tracking
+
+Important:
+- minimal permissions
+- no unsafe automation
+- use mock if needed but build full system
+
+--------------------------------------------------
+
+12. SHARE SYSTEM
+
+- share link
+- public/private toggle
+- preview page
+
+--------------------------------------------------
+
+13. MODERATION
+
+- report content
+- flag system
+- moderation-ready structure
+
+--------------------------------------------------
+
+14. BILLING (PREPARED)
+
+- free plan
+- pro plan
+- AI credits system (structure only)
+
+--------------------------------------------------
+
+DATABASE (PRISMA)
+
+Include:
+- users
+- projects
+- assets
+- exports
+- roblox connections
+- ai logs
+- share links
+
+--------------------------------------------------
+
+API
+
+Create endpoints for:
+- auth
+- project CRUD
+- AI
+- export
+- Roblox
+- share
+
+Use Zod validation
+
+--------------------------------------------------
+
+ENV
+
+Create .env.example with:
+- DATABASE_URL
+- OPENAI_API_KEY
+- ROBLOX_CLIENT_ID
+- ROBLOX_CLIENT_SECRET
+- NEXTAUTH_SECRET
+
+--------------------------------------------------
+
+README
+
+Include:
+- setup
+- env config
+- how to add languages
+- Roblox setup
+- AI setup
+- roadmap
+
+--------------------------------------------------
+
+MVP PRIORITY
+
+1. landing
+2. auth
+3. dashboard
+4. editor
+5. save/load
+6. export
+7. AI
+8. Roblox UI
+9. preview
+
+--------------------------------------------------
+
+FINAL REQUIREMENTS
+
+- App name must be “My Skins”
+- must run in Replit
+- must be clean and scalable
+- must feel premium
+- must support global users
+- must integrate AI properly
+- must be ready for Roblox API
+
+--------------------------------------------------
+
+OUTPUT
+
+- full codebase
+- working MVP
+- clear structure
+- mark mocked features
+- setup instructions
+
+Start building now.
