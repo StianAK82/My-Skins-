@@ -1,0 +1,176 @@
+Enhance the existing app “My Skins” by adding full AI functionality using OpenAI.
+
+GOAL
+Integrate AI deeply into the product so users can generate Roblox clothing ideas, improve designs, and create content directly inside the editor.
+
+This must feel like a real creator tool (similar to Canva + AI), not just a chatbot.
+
+--------------------------------------------------
+
+TECH REQUIREMENTS
+
+- Use OpenAI API
+- Use server-side API routes (Next.js)
+- Never expose API key in frontend
+- Use environment variable: OPENAI_API_KEY
+- Handle errors and loading states properly
+
+--------------------------------------------------
+
+AI FEATURES TO BUILD
+
+1. DESIGN IDEA GENERATOR
+
+Users can type a prompt like:
+“black hoodie with flames”
+
+AI returns:
+- detailed design idea
+- style suggestions
+- color palette suggestions
+
+Backend route:
+POST /api/ai/generate-idea
+
+--------------------------------------------------
+
+2. TITLE + DESCRIPTION GENERATOR
+
+Generate Roblox marketplace content:
+
+Input:
+- design idea
+
+Output:
+- title
+- description
+- tags
+
+Route:
+POST /api/ai/generate-listing
+
+--------------------------------------------------
+
+3. DESIGN IMPROVEMENT TOOL
+
+User submits description of their design
+
+AI returns:
+- suggestions to improve
+- style upgrades
+- color fixes
+
+Route:
+POST /api/ai/improve
+
+--------------------------------------------------
+
+4. STYLE PRESETS
+
+Add quick buttons:
+- Streetwear
+- Anime
+- Cyberpunk
+- Y2K
+- Minimal
+- Fantasy
+
+Each sends predefined prompts to AI
+
+--------------------------------------------------
+
+5. AI PANEL IN EDITOR
+
+Add a new panel in the editor UI:
+
+Left sidebar tab:
+👉 “AI”
+
+Inside:
+- prompt input
+- generate button
+- result display
+- “Use this idea” button
+
+--------------------------------------------------
+
+6. LANGUAGE SUPPORT
+
+AI must:
+- respond in user's selected language
+- default English
+- support future multi-language
+
+--------------------------------------------------
+
+7. API IMPLEMENTATION
+
+Create these routes:
+
+/api/ai/generate-idea
+/api/ai/generate-listing
+/api/ai/improve
+
+Use OpenAI like this:
+
+- model: gpt-4.1
+- structured prompts
+- return clean JSON
+
+Example:
+
+{
+  idea: "...",
+  colors: ["..."],
+  style: "...",
+}
+
+--------------------------------------------------
+
+8. ERROR HANDLING
+
+- show loading spinner
+- show error messages
+- handle missing API key
+
+--------------------------------------------------
+
+9. UI REQUIREMENTS
+
+- modern dark UI
+- clean input box
+- card-style output
+- copy button
+- apply button
+
+--------------------------------------------------
+
+10. FUTURE READY
+
+Prepare system for:
+- image generation
+- texture generation
+- auto layer insertion into editor
+
+--------------------------------------------------
+
+IMPORTANT RULES
+
+- Do NOT build a simple chat
+- AI must feel like a design assistant
+- Keep responses structured
+- Keep code modular
+- Separate AI logic into /features/ai
+
+--------------------------------------------------
+
+OUTPUT
+
+- full working AI integration
+- backend + frontend
+- clean UI panel
+- working endpoints
+- example prompts
+- loading + error states
+
+Start implementing now.

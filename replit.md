@@ -1,8 +1,8 @@
-# Workspace
+# My Skins — Roblox Clothing Creator Platform
 
 ## Overview
 
-pnpm workspace monorepo using TypeScript. Each package manages its own dependencies.
+Full-production Roblox clothing creation platform. pnpm workspace monorepo with TypeScript. Users can design Roblox shirts/pants with a Fabric.js canvas editor, AI design tools (powered by OpenAI via Replit AI Integrations), color palette generation, project management, export to PNG, and share links. Dark gaming aesthetic. Auth via Replit OIDC.
 
 ## Stack
 
@@ -12,9 +12,13 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 - **TypeScript version**: 5.9
 - **API framework**: Express 5
 - **Database**: PostgreSQL + Drizzle ORM
-- **Validation**: Zod (`zod/v4`), `drizzle-zod`
+- **Validation**: Zod, `drizzle-zod`
 - **API codegen**: Orval (from OpenAPI spec)
 - **Build**: esbuild (CJS bundle)
+- **Frontend**: React + Vite, Fabric.js (canvas), Zustand, TanStack Query, Tailwind CSS, shadcn/ui
+- **AI**: OpenAI gpt-5.2 via Replit AI Integrations (no external API key needed)
+- **Auth**: Replit OIDC (openid-client + session cookies + PostgreSQL sessions)
+- **i18n**: EN / NO / ES
 
 ## Structure
 
