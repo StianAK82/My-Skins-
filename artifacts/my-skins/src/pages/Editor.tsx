@@ -224,6 +224,56 @@ export default function Editor() {
   const saveCanvas = useSaveCanvas();
   const createExport = useCreateExport();
 
+  // These must be declared BEFORE the canvas useEffect that depends on them
+  const handleUseColors = useCallback((colors: string[]) => {
+    if (colors[0]) setFillColor(colors[0]);
+    if (colors[1]) setStrokeColor(colors[1]);
+    toast({ title: language === "no" ? "Farger brukt!" : "Colors applied!" });
+  }, [toast, language]);
+
+  const addTemplateGuideLayer = useCallback(() => {
+    if (!fabricRef.current) return;
+    const canvas = fabricRef.current;
+    const type = (project?.type as "shirt" | "pants") ?? "shirt";
+    const zones = TEMPLATE_ZONES[type];
+
+    canvas.getObjects().forEach((obj) => {
+      if ((obj.data as { role?: string } | undefined)?.role === "template-guide") {
+        canvas.remove(obj);
+      }
+    });
+
+    (Object.values(zones) as TemplateZone[]).forEach((zone) => {
+      const frame = new fabric.Rect({
+        left: zone.left,
+        top: zone.top,
+        width: zone.width,
+        height: zone.height,
+        fill: "rgba(59, 130, 246, 0.06)",
+        stroke: "rgba(59, 130, 246, 0.4)",
+        strokeWidth: 1,
+        selectable: false,
+        evented: false,
+        data: { role: "template-guide" },
+      });
+
+      const label = new fabric.Text(zone.label, {
+        left: zone.left + 6,
+        top: zone.top + 6,
+        fontSize: 10,
+        fill: "rgba(59, 130, 246, 0.8)",
+        selectable: false,
+        evented: false,
+        data: { role: "template-guide" },
+      });
+
+      canvas.add(frame);
+      canvas.add(label);
+      canvas.sendObjectToBack(label);
+      canvas.sendObjectToBack(frame);
+    });
+  }, [project?.type]);
+
   // Initialize Canvas
   useEffect(() => {
     if (!canvasRef.current || !project) return;
@@ -388,54 +438,6 @@ export default function Editor() {
     reader.readAsDataURL(file);
     e.target.value = "";
   };
-
-  const handleUseColors = useCallback((colors: string[]) => {
-    if (colors[0]) setFillColor(colors[0]);
-    if (colors[1]) setStrokeColor(colors[1]);
-    toast({ title: language === "no" ? "Farger brukt!" : "Colors applied!" });
-  }, [toast, language]);
-
-  const addTemplateGuideLayer = useCallback(() => {
-    if (!fabricRef.current) return;
-    const canvas = fabricRef.current;
-    const type = (project?.type as "shirt" | "pants") ?? "shirt";
-    const zones = TEMPLATE_ZONES[type];
-
-    canvas.getObjects().forEach((obj) => {
-      if ((obj.data as { role?: string } | undefined)?.role === "template-guide") {
-        canvas.remove(obj);
-      }
-    });
-
-    (Object.values(zones) as TemplateZone[]).forEach((zone) => {
-      const frame = new fabric.Rect({
-        left: zone.left,
-        top: zone.top,
-        width: zone.width,
-        height: zone.height,
-        fill: "rgba(59, 130, 246, 0.06)",
-        stroke: "rgba(59, 130, 246, 0.4)",
-        strokeWidth: 1,
-        selectable: false,
-        evented: false,
-        data: { role: "template-guide" },
-      });
-
-      const label = new fabric.Text(zone.label, {
-        left: zone.left + 6,
-        top: zone.top + 6,
-        fontSize: 10,
-        fill: "rgba(59, 130, 246, 0.8)",
-        selectable: false,
-        evented: false,
-        data: { role: "template-guide" },
-      });
-
-      canvas.add(frame, label);
-      frame.sendToBack();
-      label.sendToBack();
-    });
-  }, [project?.type]);
 
   const addImageToZone = useCallback(async (source: string, zone: TemplateZone) => {
     if (!fabricRef.current) return;
