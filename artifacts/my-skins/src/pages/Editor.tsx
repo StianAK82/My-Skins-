@@ -200,8 +200,9 @@ export default function Editor() {
   useEffect(() => {
     if (!canvasRef.current || !project) return;
 
-    const width = project.type === "shirt" ? 1024 : 585;
-    const height = project.type === "shirt" ? 512 : 559;
+    // Roblox classic clothing template = 585×559 for BOTH shirt and pants
+    const width = 585;
+    const height = 559;
 
     const canvas = new fabric.Canvas(canvasRef.current, {
       width,

@@ -15,277 +15,246 @@ const STYLE_PRESETS: Record<string, string> = {
 };
 
 const ITEM_TYPE_MAP: Record<string, { robloxType: "shirt" | "pants"; label: string }> = {
-  shirt: { robloxType: "shirt", label: "classic shirt" },
-  pants: { robloxType: "pants", label: "classic pants" },
-  hoodie: { robloxType: "shirt", label: "hoodie" },
-  jacket: { robloxType: "shirt", label: "jacket" },
-  uniform: { robloxType: "shirt", label: "uniform" },
-  tshirt: { robloxType: "shirt", label: "t-shirt" },
-  suit: { robloxType: "shirt", label: "suit" },
-  vest: { robloxType: "shirt", label: "vest" },
+  shirt:   { robloxType: "shirt",  label: "classic shirt" },
+  pants:   { robloxType: "pants",  label: "classic pants" },
+  hoodie:  { robloxType: "shirt",  label: "hoodie" },
+  jacket:  { robloxType: "shirt",  label: "jacket" },
+  uniform: { robloxType: "shirt",  label: "uniform" },
+  tshirt:  { robloxType: "shirt",  label: "t-shirt" },
+  suit:    { robloxType: "shirt",  label: "suit" },
+  vest:    { robloxType: "shirt",  label: "vest" },
 };
 
 function getLanguageInstruction(language?: string): string {
   const map: Record<string, string> = {
-    no: "Respond entirely in Norwegian (Bokmål).",
-    es: "Respond entirely in Spanish.",
+    no: "All text fields (title, concept, description, etc.) must be in Norwegian (Bokmål). Only displayText must be exact as the user wrote it (usually in English for Roblox).",
+    es: "All text fields must be in Spanish. Only displayText must be exact as the user wrote it.",
   };
   return map[language ?? ""] ?? "Respond in English.";
 }
 
-function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
-  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-  return result ? {
-    r: parseInt(result[1], 16),
-    g: parseInt(result[2], 16),
-    b: parseInt(result[3], 16),
-  } : null;
-}
-
 function luminance(hex: string): number {
-  const rgb = hexToRgb(hex);
-  if (!rgb) return 0.5;
-  return (0.299 * rgb.r + 0.587 * rgb.g + 0.114 * rgb.b) / 255;
+  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+  if (!result) return 0.5;
+  const r = parseInt(result[1], 16);
+  const g = parseInt(result[2], 16);
+  const b = parseInt(result[3], 16);
+  return (0.299 * r + 0.587 * g + 0.114 * b) / 255;
 }
 
 function contrastText(bg: string): string {
-  return luminance(bg) > 0.5 ? "#1a1a1a" : "#ffffff";
+  return luminance(bg) > 0.55 ? "#111111" : "#ffffff";
 }
 
-function makeUuid() { return randomUUID(); }
+interface AiConcept {
+  title?: string;
+  displayText?: string;
+  textStyle?: string;
+  concept?: string;
+  description?: string;
+  mood?: string;
+  style?: string;
+  primaryColor?: string;
+  backgroundColor?: string;
+  colors?: Array<{ hex: string; name: string; role?: string }>;
+  keyElements?: string[];
+  designTips?: string[];
+  suggestedTags?: string[];
+}
 
-function buildShirtCanvas(
-  title: string,
-  colors: Array<{ hex: string; name: string; role?: string }>,
-  primaryColor: string,
-  bgColor: string,
+/**
+ * Roblox classic clothing template = 585×559 px for BOTH shirt and pants.
+ * This is the official template size required for avatar wearability.
+ */
+const ROBLOX_W = 585;
+const ROBLOX_H = 559;
+
+function buildCanvas(
+  concept: AiConcept,
+  originalPrompt: string,
+  itemType: "shirt" | "pants",
 ): object {
-  const W = 1024;
-  const H = 512;
+  const W = ROBLOX_W;
+  const H = ROBLOX_H;
+
+  const colors = concept.colors ?? [];
+  const bg      = concept.backgroundColor ?? "#1a1a2e";
+  const primary = concept.primaryColor ?? colors[0]?.hex ?? "#3b82f6";
   const accent1 = colors[1]?.hex ?? "#ffffff";
-  const accent2 = colors[2]?.hex ?? primaryColor;
+  const accent2 = colors[2]?.hex ?? primary;
   const accent3 = colors[3]?.hex ?? accent1;
 
-  const objects: object[] = [
-    // Full background
-    {
-      type: "rect",
-      version: "6.0.0",
-      originX: "left", originY: "top",
-      left: 0, top: 0,
-      width: W, height: H,
-      fill: bgColor,
-      stroke: null, strokeWidth: 0,
-      opacity: 1, selectable: false, evented: false,
-    },
-    // Top horizontal stripe
-    {
-      type: "rect",
-      version: "6.0.0",
-      originX: "left", originY: "top",
-      left: 0, top: 0,
-      width: W, height: 48,
-      fill: primaryColor,
-      stroke: null, strokeWidth: 0,
-      opacity: 1,
-    },
-    // Left vertical bar
-    {
-      type: "rect",
-      version: "6.0.0",
-      originX: "left", originY: "top",
-      left: 0, top: 48,
-      width: 64, height: H - 48,
-      fill: primaryColor,
-      stroke: null, strokeWidth: 0,
-      opacity: 0.85,
-    },
-    // Right vertical bar
-    {
-      type: "rect",
-      version: "6.0.0",
-      originX: "left", originY: "top",
-      left: W - 64, top: 48,
-      width: 64, height: H - 48,
-      fill: primaryColor,
-      stroke: null, strokeWidth: 0,
-      opacity: 0.85,
-    },
-    // Center accent rectangle
-    {
-      type: "rect",
-      version: "6.0.0",
-      originX: "center", originY: "center",
-      left: W / 2, top: H / 2 + 20,
-      width: 340, height: 120,
-      fill: accent1,
-      stroke: accent2, strokeWidth: 3,
-      rx: 8, ry: 8,
-      opacity: 0.9,
-    },
-    // Bottom stripe
-    {
-      type: "rect",
-      version: "6.0.0",
-      originX: "left", originY: "top",
-      left: 0, top: H - 36,
-      width: W, height: 36,
-      fill: accent2,
-      stroke: null, strokeWidth: 0,
-      opacity: 0.9,
-    },
-    // Accent dot left
-    {
-      type: "circle",
-      version: "6.0.0",
-      originX: "center", originY: "center",
-      left: 130, top: H / 2 + 20,
-      radius: 36,
-      fill: accent3,
-      stroke: accent1, strokeWidth: 2,
-      opacity: 0.8,
-    },
-    // Accent dot right
-    {
-      type: "circle",
-      version: "6.0.0",
-      originX: "center", originY: "center",
-      left: W - 130, top: H / 2 + 20,
-      radius: 36,
-      fill: accent3,
-      stroke: accent1, strokeWidth: 2,
-      opacity: 0.8,
-    },
-    // Design title text (top bar)
-    {
-      type: "i-text",
-      version: "6.0.0",
-      originX: "center", originY: "center",
-      left: W / 2, top: 24,
-      text: title.toUpperCase(),
-      fontSize: 22,
-      fontFamily: "Arial Black, Impact, sans-serif",
-      fontWeight: "bold",
-      fill: contrastText(primaryColor),
-      stroke: null, strokeWidth: 0,
-      opacity: 1,
-    },
-    // Design label in center rectangle
-    {
-      type: "i-text",
-      version: "6.0.0",
-      originX: "center", originY: "center",
-      left: W / 2, top: H / 2 + 20,
-      text: title,
-      fontSize: 20,
-      fontFamily: "Arial, Helvetica, sans-serif",
-      fontWeight: "bold",
-      fill: contrastText(accent1),
-      stroke: null, strokeWidth: 0,
-      opacity: 1,
-    },
-  ];
+  // displayText = what the user wants written on the garment, or the title
+  const rawDisplay = (concept.displayText ?? concept.title ?? originalPrompt).trim();
+  // Split into lines if multi-word (max 2 words per line)
+  const words = rawDisplay.split(/\s+/);
+  const displayText = words.length > 2
+    ? words.slice(0, Math.ceil(words.length / 2)).join(" ") + "\n" + words.slice(Math.ceil(words.length / 2)).join(" ")
+    : rawDisplay;
 
-  return {
-    version: "6.0.0",
-    objects,
-    background: bgColor,
-  };
-}
+  const textStyle = (concept.textStyle ?? "bold").toLowerCase();
+  const isGraffiti = textStyle.includes("graffiti") || textStyle.includes("street") || textStyle.includes("bold");
+  const textColor = contrastText(primary);
 
-function buildPantsCanvas(
-  title: string,
-  colors: Array<{ hex: string; name: string; role?: string }>,
-  primaryColor: string,
-  bgColor: string,
-): object {
-  const W = 585;
-  const H = 559;
-  const accent1 = colors[1]?.hex ?? "#ffffff";
-  const accent2 = colors[2]?.hex ?? primaryColor;
+  // Graffiti / bold outline style
+  const titleFontSize = rawDisplay.length <= 8 ? 80 : rawDisplay.length <= 14 ? 60 : 44;
+  const titleStrokeW  = isGraffiti ? 6 : 3;
+  const titleStroke   = isGraffiti ? accent1 : "transparent";
 
-  const objects: object[] = [
-    // Full background
-    {
-      type: "rect",
-      version: "6.0.0",
+  const objects: object[] = [];
+
+  // ── 1. Full background fill
+  objects.push({
+    type: "rect", version: "6.0.0",
+    originX: "left", originY: "top",
+    left: 0, top: 0, width: W, height: H,
+    fill: bg, stroke: null, strokeWidth: 0,
+    opacity: 1, selectable: false, evented: false,
+  });
+
+  if (itemType === "shirt") {
+    // ── 2. Chest gradient panel (front torso area)
+    objects.push({
+      type: "rect", version: "6.0.0",
       originX: "left", originY: "top",
-      left: 0, top: 0, width: W, height: H,
-      fill: bgColor,
-      stroke: null, strokeWidth: 0,
-      opacity: 1, selectable: false, evented: false,
-    },
-    // Left leg panel
-    {
-      type: "rect",
-      version: "6.0.0",
+      left: Math.floor(W * 0.08), top: Math.floor(H * 0.1),
+      width: Math.floor(W * 0.84), height: Math.floor(H * 0.55),
+      fill: primary, stroke: null, strokeWidth: 0,
+      rx: 6, ry: 6, opacity: 0.92,
+    });
+
+    // ── 3. Top collar bar
+    objects.push({
+      type: "rect", version: "6.0.0",
       originX: "left", originY: "top",
-      left: 0, top: 0, width: W / 2 - 2, height: H,
-      fill: primaryColor,
-      stroke: null, strokeWidth: 0,
-      opacity: 0.85,
-    },
-    // Right leg panel (slightly lighter)
-    {
-      type: "rect",
-      version: "6.0.0",
+      left: 0, top: 0, width: W, height: 28,
+      fill: accent2, stroke: null, strokeWidth: 0, opacity: 1,
+    });
+
+    // ── 4. Bottom hem bar
+    objects.push({
+      type: "rect", version: "6.0.0",
       originX: "left", originY: "top",
-      left: W / 2 + 2, top: 0, width: W / 2 - 2, height: H,
-      fill: primaryColor,
-      stroke: null, strokeWidth: 0,
-      opacity: 0.7,
-    },
-    // Center seam accent
-    {
-      type: "rect",
-      version: "6.0.0",
+      left: 0, top: H - 32, width: W, height: 32,
+      fill: accent2, stroke: null, strokeWidth: 0, opacity: 1,
+    });
+
+    // ── 5. Left sleeve accent
+    objects.push({
+      type: "rect", version: "6.0.0",
+      originX: "left", originY: "top",
+      left: 0, top: 28, width: Math.floor(W * 0.07), height: Math.floor(H * 0.45),
+      fill: accent3, stroke: null, strokeWidth: 0, opacity: 0.9,
+    });
+
+    // ── 6. Right sleeve accent
+    objects.push({
+      type: "rect", version: "6.0.0",
+      originX: "left", originY: "top",
+      left: W - Math.floor(W * 0.07), top: 28,
+      width: Math.floor(W * 0.07), height: Math.floor(H * 0.45),
+      fill: accent3, stroke: null, strokeWidth: 0, opacity: 0.9,
+    });
+
+    // ── 7. MAIN DISPLAY TEXT (graffiti/bold — centred on chest)
+    objects.push({
+      type: "i-text", version: "6.0.0",
+      originX: "center", originY: "center",
+      left: W / 2, top: Math.floor(H * 0.37),
+      text: displayText,
+      fontSize: titleFontSize,
+      fontFamily: "Impact, Arial Black, 'Arial Narrow', sans-serif",
+      fontWeight: "900",
+      fontStyle: "normal",
+      fill: textColor,
+      stroke: titleStroke,
+      strokeWidth: titleStrokeW,
+      paintFirst: "stroke",
+      textAlign: "center",
+      lineHeight: 1.1,
+      opacity: 1,
+    });
+
+    // ── 8. Decorative subtitle / concept line
+    if (concept.mood) {
+      objects.push({
+        type: "i-text", version: "6.0.0",
+        originX: "center", originY: "center",
+        left: W / 2, top: Math.floor(H * 0.62),
+        text: concept.mood.toUpperCase(),
+        fontSize: 16,
+        fontFamily: "Arial, sans-serif",
+        fontWeight: "bold",
+        fill: accent1,
+        stroke: null, strokeWidth: 0,
+        textAlign: "center",
+        opacity: 0.85,
+        charSpacing: 300,
+      });
+    }
+
+  } else {
+    // ── Pants layout (left + right leg panels)
+    // Left leg
+    objects.push({
+      type: "rect", version: "6.0.0",
+      originX: "left", originY: "top",
+      left: 0, top: 0, width: Math.floor(W / 2) - 2, height: H,
+      fill: primary, stroke: null, strokeWidth: 0, opacity: 0.88,
+    });
+    // Right leg
+    objects.push({
+      type: "rect", version: "6.0.0",
+      originX: "left", originY: "top",
+      left: Math.floor(W / 2) + 2, top: 0,
+      width: Math.floor(W / 2) - 2, height: H,
+      fill: primary, stroke: null, strokeWidth: 0, opacity: 0.72,
+    });
+    // Seam line
+    objects.push({
+      type: "rect", version: "6.0.0",
       originX: "center", originY: "top",
       left: W / 2, top: 0, width: 4, height: H,
-      fill: accent1,
-      stroke: null, strokeWidth: 0,
-      opacity: 0.9,
-    },
-    // Bottom accent stripe left
-    {
-      type: "rect",
-      version: "6.0.0",
+      fill: accent1, stroke: null, strokeWidth: 0, opacity: 0.9,
+    });
+    // Bottom stripe left
+    objects.push({
+      type: "rect", version: "6.0.0",
       originX: "left", originY: "top",
-      left: 0, top: H - 40, width: W / 2 - 2, height: 40,
-      fill: accent2,
-      stroke: null, strokeWidth: 0,
-      opacity: 1,
-    },
-    // Bottom accent stripe right
-    {
-      type: "rect",
-      version: "6.0.0",
+      left: 0, top: H - 44, width: Math.floor(W / 2) - 2, height: 44,
+      fill: accent2, stroke: null, strokeWidth: 0, opacity: 1,
+    });
+    // Bottom stripe right
+    objects.push({
+      type: "rect", version: "6.0.0",
       originX: "left", originY: "top",
-      left: W / 2 + 2, top: H - 40, width: W / 2 - 2, height: 40,
-      fill: accent2,
-      stroke: null, strokeWidth: 0,
-      opacity: 1,
-    },
-    // Design title text
-    {
-      type: "i-text",
-      version: "6.0.0",
+      left: Math.floor(W / 2) + 2, top: H - 44,
+      width: Math.floor(W / 2) - 2, height: 44,
+      fill: accent2, stroke: null, strokeWidth: 0, opacity: 1,
+    });
+    // Main text on left leg
+    objects.push({
+      type: "i-text", version: "6.0.0",
       originX: "center", originY: "center",
-      left: W / 4, top: H / 2,
-      text: title.split(" ").join("\n"),
-      fontSize: 18,
-      fontFamily: "Arial Black, Impact, sans-serif",
-      fontWeight: "bold",
-      fill: contrastText(primaryColor),
+      left: W / 4, top: H / 2 - 20,
+      text: displayText,
+      fontSize: Math.min(titleFontSize, 50),
+      fontFamily: "Impact, Arial Black, sans-serif",
+      fontWeight: "900",
+      fill: textColor,
+      stroke: titleStroke,
+      strokeWidth: titleStrokeW,
+      paintFirst: "stroke",
       textAlign: "center",
-      stroke: null, strokeWidth: 0,
+      lineHeight: 1.1,
       opacity: 1,
-    },
-  ];
+    });
+  }
 
   return {
     version: "6.0.0",
     objects,
-    background: bgColor,
+    background: bg,
   };
 }
 
@@ -305,7 +274,7 @@ router.post("/ai/quick-create", async (req, res): Promise<void> => {
   const styleDesc = style ? STYLE_PRESETS[style] ?? style : "";
   const langInstruction = getLanguageInstruction(language);
 
-  let concept: Record<string, unknown> = {};
+  let concept: AiConcept = {};
 
   try {
     const completion = await openai.chat.completions.create({
@@ -314,18 +283,22 @@ router.post("/ai/quick-create", async (req, res): Promise<void> => {
       messages: [
         {
           role: "system",
-          content: `You are a world-class Roblox clothing designer creating Roblox ${mapped.label} textures. ${langInstruction} Always respond with valid JSON only. No markdown, no code blocks — just the raw JSON object.`,
+          content: `You are a professional Roblox clothing designer creating textures for Roblox avatars. The classic clothing template is 585×559 pixels — this exact size is required for avatar wearability. ${langInstruction} Respond with valid JSON only, no markdown.`,
         },
         {
           role: "user",
-          content: `Create a detailed Roblox ${mapped.label} design from this description: "${prompt}"${styleDesc ? `\nStyle direction: ${styleDesc}` : ""}
+          content: `Create a Roblox ${mapped.label} design based on this request: "${prompt}"${styleDesc ? `\nStyle: ${styleDesc}` : ""}
 
-Return this exact JSON structure:
+Important: If the user mentions specific text that should appear on the garment (e.g. "with the text Roblox King"), extract that exact text into "displayText". The displayText will be printed prominently on the clothing texture.
+
+Return JSON:
 {
-  "title": "A catchy, marketable design name (max 40 chars)",
-  "concept": "One vivid sentence describing the design",
-  "description": "Rich 2-3 paragraph design description with visual details, texture feel, and how it looks on a Roblox character",
-  "mood": "Overall vibe (e.g. edgy, mystical, playful)",
+  "title": "Short catchy design name (max 35 chars)",
+  "displayText": "The exact text to print on the garment (e.g. 'ROBLOX KING'). If no specific text mentioned, use a short version of the title.",
+  "textStyle": "One of: graffiti, bold, elegant, minimal, script",
+  "concept": "One vivid sentence describing the look",
+  "description": "2-3 paragraph description of how it looks on a Roblox avatar",
+  "mood": "Single vibe word (e.g. Edgy, Mystical, Playful, Street, Royal)",
   "style": "${style || "custom"}",
   "primaryColor": "#XXXXXX",
   "backgroundColor": "#XXXXXX",
@@ -336,9 +309,9 @@ Return this exact JSON structure:
     {"hex": "#XXXXXX", "name": "Name", "role": "highlight"},
     {"hex": "#XXXXXX", "name": "Name", "role": "base"}
   ],
-  "keyElements": ["visual element 1", "element 2", "element 3", "element 4", "element 5"],
-  "designTips": ["Roblox-specific tip 1", "tip 2", "tip 3"],
-  "suggestedTags": ["tag1", "tag2", "tag3", "tag4", "tag5"]
+  "keyElements": ["element 1", "element 2", "element 3"],
+  "designTips": ["Roblox tip 1", "tip 2"],
+  "suggestedTags": ["tag1", "tag2", "tag3", "tag4"]
 }`,
         },
       ],
@@ -348,37 +321,34 @@ Return this exact JSON structure:
     const jsonMatch = raw.match(/\{[\s\S]*\}/);
     concept = JSON.parse(jsonMatch ? jsonMatch[0] : raw);
   } catch (err) {
-    req.log.error({ err }, "AI quick-create concept generation error");
+    req.log.error({ err }, "AI quick-create concept error");
     concept = {
       title: prompt.split(" ").slice(0, 4).join(" "),
+      displayText: prompt.split(" ").slice(0, 3).join(" ").toUpperCase(),
+      textStyle: "graffiti",
       concept: prompt,
       description: prompt,
+      mood: "Bold",
       colors: [
-        { hex: "#3b82f6", name: "Blue", role: "primary" },
-        { hex: "#ffffff", name: "White", role: "accent" },
-        { hex: "#1e3a5f", name: "Dark Blue", role: "shadow" },
-        { hex: "#60a5fa", name: "Light Blue", role: "highlight" },
-        { hex: "#0f172a", name: "Navy", role: "base" },
+        { hex: "#1a1a2e", name: "Dark Navy",    role: "primary" },
+        { hex: "#e94560", name: "Neon Red",     role: "accent" },
+        { hex: "#0f3460", name: "Deep Blue",    role: "shadow" },
+        { hex: "#16213e", name: "Midnight",     role: "highlight" },
+        { hex: "#ffffff", name: "White",        role: "base" },
       ],
-      backgroundColor: "#1e3a5f",
-      primaryColor: "#3b82f6",
+      backgroundColor: "#1a1a2e",
+      primaryColor: "#0f3460",
       suggestedTags: [],
     };
   }
 
-  const title = (concept.title as string) || `${prompt.split(" ").slice(0, 3).join(" ")} ${mapped.label}`;
-  const tags = (concept.suggestedTags as string[]) || [];
-  const colors = (concept.colors as Array<{ hex: string; name: string; role?: string }>) || [];
-  const primaryColor = (concept.primaryColor as string) || colors[0]?.hex || "#3b82f6";
-  const bgColor = (concept.backgroundColor as string) || "#1e3a5f";
+  const title = (concept.title ?? `${prompt.slice(0, 30)} ${mapped.label}`).slice(0, 100);
+  const tags  = concept.suggestedTags ?? [];
 
-  // Build actual Fabric.js canvas with visual content
-  const fabricCanvas = mapped.robloxType === "pants"
-    ? buildPantsCanvas(title, colors, primaryColor, bgColor)
-    : buildShirtCanvas(title, colors, primaryColor, bgColor);
+  // Build proper Fabric.js canvas at correct Roblox template size (585×559)
+  const fabricCanvas = buildCanvas(concept, prompt, mapped.robloxType);
 
-  // Attach AI metadata to the canvas JSON for the editor to use
-  const fabricInitialCanvas = JSON.stringify({
+  const canvasJson = JSON.stringify({
     ...fabricCanvas,
     __aiConcept: concept,
     __itemLabel: mapped.label,
@@ -388,11 +358,11 @@ Return this exact JSON structure:
   const [project] = await db.insert(projectsTable).values({
     id: randomUUID(),
     userId: req.user.id,
-    title: title.slice(0, 100),
+    title,
     type: mapped.robloxType,
     isAiGenerated: true,
     tags,
-    canvasData: fabricInitialCanvas,
+    canvasData: canvasJson,
   }).returning();
 
   await db.insert(aiGenerationsTable).values({
