@@ -27,6 +27,34 @@ interface AiConcept {
   designTips?: string[];
 }
 
+interface GeneratedAssets {
+  frontImage: string;
+  backImage: string;
+  sleeveImage: string;
+  colorPalette: string[];
+}
+
+interface TemplateZone {
+  label: string;
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
+const TEMPLATE_ZONES: Record<"shirt" | "pants", { front: TemplateZone; back: TemplateZone; sleeves: TemplateZone }> = {
+  shirt: {
+    front: { label: "Front / Chest", left: 196, top: 118, width: 128, height: 128 },
+    back: { label: "Back", left: 338, top: 118, width: 128, height: 128 },
+    sleeves: { label: "Sleeves", left: 44, top: 118, width: 128, height: 128 },
+  },
+  pants: {
+    front: { label: "Front / Legs", left: 196, top: 288, width: 128, height: 192 },
+    back: { label: "Back / Legs", left: 338, top: 288, width: 128, height: 192 },
+    sleeves: { label: "Side Legs", left: 44, top: 288, width: 128, height: 192 },
+  },
+};
+
 function parseAiConcept(canvasData: string | null | undefined): AiConcept | null {
   if (!canvasData) return null;
   try {
@@ -233,19 +261,24 @@ export default function Editor() {
         const { __aiConcept: _a, __itemLabel: _b, __originalPrompt: _c, ...fabricJson } = parsed as Record<string, unknown>;
         if (fabricJson.objects && Array.isArray(fabricJson.objects)) {
           canvas.loadFromJSON(fabricJson).then(() => {
+            addTemplateGuideLayer();
             canvas.renderAll();
           }).catch(err => {
             console.error("loadFromJSON error", err);
+            addTemplateGuideLayer();
             canvas.renderAll();
           });
         } else {
+          addTemplateGuideLayer();
           canvas.renderAll();
         }
       } catch (e) {
         console.error("Error loading canvas data", e);
+        addTemplateGuideLayer();
         canvas.renderAll();
       }
     } else {
+      addTemplateGuideLayer();
       canvas.renderAll();
     }
 
@@ -254,7 +287,7 @@ export default function Editor() {
     canvas.on("selection:cleared", () => setSelectedObject(null));
 
     return () => { canvas.dispose(); fabricRef.current = null; };
-  }, [project?.id]);
+  }, [addTemplateGuideLayer, project?.id]);
 
   // Drawing mode
   useEffect(() => {
@@ -361,6 +394,84 @@ export default function Editor() {
     if (colors[1]) setStrokeColor(colors[1]);
     toast({ title: language === "no" ? "Farger brukt!" : "Colors applied!" });
   }, [toast, language]);
+
+  const addTemplateGuideLayer = useCallback(() => {
+    if (!fabricRef.current) return;
+    const canvas = fabricRef.current;
+    const type = (project?.type as "shirt" | "pants") ?? "shirt";
+    const zones = TEMPLATE_ZONES[type];
+
+    canvas.getObjects().forEach((obj) => {
+      if ((obj.data as { role?: string } | undefined)?.role === "template-guide") {
+        canvas.remove(obj);
+      }
+    });
+
+    (Object.values(zones) as TemplateZone[]).forEach((zone) => {
+      const frame = new fabric.Rect({
+        left: zone.left,
+        top: zone.top,
+        width: zone.width,
+        height: zone.height,
+        fill: "rgba(59, 130, 246, 0.06)",
+        stroke: "rgba(59, 130, 246, 0.4)",
+        strokeWidth: 1,
+        selectable: false,
+        evented: false,
+        data: { role: "template-guide" },
+      });
+
+      const label = new fabric.Text(zone.label, {
+        left: zone.left + 6,
+        top: zone.top + 6,
+        fontSize: 10,
+        fill: "rgba(59, 130, 246, 0.8)",
+        selectable: false,
+        evented: false,
+        data: { role: "template-guide" },
+      });
+
+      canvas.add(frame, label);
+      frame.sendToBack();
+      label.sendToBack();
+    });
+  }, [project?.type]);
+
+  const addImageToZone = useCallback(async (source: string, zone: TemplateZone) => {
+    if (!fabricRef.current) return;
+    const image = await fabric.FabricImage.fromURL(source);
+    image.set({
+      left: zone.left,
+      top: zone.top,
+      selectable: true,
+      evented: true,
+      data: { role: "ai-generated", zone: zone.label },
+    });
+    image.scaleToWidth(zone.width);
+    if ((image.getScaledHeight() ?? 0) > zone.height) {
+      image.scaleToHeight(zone.height);
+    }
+    fabricRef.current.add(image);
+  }, []);
+
+  const applyAiDesignToCanvas = useCallback(async (assets: GeneratedAssets) => {
+    if (!fabricRef.current) return;
+    const canvas = fabricRef.current;
+    const type = (project?.type as "shirt" | "pants") ?? "shirt";
+    const zones = TEMPLATE_ZONES[type];
+
+    setDrawingMode(false);
+    await Promise.all([
+      addImageToZone(assets.frontImage, zones.front),
+      addImageToZone(assets.backImage, zones.back),
+      addImageToZone(assets.sleeveImage, zones.sleeves),
+    ]);
+
+    canvas.renderAll();
+    handleUseColors(assets.colorPalette);
+    addTemplateGuideLayer();
+    toast({ title: language === "no" ? "AI design lagt til!" : "AI design applied to canvas!" });
+  }, [addImageToZone, addTemplateGuideLayer, handleUseColors, language, project?.type, toast]);
 
   const zoomIn = () => {
     if (!fabricRef.current) return;
@@ -561,6 +672,7 @@ export default function Editor() {
                 <AiPanel
                   projectType={(project?.type as "shirt" | "pants") ?? "shirt"}
                   onUseColors={handleUseColors}
+                  onApplyAssets={applyAiDesignToCanvas}
                 />
               </TabsContent>
             </div>
