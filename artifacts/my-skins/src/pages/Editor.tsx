@@ -228,14 +228,24 @@ export default function Editor() {
     if (project.canvasData) {
       try {
         const parsed = JSON.parse(project.canvasData);
-        if (parsed.objects && Array.isArray(parsed.objects)) {
-          canvas.loadFromJSON(parsed).then(() => canvas.renderAll());
+        // Strip non-Fabric meta fields before loading
+        const { __aiConcept: _a, __itemLabel: _b, __originalPrompt: _c, ...fabricJson } = parsed as Record<string, unknown>;
+        if (fabricJson.objects && Array.isArray(fabricJson.objects)) {
+          canvas.loadFromJSON(fabricJson).then(() => {
+            canvas.renderAll();
+          }).catch(err => {
+            console.error("loadFromJSON error", err);
+            canvas.renderAll();
+          });
         } else {
           canvas.renderAll();
         }
       } catch (e) {
         console.error("Error loading canvas data", e);
+        canvas.renderAll();
       }
+    } else {
+      canvas.renderAll();
     }
 
     canvas.on("selection:created", (e) => setSelectedObject(e.selected?.[0] || null));
