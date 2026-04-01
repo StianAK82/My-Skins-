@@ -17,11 +17,14 @@ import type {
 } from "@tanstack/react-query";
 
 import type {
-  AiGenerateRequest,
-  AiGenerateResponse,
-  AiGeneration,
-  AiPaletteRequest,
-  AiPaletteResponse,
+  AiGenerateListingRequest,
+  AiGenerateListingResponse,
+  AiGenerateOutfitRequest,
+  AiGenerateVariantsRequest,
+  AiGenerateVariantsResponse,
+  AiGeneratedOutfit,
+  AiHistoryEntry,
+  AiRemixOutfitRequest,
   CreateExportRequest,
   CreateProjectRequest,
   CreateShareRequest,
@@ -1116,42 +1119,42 @@ export function useGetRecentProjects<
 }
 
 /**
- * @summary Generate design idea from prompt
+ * @summary Generate a Roblox classic shirt or pants outfit result
  */
-export const getGenerateAiDesignUrl = () => {
-  return `/api/ai/generate`;
+export const getGenerateOutfitUrl = () => {
+  return `/api/ai/generate-outfit`;
 };
 
-export const generateAiDesign = async (
-  aiGenerateRequest: AiGenerateRequest,
+export const generateOutfit = async (
+  aiGenerateOutfitRequest: AiGenerateOutfitRequest,
   options?: RequestInit,
-): Promise<AiGenerateResponse> => {
-  return customFetch<AiGenerateResponse>(getGenerateAiDesignUrl(), {
+): Promise<AiGeneratedOutfit> => {
+  return customFetch<AiGeneratedOutfit>(getGenerateOutfitUrl(), {
     ...options,
     method: "POST",
     headers: { "Content-Type": "application/json", ...options?.headers },
-    body: JSON.stringify(aiGenerateRequest),
+    body: JSON.stringify(aiGenerateOutfitRequest),
   });
 };
 
-export const getGenerateAiDesignMutationOptions = <
+export const getGenerateOutfitMutationOptions = <
   TError = ErrorType<unknown>,
   TContext = unknown,
 >(options?: {
   mutation?: UseMutationOptions<
-    Awaited<ReturnType<typeof generateAiDesign>>,
+    Awaited<ReturnType<typeof generateOutfit>>,
     TError,
-    { data: BodyType<AiGenerateRequest> },
+    { data: BodyType<AiGenerateOutfitRequest> },
     TContext
   >;
   request?: SecondParameter<typeof customFetch>;
 }): UseMutationOptions<
-  Awaited<ReturnType<typeof generateAiDesign>>,
+  Awaited<ReturnType<typeof generateOutfit>>,
   TError,
-  { data: BodyType<AiGenerateRequest> },
+  { data: BodyType<AiGenerateOutfitRequest> },
   TContext
 > => {
-  const mutationKey = ["generateAiDesign"];
+  const mutationKey = ["generateOutfit"];
   const { mutation: mutationOptions, request: requestOptions } = options
     ? options.mutation &&
       "mutationKey" in options.mutation &&
@@ -1161,83 +1164,86 @@ export const getGenerateAiDesignMutationOptions = <
     : { mutation: { mutationKey }, request: undefined };
 
   const mutationFn: MutationFunction<
-    Awaited<ReturnType<typeof generateAiDesign>>,
-    { data: BodyType<AiGenerateRequest> }
+    Awaited<ReturnType<typeof generateOutfit>>,
+    { data: BodyType<AiGenerateOutfitRequest> }
   > = (props) => {
     const { data } = props ?? {};
 
-    return generateAiDesign(data, requestOptions);
+    return generateOutfit(data, requestOptions);
   };
 
   return { mutationFn, ...mutationOptions };
 };
 
-export type GenerateAiDesignMutationResult = NonNullable<
-  Awaited<ReturnType<typeof generateAiDesign>>
+export type GenerateOutfitMutationResult = NonNullable<
+  Awaited<ReturnType<typeof generateOutfit>>
 >;
-export type GenerateAiDesignMutationBody = BodyType<AiGenerateRequest>;
-export type GenerateAiDesignMutationError = ErrorType<unknown>;
+export type GenerateOutfitMutationBody = BodyType<AiGenerateOutfitRequest>;
+export type GenerateOutfitMutationError = ErrorType<unknown>;
 
 /**
- * @summary Generate design idea from prompt
+ * @summary Generate a Roblox classic shirt or pants outfit result
  */
-export const useGenerateAiDesign = <
+export const useGenerateOutfit = <
   TError = ErrorType<unknown>,
   TContext = unknown,
 >(options?: {
   mutation?: UseMutationOptions<
-    Awaited<ReturnType<typeof generateAiDesign>>,
+    Awaited<ReturnType<typeof generateOutfit>>,
     TError,
-    { data: BodyType<AiGenerateRequest> },
+    { data: BodyType<AiGenerateOutfitRequest> },
     TContext
   >;
   request?: SecondParameter<typeof customFetch>;
 }): UseMutationResult<
-  Awaited<ReturnType<typeof generateAiDesign>>,
+  Awaited<ReturnType<typeof generateOutfit>>,
   TError,
-  { data: BodyType<AiGenerateRequest> },
+  { data: BodyType<AiGenerateOutfitRequest> },
   TContext
 > => {
-  return useMutation(getGenerateAiDesignMutationOptions(options));
+  return useMutation(getGenerateOutfitMutationOptions(options));
 };
 
 /**
- * @summary Generate color palette from prompt
+ * @summary Generate four purposeful outfit variants
  */
-export const getGenerateColorPaletteUrl = () => {
-  return `/api/ai/palette`;
+export const getGenerateOutfitVariantsUrl = () => {
+  return `/api/ai/generate-variants`;
 };
 
-export const generateColorPalette = async (
-  aiPaletteRequest: AiPaletteRequest,
+export const generateOutfitVariants = async (
+  aiGenerateVariantsRequest: AiGenerateVariantsRequest,
   options?: RequestInit,
-): Promise<AiPaletteResponse> => {
-  return customFetch<AiPaletteResponse>(getGenerateColorPaletteUrl(), {
-    ...options,
-    method: "POST",
-    headers: { "Content-Type": "application/json", ...options?.headers },
-    body: JSON.stringify(aiPaletteRequest),
-  });
+): Promise<AiGenerateVariantsResponse> => {
+  return customFetch<AiGenerateVariantsResponse>(
+    getGenerateOutfitVariantsUrl(),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(aiGenerateVariantsRequest),
+    },
+  );
 };
 
-export const getGenerateColorPaletteMutationOptions = <
+export const getGenerateOutfitVariantsMutationOptions = <
   TError = ErrorType<unknown>,
   TContext = unknown,
 >(options?: {
   mutation?: UseMutationOptions<
-    Awaited<ReturnType<typeof generateColorPalette>>,
+    Awaited<ReturnType<typeof generateOutfitVariants>>,
     TError,
-    { data: BodyType<AiPaletteRequest> },
+    { data: BodyType<AiGenerateVariantsRequest> },
     TContext
   >;
   request?: SecondParameter<typeof customFetch>;
 }): UseMutationOptions<
-  Awaited<ReturnType<typeof generateColorPalette>>,
+  Awaited<ReturnType<typeof generateOutfitVariants>>,
   TError,
-  { data: BodyType<AiPaletteRequest> },
+  { data: BodyType<AiGenerateVariantsRequest> },
   TContext
 > => {
-  const mutationKey = ["generateColorPalette"];
+  const mutationKey = ["generateOutfitVariants"];
   const { mutation: mutationOptions, request: requestOptions } = options
     ? options.mutation &&
       "mutationKey" in options.mutation &&
@@ -1247,44 +1253,217 @@ export const getGenerateColorPaletteMutationOptions = <
     : { mutation: { mutationKey }, request: undefined };
 
   const mutationFn: MutationFunction<
-    Awaited<ReturnType<typeof generateColorPalette>>,
-    { data: BodyType<AiPaletteRequest> }
+    Awaited<ReturnType<typeof generateOutfitVariants>>,
+    { data: BodyType<AiGenerateVariantsRequest> }
   > = (props) => {
     const { data } = props ?? {};
 
-    return generateColorPalette(data, requestOptions);
+    return generateOutfitVariants(data, requestOptions);
   };
 
   return { mutationFn, ...mutationOptions };
 };
 
-export type GenerateColorPaletteMutationResult = NonNullable<
-  Awaited<ReturnType<typeof generateColorPalette>>
+export type GenerateOutfitVariantsMutationResult = NonNullable<
+  Awaited<ReturnType<typeof generateOutfitVariants>>
 >;
-export type GenerateColorPaletteMutationBody = BodyType<AiPaletteRequest>;
-export type GenerateColorPaletteMutationError = ErrorType<unknown>;
+export type GenerateOutfitVariantsMutationBody =
+  BodyType<AiGenerateVariantsRequest>;
+export type GenerateOutfitVariantsMutationError = ErrorType<unknown>;
 
 /**
- * @summary Generate color palette from prompt
+ * @summary Generate four purposeful outfit variants
  */
-export const useGenerateColorPalette = <
+export const useGenerateOutfitVariants = <
   TError = ErrorType<unknown>,
   TContext = unknown,
 >(options?: {
   mutation?: UseMutationOptions<
-    Awaited<ReturnType<typeof generateColorPalette>>,
+    Awaited<ReturnType<typeof generateOutfitVariants>>,
     TError,
-    { data: BodyType<AiPaletteRequest> },
+    { data: BodyType<AiGenerateVariantsRequest> },
     TContext
   >;
   request?: SecondParameter<typeof customFetch>;
 }): UseMutationResult<
-  Awaited<ReturnType<typeof generateColorPalette>>,
+  Awaited<ReturnType<typeof generateOutfitVariants>>,
   TError,
-  { data: BodyType<AiPaletteRequest> },
+  { data: BodyType<AiGenerateVariantsRequest> },
   TContext
 > => {
-  return useMutation(getGenerateColorPaletteMutationOptions(options));
+  return useMutation(getGenerateOutfitVariantsMutationOptions(options));
+};
+
+/**
+ * @summary Remix an existing generated outfit while preserving concept
+ */
+export const getRemixOutfitUrl = () => {
+  return `/api/ai/remix-outfit`;
+};
+
+export const remixOutfit = async (
+  aiRemixOutfitRequest: AiRemixOutfitRequest,
+  options?: RequestInit,
+): Promise<AiGeneratedOutfit> => {
+  return customFetch<AiGeneratedOutfit>(getRemixOutfitUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(aiRemixOutfitRequest),
+  });
+};
+
+export const getRemixOutfitMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof remixOutfit>>,
+    TError,
+    { data: BodyType<AiRemixOutfitRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof remixOutfit>>,
+  TError,
+  { data: BodyType<AiRemixOutfitRequest> },
+  TContext
+> => {
+  const mutationKey = ["remixOutfit"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof remixOutfit>>,
+    { data: BodyType<AiRemixOutfitRequest> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return remixOutfit(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type RemixOutfitMutationResult = NonNullable<
+  Awaited<ReturnType<typeof remixOutfit>>
+>;
+export type RemixOutfitMutationBody = BodyType<AiRemixOutfitRequest>;
+export type RemixOutfitMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Remix an existing generated outfit while preserving concept
+ */
+export const useRemixOutfit = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof remixOutfit>>,
+    TError,
+    { data: BodyType<AiRemixOutfitRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof remixOutfit>>,
+  TError,
+  { data: BodyType<AiRemixOutfitRequest> },
+  TContext
+> => {
+  return useMutation(getRemixOutfitMutationOptions(options));
+};
+
+/**
+ * @summary Generate listing metadata from a generated outfit
+ */
+export const getGenerateAiListingUrl = () => {
+  return `/api/ai/generate-listing`;
+};
+
+export const generateAiListing = async (
+  aiGenerateListingRequest: AiGenerateListingRequest,
+  options?: RequestInit,
+): Promise<AiGenerateListingResponse> => {
+  return customFetch<AiGenerateListingResponse>(getGenerateAiListingUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(aiGenerateListingRequest),
+  });
+};
+
+export const getGenerateAiListingMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof generateAiListing>>,
+    TError,
+    { data: BodyType<AiGenerateListingRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof generateAiListing>>,
+  TError,
+  { data: BodyType<AiGenerateListingRequest> },
+  TContext
+> => {
+  const mutationKey = ["generateAiListing"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof generateAiListing>>,
+    { data: BodyType<AiGenerateListingRequest> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return generateAiListing(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type GenerateAiListingMutationResult = NonNullable<
+  Awaited<ReturnType<typeof generateAiListing>>
+>;
+export type GenerateAiListingMutationBody = BodyType<AiGenerateListingRequest>;
+export type GenerateAiListingMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Generate listing metadata from a generated outfit
+ */
+export const useGenerateAiListing = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof generateAiListing>>,
+    TError,
+    { data: BodyType<AiGenerateListingRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof generateAiListing>>,
+  TError,
+  { data: BodyType<AiGenerateListingRequest> },
+  TContext
+> => {
+  return useMutation(getGenerateAiListingMutationOptions(options));
 };
 
 /**
@@ -1296,8 +1475,8 @@ export const getGetAiHistoryUrl = () => {
 
 export const getAiHistory = async (
   options?: RequestInit,
-): Promise<AiGeneration[]> => {
-  return customFetch<AiGeneration[]>(getGetAiHistoryUrl(), {
+): Promise<AiHistoryEntry[]> => {
+  return customFetch<AiHistoryEntry[]>(getGetAiHistoryUrl(), {
     ...options,
     method: "GET",
   });

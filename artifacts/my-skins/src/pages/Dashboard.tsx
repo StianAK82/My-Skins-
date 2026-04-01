@@ -53,20 +53,6 @@ const EXAMPLE_PROMPTS_EN = [
   "purple fantasy robe with runes and magical symbols",
 ];
 
-async function quickCreate(body: Record<string, unknown>) {
-  const res = await fetch("/api/ai/quick-create", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    credentials: "include",
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: "Failed" }));
-    throw new Error(err.error ?? "AI creation failed");
-  }
-  return res.json();
-}
-
 async function deleteProject(id: string) {
   const res = await fetch(`/api/projects/${id}`, { method: "DELETE", credentials: "include" });
   if (!res.ok) throw new Error("Delete failed");
@@ -119,23 +105,17 @@ export default function Dashboard() {
       setGeneratingStep(language === "no" ? "Analyserer beskrivelsen..." : "Analyzing your description...");
       await new Promise(r => setTimeout(r, 400));
       setGeneratingStep(language === "no" ? "Genererer designkonsept med AI..." : "Generating design concept with AI...");
-
-      const result = await quickCreate({
-        prompt: prompt.trim(),
-        itemType: selectedType,
-        style: selectedStyle || undefined,
-        language,
-      });
+      const result = await createBlankProject(currentItemType.roblox as "shirt" | "pants", prompt.trim().slice(0, 60));
 
       setGeneratingStep(language === "no" ? "Oppretter prosjektet..." : "Creating your project...");
       await new Promise(r => setTimeout(r, 300));
 
       toast({
-        title: language === "no" ? "Design opprettet! 🎨" : "Design created! 🎨",
-        description: result.title,
+        title: language === "no" ? "Prosjekt opprettet! 🎨" : "Project created! 🎨",
+        description: language === "no" ? "AI-designer er flyttet til editoren." : "AI workflow is now inside the editor.",
       });
 
-      setLocation(`/editor/${result.projectId}`);
+      setLocation(`/editor/${result.id}`);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "AI creation failed";
       toast({ title: language === "no" ? "Feil" : "Error", description: message, variant: "destructive" });

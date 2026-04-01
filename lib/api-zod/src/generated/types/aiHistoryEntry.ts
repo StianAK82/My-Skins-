@@ -5,12 +5,13 @@
  * My Skins API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { AiGeneratedOutfit } from "./aiGeneratedOutfit";
 
-export interface AiGenerateResponse {
+export interface AiHistoryEntry {
   id: string;
   prompt: string;
-  result: string;
-  suggestedTitle?: string;
-  suggestedTags?: string[];
+  style?: string | null;
+  type?: string | null;
   createdAt: Date;
+  result: AiGeneratedOutfit;
 }

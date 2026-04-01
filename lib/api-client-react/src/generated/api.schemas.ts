@@ -107,46 +107,165 @@ export interface DashboardSummary {
   robloxConnected: boolean;
 }
 
-export type AiGenerateRequestType =
-  (typeof AiGenerateRequestType)[keyof typeof AiGenerateRequestType];
+export type AiTarget = (typeof AiTarget)[keyof typeof AiTarget];
 
-export const AiGenerateRequestType = {
-  shirt: "shirt",
-  pants: "pants",
+export const AiTarget = {
+  classic_shirt: "classic_shirt",
+  classic_pants: "classic_pants",
 } as const;
 
-export interface AiGenerateRequest {
-  prompt: string;
-  type: AiGenerateRequestType;
-  style?: string;
-  language?: string;
+export type AiStylePreset = (typeof AiStylePreset)[keyof typeof AiStylePreset];
+
+export const AiStylePreset = {
+  Streetwear: "Streetwear",
+  Anime: "Anime",
+  Cyberpunk: "Cyberpunk",
+  Y2K: "Y2K",
+  Minimal: "Minimal",
+  Fantasy: "Fantasy",
+  Sport: "Sport",
+  Luxury: "Luxury",
+} as const;
+
+export type AiFrontBackRegionGraphicType =
+  (typeof AiFrontBackRegionGraphicType)[keyof typeof AiFrontBackRegionGraphicType];
+
+export const AiFrontBackRegionGraphicType = {
+  graphic: "graphic",
+  emblem: "emblem",
+  pattern: "pattern",
+  plain: "plain",
+} as const;
+
+export interface AiFrontBackRegion {
+  description: string;
+  graphicType: AiFrontBackRegionGraphicType;
 }
 
-export interface AiGenerateResponse {
+export type AiSideRegionGraphicType =
+  (typeof AiSideRegionGraphicType)[keyof typeof AiSideRegionGraphicType];
+
+export const AiSideRegionGraphicType = {
+  pattern: "pattern",
+  stripe: "stripe",
+  symbol: "symbol",
+  plain: "plain",
+} as const;
+
+export interface AiSideRegion {
+  description: string;
+  graphicType: AiSideRegionGraphicType;
+}
+
+export interface AiOutfitPlan {
+  target: AiTarget;
+  title: string;
+  style: string;
+  /** @pattern ^#([0-9a-fA-F]{6})$ */
+  baseColor: string;
+  /**
+   * @minItems 3
+   * @maxItems 6
+   */
+  colorPalette: string[];
+  overallMood: string;
+  front: AiFrontBackRegion;
+  back: AiFrontBackRegion;
+  leftRegion: AiSideRegion;
+  rightRegion: AiSideRegion;
+  /** @minItems 2 */
+  details: string[];
+}
+
+export interface AiRegionAssets {
+  frontImage: string;
+  backImage: string;
+  leftRegionImage: string;
+  rightRegionImage: string;
+}
+
+export type AiFallbackDraftSuggestedShapesItem =
+  (typeof AiFallbackDraftSuggestedShapesItem)[keyof typeof AiFallbackDraftSuggestedShapesItem];
+
+export const AiFallbackDraftSuggestedShapesItem = {
+  stripe: "stripe",
+  block: "block",
+  chevron: "chevron",
+  emblem: "emblem",
+  panel: "panel",
+} as const;
+
+export interface AiFallbackDraft {
+  enabled: boolean;
+  reason: string;
+  instructions: string[];
+  suggestedShapes: AiFallbackDraftSuggestedShapesItem[];
+}
+
+export interface AiGeneratedOutfit {
+  plan: AiOutfitPlan;
+  assets?: AiRegionAssets;
+  fallbackDraft?: AiFallbackDraft;
+}
+
+export interface AiGenerateOutfitRequest {
+  prompt: string;
+  target: AiTarget;
+  stylePreset?: AiStylePreset;
+}
+
+export interface AiGenerateVariantsRequest {
+  prompt: string;
+  target: AiTarget;
+  stylePreset?: AiStylePreset;
+  basePlan?: AiOutfitPlan;
+}
+
+export type AiVariantResultVariant =
+  (typeof AiVariantResultVariant)[keyof typeof AiVariantResultVariant];
+
+export const AiVariantResultVariant = {
+  Clean: "Clean",
+  Bold: "Bold",
+  Premium: "Premium",
+  Experimental: "Experimental",
+} as const;
+
+export interface AiVariantResult {
+  variant: AiVariantResultVariant;
+  result: AiGeneratedOutfit;
+}
+
+export interface AiGenerateVariantsResponse {
+  /**
+   * @minItems 4
+   * @maxItems 4
+   */
+  variants: AiVariantResult[];
+}
+
+export interface AiRemixOutfitRequest {
+  instruction: string;
+  source: AiGeneratedOutfit;
+}
+
+export interface AiGenerateListingRequest {
+  result: AiGeneratedOutfit;
+}
+
+export interface AiGenerateListingResponse {
+  title: string;
+  description: string;
+  tags: string[];
+}
+
+export interface AiHistoryEntry {
   id: string;
   prompt: string;
-  result: string;
-  suggestedTitle?: string;
-  suggestedTags?: string[];
+  style?: string | null;
+  type?: string | null;
   createdAt: string;
-}
-
-export interface AiPaletteRequest {
-  prompt: string;
-  style?: string;
-}
-
-export interface AiPaletteResponse {
-  colors: string[];
-  name: string;
-  description?: string;
-}
-
-export interface AiGeneration {
-  id: string;
-  prompt: string;
-  result: string;
-  createdAt: string;
+  result: AiGeneratedOutfit;
 }
 
 export type CreateExportRequestFormat =

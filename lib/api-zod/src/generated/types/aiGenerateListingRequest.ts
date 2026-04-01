@@ -5,10 +5,8 @@
  * My Skins API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { AiGeneratedOutfit } from "./aiGeneratedOutfit";
 
-export interface AiGeneration {
-  id: string;
-  prompt: string;
-  result: string;
-  createdAt: Date;
+export interface AiGenerateListingRequest {
+  result: AiGeneratedOutfit;
 }

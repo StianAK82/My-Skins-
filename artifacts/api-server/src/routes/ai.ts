@@ -1,389 +1,427 @@
-import { Router, type IRouter, type Response } from "express";
+import { Router, type IRouter, type Request, type Response } from "express";
 import { z } from "zod";
 import { openai } from "@workspace/integrations-openai-ai-server";
 import { db, aiGenerationsTable } from "@workspace/db";
-import { eq, desc } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { randomUUID } from "crypto";
 
 const router: IRouter = Router();
 
-const STYLE_PRESETS: Record<string, string> = {
-  streetwear: "Streetwear direction: bold urban layering, wearable graphics, and clean contrast panels for Roblox classic shirts.",
-  anime: "Anime direction: expressive yet clean linework, stylized motifs, and balanced color blocking compatible with Roblox shirt regions.",
-  cyberpunk: "Cyberpunk direction: futuristic paneling, neon accents, dark base tones, and subtle tech details.",
-  y2k: "Y2K direction: glossy retro-futuristic cues, playful accents, and early-2000s inspired color combinations.",
-  minimal: "Minimal direction: restrained palette, simple geometry, and premium clean composition.",
-  fantasy: "Fantasy direction: magical motifs, ornamental shapes, and adventure-inspired visual storytelling for Roblox avatars.",
-};
+const STYLE_PRESETS = [
+  "Streetwear",
+  "Anime",
+  "Cyberpunk",
+  "Y2K",
+  "Minimal",
+  "Fantasy",
+  "Sport",
+  "Luxury",
+] as const;
 
-const robloxDesignSchema = z.object({
+const variantKinds = ["Clean", "Bold", "Premium", "Experimental"] as const;
+
+const graphicTypeSchema = z.enum(["graphic", "emblem", "pattern", "plain"]);
+const sideGraphicTypeSchema = z.enum(["pattern", "stripe", "symbol", "plain"]);
+
+const outfitPlanSchema = z.object({
+  target: z.enum(["classic_shirt", "classic_pants"]),
   title: z.string().min(1),
   style: z.string().min(1),
-  colorPalette: z.array(z.string().min(1)).min(1),
-  designElements: z.array(z.string().min(1)).min(1),
-  placement: z.object({
-    front: z.string().min(1),
-    back: z.string().min(1),
-    sleeves: z.string().min(1),
-  }),
+  baseColor: z.string().regex(/^#([0-9a-fA-F]{6})$/),
+  colorPalette: z.array(z.string().regex(/^#([0-9a-fA-F]{6})$/)).min(3).max(6),
+  overallMood: z.string().min(1),
+  front: z.object({ description: z.string().min(1), graphicType: graphicTypeSchema }),
+  back: z.object({ description: z.string().min(1), graphicType: graphicTypeSchema }),
+  leftRegion: z.object({ description: z.string().min(1), graphicType: sideGraphicTypeSchema }),
+  rightRegion: z.object({ description: z.string().min(1), graphicType: sideGraphicTypeSchema }),
+  details: z.array(z.string().min(1)).min(2).max(6),
 });
 
-const assetRequestSchema = z.object({
-  prompt: z.string().min(1),
-  style: z.string().optional(),
-  type: z.enum(["shirt", "pants"]),
-  variationCount: z.number().int().min(1).max(4).optional(),
-  remixInstruction: z.string().optional(),
-  currentDesign: z
-    .object({
-      frontImage: z.string().optional(),
-      backImage: z.string().optional(),
-      sleeveImage: z.string().optional(),
-    })
-    .optional(),
-});
-
-const assetSchema = z.object({
+const regionAssetsSchema = z.object({
   frontImage: z.string().min(1),
   backImage: z.string().min(1),
-  sleeveImage: z.string().min(1),
-  colorPalette: z.array(z.string().regex(/^#([0-9a-fA-F]{6})$/)).min(3).max(8),
+  leftRegionImage: z.string().min(1),
+  rightRegionImage: z.string().min(1),
 });
 
-const assetResponseSchema = assetSchema.extend({
-  variants: z.array(assetSchema).optional(),
+const fallbackDraftSchema = z.object({
+  enabled: z.literal(true),
+  reason: z.string().min(1),
+  instructions: z.array(z.string().min(1)).min(3).max(8),
+  suggestedShapes: z.array(z.enum(["stripe", "block", "chevron", "emblem", "panel"]))
+    .min(2)
+    .max(5),
 });
 
-type RobloxDesign = z.infer<typeof robloxDesignSchema>;
-type AssetRequest = z.infer<typeof assetRequestSchema>;
-type AssetResponse = z.infer<typeof assetResponseSchema>;
+const generatedOutfitSchema = z.object({
+  plan: outfitPlanSchema,
+  assets: regionAssetsSchema.optional(),
+  fallbackDraft: fallbackDraftSchema.optional(),
+});
 
-const basePrompt = `You are a professional Roblox clothing designer.
+const generateOutfitRequestSchema = z.object({
+  prompt: z.string().min(1),
+  target: z.enum(["classic_shirt", "classic_pants"]),
+  stylePreset: z.enum(STYLE_PRESETS).optional(),
+});
 
-Generate a Roblox classic shirt design.
+const generateVariantsRequestSchema = z.object({
+  prompt: z.string().min(1),
+  target: z.enum(["classic_shirt", "classic_pants"]),
+  stylePreset: z.enum(STYLE_PRESETS).optional(),
+  basePlan: outfitPlanSchema.optional(),
+});
 
-Rules:
-- Must fit Roblox shirt template
-- Include front, back, sleeves
-- Avoid copyrighted brands/logos
-- Keep design clean and wearable
-- Focus on style, colors, and placement
+const generateVariantsResponseSchema = z.object({
+  variants: z.array(
+    z.object({
+      variant: z.enum(variantKinds),
+      result: generatedOutfitSchema,
+    }),
+  ).length(4),
+});
 
-Return ONLY valid JSON with this structure:
+const remixOutfitRequestSchema = z.object({
+  instruction: z.string().min(1),
+  source: generatedOutfitSchema,
+});
 
-{
-  title: string,
-  style: string,
-  colorPalette: string[],
-  designElements: string[],
-  placement: {
-    front: string,
-    back: string,
-    sleeves: string
+const listingRequestSchema = z.object({
+  result: generatedOutfitSchema,
+});
+
+const listingResponseSchema = z.object({
+  title: z.string().min(1),
+  description: z.string().min(1),
+  tags: z.array(z.string().min(1)).min(3).max(10),
+});
+
+const historyEntrySchema = z.object({
+  id: z.string(),
+  prompt: z.string(),
+  style: z.string().nullable(),
+  type: z.string().nullable(),
+  createdAt: z.string(),
+  result: generatedOutfitSchema,
+});
+
+function ensureAuthenticated(req: Request, res: Response): boolean {
+  if (!req.isAuthenticated()) {
+    res.status(401).json({ error: "Unauthorized" });
+    return false;
   }
-}`;
-
-function parseStrictJson(rawContent: string): unknown {
-  return JSON.parse(rawContent);
+  return true;
 }
 
-function sendValidationError(res: Response, details: string): void {
-  res.status(422).json({
-    error: "Invalid AI response schema",
-    details,
-  });
+function getUserId(req: Request): string {
+  return (req.user as { id: string }).id;
 }
 
-async function generateStructuredDesign(context: string): Promise<RobloxDesign> {
+function parseJson(content: string): unknown {
+  return JSON.parse(content);
+}
+
+function sendSchemaError(res: Response, details: string): void {
+  res.status(422).json({ error: "Invalid AI response schema", details });
+}
+
+function planSystemPrompt(): string {
+  return [
+    "You are a professional Roblox clothing designer.",
+    "Design a wearable Roblox classic clothing concept.",
+    "Think in template regions, balanced composition, strong silhouette, clear palette, and game-friendly visuals.",
+    "Return only valid JSON.",
+  ].join(" ");
+}
+
+function buildPlanPrompt(input: z.infer<typeof generateOutfitRequestSchema>, extra?: string): string {
+  return [
+    `Target: ${input.target}`,
+    `Prompt: ${input.prompt}`,
+    input.stylePreset ? `Style preset: ${input.stylePreset}` : "",
+    extra ?? "",
+    "Rules: no copyrighted logos, no placeholder text, no photoreal output, keep visuals avatar-wearable.",
+  ].filter(Boolean).join("\n");
+}
+
+async function generatePlan(input: z.infer<typeof generateOutfitRequestSchema>, extra?: string) {
   const completion = await openai.chat.completions.create({
     model: "gpt-5.2",
-    max_completion_tokens: 1200,
+    max_completion_tokens: 1400,
     response_format: { type: "json_object" },
     messages: [
-      { role: "system", content: basePrompt },
-      { role: "user", content: context },
+      { role: "system", content: planSystemPrompt() },
+      { role: "user", content: buildPlanPrompt(input, extra) },
     ],
   });
 
-  const rawContent = completion.choices[0]?.message?.content;
-  if (!rawContent) {
-    throw new Error("AI_EMPTY_RESPONSE");
+  const content = completion.choices[0]?.message?.content;
+  if (!content) {
+    throw new Error("AI_EMPTY_PLAN");
   }
 
-  const parsed = parseStrictJson(rawContent);
-  return robloxDesignSchema.parse(parsed);
+  return outfitPlanSchema.parse(parseJson(content));
 }
 
-function createPlacementPrompt(input: AssetRequest, placement: "front" | "back" | "sleeves"): string {
-  const styleContext = input.style ? STYLE_PRESETS[input.style] ?? `Style direction: ${input.style}` : "";
-  const remixContext = input.remixInstruction
-    ? `Remix directive: ${input.remixInstruction}. Keep the result game-friendly and production-ready.`
-    : "";
+function visualPrompt(plan: z.infer<typeof outfitPlanSchema>, region: "front" | "back" | "left" | "right"): string {
+  const regionDescription = region === "front"
+    ? plan.front.description
+    : region === "back"
+      ? plan.back.description
+      : region === "left"
+        ? plan.leftRegion.description
+        : plan.rightRegion.description;
 
-  return `You are designing a Roblox clothing graphic.
-
-Create a clean, simple graphic for a Roblox ${input.type}.
-
-Rules:
-- centered composition
-- transparent background
-- high contrast
-- simple shapes
-- suitable for game avatars
-- no text unless requested
-- no copyrighted logos
-- no brand names
-- no unsafe content
-- no photorealistic style
-- output must be clear linework and stylized game art only
-
-Style: ${styleContext || "Original style derived from concept"}
-Concept: ${input.prompt}
-Placement: ${placement}
-${remixContext}`;
+  return [
+    "You are generating a clean visual asset for a Roblox clothing region.",
+    "Use transparent background.",
+    "No brand names.",
+    "No Roblox text.",
+    "No placeholder text unless explicitly requested.",
+    "The result must be suitable for direct use in a Roblox clothing editor.",
+    "No photorealism. Stylized clean vector-like graphics only.",
+    `Target clothing: ${plan.target}`,
+    `Design title: ${plan.title}`,
+    `Style: ${plan.style}`,
+    `Base color: ${plan.baseColor}`,
+    `Palette: ${plan.colorPalette.join(", ")}`,
+    `Region: ${region}`,
+    `Region description: ${regionDescription}`,
+  ].join("\n");
 }
 
-async function generatePlacementImage(input: AssetRequest, placement: "front" | "back" | "sleeves"): Promise<string> {
-  const prompt = createPlacementPrompt(input, placement);
+async function generateRegionImage(plan: z.infer<typeof outfitPlanSchema>, region: "front" | "back" | "left" | "right") {
   const response = await openai.images.generate({
     model: "gpt-image-1",
-    prompt,
+    prompt: visualPrompt(plan, region),
     size: "1024x1024",
     background: "transparent",
   });
 
   const base64 = response.data[0]?.b64_json;
   if (!base64) {
-    throw new Error(`AI_IMAGE_EMPTY_${placement.toUpperCase()}`);
+    throw new Error(`AI_IMAGE_EMPTY_${region.toUpperCase()}`);
   }
 
   return `data:image/png;base64,${base64}`;
 }
 
-async function generatePalette(input: AssetRequest): Promise<string[]> {
-  const styleContext = input.style ? STYLE_PRESETS[input.style] ?? `Style direction: ${input.style}` : "";
-
-  const completion = await openai.chat.completions.create({
-    model: "gpt-5.2",
-    max_completion_tokens: 240,
-    response_format: { type: "json_object" },
-    messages: [
-      {
-        role: "system",
-        content:
-          "Return JSON only: {\"colorPalette\":[\"#RRGGBB\",...]}. Palette must contain 4-6 high-contrast game-friendly colors.",
-      },
-      {
-        role: "user",
-        content: `Generate a color palette for a Roblox ${input.type} design. Prompt: ${input.prompt}. ${styleContext}`,
-      },
+function createFallbackDraft(reason: string): z.infer<typeof fallbackDraftSchema> {
+  return {
+    enabled: true,
+    reason,
+    instructions: [
+      "Fill target zones using baseColor as the foundation.",
+      "Add a contrasting stripe pattern to left/right regions.",
+      "Place one centered emblem shape in the front region.",
+      "Use the secondary palette color for edge trim details.",
     ],
+    suggestedShapes: ["panel", "stripe", "emblem"],
+  };
+}
+
+async function buildOutfitResult(input: z.infer<typeof generateOutfitRequestSchema>, extra?: string) {
+  const plan = await generatePlan(input, extra);
+
+  try {
+    const [frontImage, backImage, leftRegionImage, rightRegionImage] = await Promise.all([
+      generateRegionImage(plan, "front"),
+      generateRegionImage(plan, "back"),
+      generateRegionImage(plan, "left"),
+      generateRegionImage(plan, "right"),
+    ]);
+
+    return generatedOutfitSchema.parse({
+      plan,
+      assets: { frontImage, backImage, leftRegionImage, rightRegionImage },
+    });
+  } catch (err) {
+    return generatedOutfitSchema.parse({
+      plan,
+      fallbackDraft: createFallbackDraft(err instanceof Error ? err.message : "IMAGE_GENERATION_FAILED"),
+    });
+  }
+}
+
+async function saveGeneration(req: Request, prompt: string, stylePreset: string | undefined, target: string, result: unknown) {
+  await db.insert(aiGenerationsTable).values({
+    id: randomUUID(),
+    userId: getUserId(req),
+    prompt,
+    result: JSON.stringify(result),
+    style: stylePreset ?? null,
+    type: target,
   });
-
-  const raw = completion.choices[0]?.message?.content;
-  if (!raw) {
-    return ["#111827", "#2563EB", "#22D3EE", "#F59E0B"];
-  }
-
-  const parsed = parseStrictJson(raw) as { colorPalette?: string[] };
-  const cleaned = (parsed.colorPalette ?? []).filter((value) => /^#([0-9a-fA-F]{6})$/.test(value));
-
-  return cleaned.length >= 3 ? cleaned.slice(0, 8) : ["#111827", "#2563EB", "#22D3EE", "#F59E0B"];
 }
 
-async function generateAssets(input: AssetRequest): Promise<AssetResponse> {
-  const [frontImage, backImage, sleeveImage, colorPalette] = await Promise.all([
-    generatePlacementImage(input, "front"),
-    generatePlacementImage(input, "back"),
-    generatePlacementImage(input, "sleeves"),
-    generatePalette(input),
-  ]);
+router.post("/ai/generate-outfit", async (req, res): Promise<void> => {
+  if (!ensureAuthenticated(req, res)) return;
 
-  return assetSchema.parse({ frontImage, backImage, sleeveImage, colorPalette });
-}
-
-router.post("/ai/generate-assets", async (req, res): Promise<void> => {
-  if (!req.isAuthenticated()) {
-    res.status(401).json({ error: "Unauthorized" });
-    return;
-  }
-
-  const parsed = assetRequestSchema.safeParse(req.body);
+  const parsed = generateOutfitRequestSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: "Invalid request", details: parsed.error.flatten() });
     return;
   }
 
   try {
-    const input = parsed.data;
-    const primaryAsset = await generateAssets(input);
-    const variationCount = Math.max(1, Math.min(input.variationCount ?? 1, 4));
+    const result = await buildOutfitResult(parsed.data);
+    await saveGeneration(req, parsed.data.prompt, parsed.data.stylePreset, parsed.data.target, result);
+    res.json(result);
+  } catch (err) {
+    if (err instanceof z.ZodError || err instanceof SyntaxError) {
+      req.log.error({ err }, "ai.generate-outfit.invalid-schema");
+      sendSchemaError(res, err instanceof z.ZodError ? err.issues.map((i) => i.message).join(", ") : "AI returned non-JSON content");
+      return;
+    }
+    req.log.error({ err }, "ai.generate-outfit.failed");
+    res.status(500).json({ error: "Outfit generation failed. Please try again." });
+  }
+});
 
-    const variants = variationCount > 1
-      ? await Promise.all(
-        Array.from({ length: variationCount }, (_, index) =>
-          generateAssets({
-            ...input,
-            prompt: `${input.prompt}. Variation ${index + 1}: change shapes/details/color accents while preserving core concept.`,
-          }))
-      )
-      : undefined;
+router.post("/ai/generate-variants", async (req, res): Promise<void> => {
+  if (!ensureAuthenticated(req, res)) return;
 
-    const payload = assetResponseSchema.parse({
-      ...primaryAsset,
-      variants,
-    });
+  const parsed = generateVariantsRequestSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Invalid request", details: parsed.error.flatten() });
+    return;
+  }
 
-    await db.insert(aiGenerationsTable).values({
-      id: randomUUID(),
-      userId: req.user.id,
-      prompt: input.prompt,
-      result: JSON.stringify(payload),
-      style: input.style ?? null,
-      type: input.type,
-    });
+  try {
+    const baseInput = parsed.data;
+    const variants = await Promise.all(variantKinds.map(async (variant) => {
+      const result = await buildOutfitResult(
+        {
+          prompt: baseInput.prompt,
+          stylePreset: baseInput.stylePreset,
+          target: baseInput.target,
+        },
+        `Variant mode: ${variant}. Keep core concept and palette family consistent while changing composition strength.`,
+      );
+      return { variant, result };
+    }));
 
+    const payload = generateVariantsResponseSchema.parse({ variants });
+    await saveGeneration(req, parsed.data.prompt, parsed.data.stylePreset, `${parsed.data.target}:variants`, payload);
     res.json(payload);
   } catch (err) {
-    if (err instanceof z.ZodError) {
-      sendValidationError(res, err.issues.map((issue) => issue.message).join(", "));
+    if (err instanceof z.ZodError || err instanceof SyntaxError) {
+      req.log.error({ err }, "ai.generate-variants.invalid-schema");
+      sendSchemaError(res, err instanceof z.ZodError ? err.issues.map((i) => i.message).join(", ") : "AI returned non-JSON content");
       return;
     }
-
-    req.log.error({ err }, "AI generate-assets error");
-    res.status(500).json({ error: "Asset generation failed. Please try again." });
+    req.log.error({ err }, "ai.generate-variants.failed");
+    res.status(500).json({ error: "Variant generation failed. Please try again." });
   }
 });
 
-router.post("/ai/generate-idea", async (req, res): Promise<void> => {
-  if (!req.isAuthenticated()) {
-    res.status(401).json({ error: "Unauthorized" });
+router.post("/ai/remix-outfit", async (req, res): Promise<void> => {
+  if (!ensureAuthenticated(req, res)) return;
+
+  const parsed = remixOutfitRequestSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Invalid request", details: parsed.error.flatten() });
     return;
   }
-
-  const { prompt, style } = req.body;
-  if (!prompt || typeof prompt !== "string") {
-    res.status(400).json({ error: "prompt is required" });
-    return;
-  }
-
-  const styleContext = style ? STYLE_PRESETS[style] ?? `Style direction: ${style}` : "";
 
   try {
-    const data = await generateStructuredDesign(
-      `Task: Generate one production-quality Roblox shirt idea for this request: "${prompt}".\n${styleContext}`,
+    const sourcePlan = parsed.data.source.plan;
+    const result = await buildOutfitResult(
+      {
+        prompt: `${sourcePlan.title}. ${sourcePlan.overallMood}. ${parsed.data.instruction}`,
+        target: sourcePlan.target,
+        stylePreset: STYLE_PRESETS.find((preset) => preset.toLowerCase() === sourcePlan.style.toLowerCase()),
+      },
+      `Preserve core concept. Evolve this design instruction: ${parsed.data.instruction}`,
     );
 
-    await db.insert(aiGenerationsTable).values({
-      id: randomUUID(),
-      userId: req.user.id,
-      prompt,
-      result: JSON.stringify(data),
-      style: style ?? null,
-      type: "shirt",
-    });
-
-    res.json({ data });
+    await saveGeneration(req, parsed.data.instruction, sourcePlan.style, `${sourcePlan.target}:remix`, result);
+    res.json(result);
   } catch (err) {
-    if (err instanceof SyntaxError) {
-      sendValidationError(res, "AI returned non-JSON content.");
+    if (err instanceof z.ZodError || err instanceof SyntaxError) {
+      req.log.error({ err }, "ai.remix-outfit.invalid-schema");
+      sendSchemaError(res, err instanceof z.ZodError ? err.issues.map((i) => i.message).join(", ") : "AI returned non-JSON content");
       return;
     }
-    if (err instanceof z.ZodError) {
-      sendValidationError(res, err.issues.map((issue) => issue.message).join(", "));
-      return;
-    }
-
-    req.log.error({ err }, "AI generate-idea error");
-    res.status(500).json({ error: "AI generation failed. Please try again." });
-  }
-});
-
-router.post("/ai/improve-design", async (req, res): Promise<void> => {
-  if (!req.isAuthenticated()) {
-    res.status(401).json({ error: "Unauthorized" });
-    return;
-  }
-
-  const { description, style } = req.body;
-  if (!description || typeof description !== "string") {
-    res.status(400).json({ error: "description is required" });
-    return;
-  }
-
-  const styleContext = style ? STYLE_PRESETS[style] ?? `Style direction: ${style}` : "";
-
-  try {
-    const data = await generateStructuredDesign(
-      `Task: Improve this Roblox shirt concept into a cleaner, more wearable, production-ready design: "${description}".\n${styleContext}`,
-    );
-
-    res.json({ data });
-  } catch (err) {
-    if (err instanceof SyntaxError) {
-      sendValidationError(res, "AI returned non-JSON content.");
-      return;
-    }
-    if (err instanceof z.ZodError) {
-      sendValidationError(res, err.issues.map((issue) => issue.message).join(", "));
-      return;
-    }
-
-    req.log.error({ err }, "AI improve-design error");
-    res.status(500).json({ error: "Design improvement failed. Please try again." });
+    req.log.error({ err }, "ai.remix-outfit.failed");
+    res.status(500).json({ error: "Remix failed. Please try again." });
   }
 });
 
 router.post("/ai/generate-listing", async (req, res): Promise<void> => {
-  if (!req.isAuthenticated()) {
-    res.status(401).json({ error: "Unauthorized" });
+  if (!ensureAuthenticated(req, res)) return;
+
+  const parsed = listingRequestSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Invalid request", details: parsed.error.flatten() });
     return;
   }
-
-  const { idea, description, style } = req.body;
-  if (!idea && !description) {
-    res.status(400).json({ error: "idea or description is required" });
-    return;
-  }
-
-  const source = [idea, description].filter(Boolean).join(". ");
-  const styleContext = style ? STYLE_PRESETS[style] ?? `Style direction: ${style}` : "";
 
   try {
-    const data = await generateStructuredDesign(
-      `Task: Convert this concept into a market-ready Roblox design specification suitable for listing metadata and design execution: "${source}".\n${styleContext}`,
-    );
+    const completion = await openai.chat.completions.create({
+      model: "gpt-5.2",
+      max_completion_tokens: 600,
+      response_format: { type: "json_object" },
+      messages: [
+        {
+          role: "system",
+          content: "Create a Roblox catalog listing. Return only JSON with title, description, tags.",
+        },
+        {
+          role: "user",
+          content: JSON.stringify(parsed.data.result.plan),
+        },
+      ],
+    });
 
-    res.json({ data });
+    const content = completion.choices[0]?.message?.content;
+    if (!content) throw new Error("AI_EMPTY_LISTING");
+
+    const listing = listingResponseSchema.parse(parseJson(content));
+    res.json(listing);
   } catch (err) {
-    if (err instanceof SyntaxError) {
-      sendValidationError(res, "AI returned non-JSON content.");
+    if (err instanceof z.ZodError || err instanceof SyntaxError) {
+      req.log.error({ err }, "ai.generate-listing.invalid-schema");
+      sendSchemaError(res, err instanceof z.ZodError ? err.issues.map((i) => i.message).join(", ") : "AI returned non-JSON content");
       return;
     }
-    if (err instanceof z.ZodError) {
-      sendValidationError(res, err.issues.map((issue) => issue.message).join(", "));
-      return;
-    }
-
-    req.log.error({ err }, "AI generate-listing error");
+    req.log.error({ err }, "ai.generate-listing.failed");
     res.status(500).json({ error: "Listing generation failed. Please try again." });
   }
 });
 
 router.get("/ai/history", async (req, res): Promise<void> => {
-  if (!req.isAuthenticated()) {
-    res.status(401).json({ error: "Unauthorized" });
-    return;
-  }
+  if (!ensureAuthenticated(req, res)) return;
 
-  const generations = await db
+  const rows = await db
     .select()
     .from(aiGenerationsTable)
-    .where(eq(aiGenerationsTable.userId, req.user.id))
+    .where(eq(aiGenerationsTable.userId, getUserId(req)))
     .orderBy(desc(aiGenerationsTable.createdAt))
-    .limit(20);
+    .limit(30);
 
-  res.json(generations);
+  const mapped = rows.flatMap((row: any) => {
+    let payload: unknown;
+    try {
+      payload = JSON.parse(row.result);
+    } catch {
+      req.log.error({ generationId: row.id }, "ai.history.invalid-json");
+      return [];
+    }
+
+    const parsed = generatedOutfitSchema.safeParse(payload);
+    if (!parsed.success) return [];
+    return [historyEntrySchema.parse({
+      id: row.id,
+      prompt: row.prompt,
+      style: row.style,
+      type: row.type,
+      createdAt: row.createdAt.toISOString(),
+      result: parsed.data,
+    })];
+  });
+
+  res.json(mapped);
 });
 
 export default router;
