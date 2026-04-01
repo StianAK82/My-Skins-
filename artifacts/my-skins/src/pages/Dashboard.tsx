@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
+import { z } from "zod";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger
 } from "@/components/ui/dropdown-menu";
@@ -70,6 +71,39 @@ async function createBlankProject(type: "shirt" | "pants", title: string) {
   return res.json();
 }
 
+const generatedOutfitSchema = z.object({
+  concept: z.object({
+    title: z.string(),
+    style: z.string(),
+    baseColor: z.string().regex(/^#([0-9a-fA-F]{6})$/),
+    colorPalette: z.array(z.string().regex(/^#([0-9a-fA-F]{6})$/)).min(3),
+    front: z.object({ description: z.string() }),
+    back: z.object({ description: z.string() }),
+    leftSleeve: z.object({ description: z.string() }),
+    rightSleeve: z.object({ description: z.string() }),
+  }).strict(),
+  assets: z.object({
+    frontImage: z.string().nullable(),
+    backImage: z.string().nullable(),
+    leftSleeveImage: z.string().nullable(),
+    rightSleeveImage: z.string().nullable(),
+  }).strict(),
+}).strict();
+
+async function generateOutfit(prompt: string, target: "classic_shirt" | "classic_pants", stylePreset?: string) {
+  const res = await fetch("/api/ai/generate-outfit", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ prompt, target, stylePreset }),
+  });
+  const payload = await res.json();
+  if (!res.ok) {
+    throw new Error(payload?.error ?? "AI generation failed.");
+  }
+  return generatedOutfitSchema.parse(payload);
+}
+
 export default function Dashboard() {
   const { t, language } = useLanguage();
   const [, setLocation] = useLocation();
@@ -80,6 +114,7 @@ export default function Dashboard() {
   const [selectedStyle, setSelectedStyle] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatingStep, setGeneratingStep] = useState("");
+  const [failedStep, setFailedStep] = useState("");
   const [placeholderIdx, setPlaceholderIdx] = useState(0);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -100,24 +135,32 @@ export default function Dashboard() {
   const handleAiCreate = async () => {
     if (!prompt.trim() || isGenerating) return;
     setIsGenerating(true);
+    setFailedStep("");
 
     try {
-      setGeneratingStep(language === "no" ? "Analyserer beskrivelsen..." : "Analyzing your description...");
-      await new Promise(r => setTimeout(r, 400));
-      setGeneratingStep(language === "no" ? "Genererer designkonsept med AI..." : "Generating design concept with AI...");
+      const normalizedStyle = selectedStyle
+        ? `${selectedStyle.charAt(0).toUpperCase()}${selectedStyle.slice(1)}`
+        : undefined;
+      const aiTarget = currentItemType.roblox === "pants" ? "classic_pants" : "classic_shirt";
+
+      setGeneratingStep("Creating concept...");
+      const generated = await generateOutfit(prompt.trim(), aiTarget, normalizedStyle);
+      console.info("dashboard.ai.step.concept.completed", { prompt: prompt.trim(), aiTarget, normalizedStyle });
+
+      setGeneratingStep("Generating visuals...");
       const result = await createBlankProject(currentItemType.roblox as "shirt" | "pants", prompt.trim().slice(0, 60));
+      console.info("dashboard.ai.step.visuals.completed", { projectId: result.id });
 
-      setGeneratingStep(language === "no" ? "Oppretter prosjektet..." : "Creating your project...");
-      await new Promise(r => setTimeout(r, 300));
+      setGeneratingStep("Applying to canvas...");
+      sessionStorage.setItem(`my-skins:pending-ai:${result.id}`, JSON.stringify(generated));
+      console.info("dashboard.ai.step.apply.queued", { projectId: result.id });
 
-      toast({
-        title: language === "no" ? "Prosjekt opprettet! 🎨" : "Project created! 🎨",
-        description: language === "no" ? "AI-designer er flyttet til editoren." : "AI workflow is now inside the editor.",
-      });
-
+      setGeneratingStep("Done");
       setLocation(`/editor/${result.id}`);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "AI creation failed";
+      setFailedStep(generatingStep || "Creating concept...");
+      console.error("dashboard.ai.pipeline.failed", { step: generatingStep || "unknown", message });
       toast({ title: language === "no" ? "Feil" : "Error", description: message, variant: "destructive" });
     } finally {
       setIsGenerating(false);
@@ -270,7 +313,7 @@ export default function Dashboard() {
 
               {/* Generating progress */}
               <AnimatePresence>
-                {isGenerating && generatingStep && (
+                {(isGenerating && generatingStep) || failedStep ? (
                   <motion.div
                     initial={{ opacity: 0, height: 0 }}
                     animate={{ opacity: 1, height: "auto" }}
@@ -278,11 +321,14 @@ export default function Dashboard() {
                     className="border-t border-border/50 bg-primary/5 px-5 py-2"
                   >
                     <div className="flex items-center gap-2 text-sm text-primary">
-                      <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" />
-                      {generatingStep}
+                      {isGenerating ? <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" /> : <Sparkles className="w-3.5 h-3.5 shrink-0" />}
+                      {generatingStep || "Generation failed"}
                     </div>
+                    {failedStep && (
+                      <div className="text-xs text-destructive mt-1">Failed step: {failedStep}</div>
+                    )}
                   </motion.div>
-                )}
+                ) : null}
               </AnimatePresence>
             </div>
 

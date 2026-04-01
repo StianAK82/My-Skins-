@@ -39,19 +39,19 @@ export function AiPanel({ projectType, onUseColors, onApplyAssets }: AiPanelProp
   const loading = generateOutfit.isPending || generateVariants.isPending || remixOutfit.isPending;
   const current = variants[activeVariant]?.result;
 
-  const palette = useMemo(() => current?.plan.colorPalette ?? [], [current]);
+  const palette = useMemo(() => current?.concept.colorPalette ?? [], [current]);
 
   const target = selectedTarget === "shirt" ? "classic_shirt" : "classic_pants";
 
   const buildFallbackPreview = (label: string) => {
     if (!current) return "";
-    const palette = current.plan.colorPalette;
-    const primary = palette[0] ?? current.plan.baseColor;
+    const palette = current.concept.colorPalette;
+    const primary = palette[0] ?? current.concept.baseColor;
     const secondary = palette[1] ?? "#ffffff";
     const accent = palette[2] ?? "#111111";
     const data = `
       <svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
-        <rect width="512" height="512" fill="${current.plan.baseColor}" />
+        <rect width="512" height="512" fill="${current.concept.baseColor}" />
         <rect x="48" y="72" width="416" height="368" rx="24" fill="${primary}" opacity="0.28" />
         <rect x="56" y="112" width="400" height="34" rx="17" fill="${secondary}" opacity="0.9" />
         <rect x="56" y="366" width="400" height="24" rx="12" fill="${accent}" opacity="0.85" />
@@ -82,7 +82,7 @@ export function AiPanel({ projectType, onUseColors, onApplyAssets }: AiPanelProp
           prompt: prompt.trim(),
           target,
           stylePreset: selectedStyle || undefined,
-          basePlan: current?.plan as AiOutfitPlan | undefined,
+          basePlan: current?.concept as AiOutfitPlan | undefined,
         },
       });
 
@@ -155,8 +155,8 @@ export function AiPanel({ projectType, onUseColors, onApplyAssets }: AiPanelProp
             {[
               { label: "Front", src: current.assets?.frontImage },
               { label: "Back", src: current.assets?.backImage },
-              { label: "Left Region", src: current.assets?.leftRegionImage },
-              { label: "Right Region", src: current.assets?.rightRegionImage },
+              { label: "Left Sleeve", src: current.assets?.leftSleeveImage },
+              { label: "Right Sleeve", src: current.assets?.rightSleeveImage },
             ].map((item) => (
               <div key={item.label} className="border rounded-lg overflow-hidden bg-muted/20">
                 <img src={item.src || buildFallbackPreview(item.label)} alt={item.label} className="w-full aspect-square object-contain" />

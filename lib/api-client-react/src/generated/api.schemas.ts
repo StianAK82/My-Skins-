@@ -171,41 +171,22 @@ export interface AiOutfitPlan {
   overallMood: string;
   front: AiFrontBackRegion;
   back: AiFrontBackRegion;
-  leftRegion: AiSideRegion;
-  rightRegion: AiSideRegion;
+  leftSleeve: AiSideRegion;
+  rightSleeve: AiSideRegion;
   /** @minItems 2 */
   details: string[];
 }
 
 export interface AiRegionAssets {
-  frontImage: string;
-  backImage: string;
-  leftRegionImage: string;
-  rightRegionImage: string;
-}
-
-export type AiFallbackDraftSuggestedShapesItem =
-  (typeof AiFallbackDraftSuggestedShapesItem)[keyof typeof AiFallbackDraftSuggestedShapesItem];
-
-export const AiFallbackDraftSuggestedShapesItem = {
-  stripe: "stripe",
-  block: "block",
-  chevron: "chevron",
-  emblem: "emblem",
-  panel: "panel",
-} as const;
-
-export interface AiFallbackDraft {
-  enabled: boolean;
-  reason: string;
-  instructions: string[];
-  suggestedShapes: AiFallbackDraftSuggestedShapesItem[];
+  frontImage: string | null;
+  backImage: string | null;
+  leftSleeveImage: string | null;
+  rightSleeveImage: string | null;
 }
 
 export interface AiGeneratedOutfit {
-  plan: AiOutfitPlan;
-  assets?: AiRegionAssets;
-  fallbackDraft?: AiFallbackDraft;
+  concept: AiOutfitPlan;
+  assets: AiRegionAssets;
 }
 
 export interface AiGenerateOutfitRequest {

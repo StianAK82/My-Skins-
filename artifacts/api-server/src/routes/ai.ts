@@ -23,7 +23,7 @@ const variantKinds = ["Clean", "Bold", "Premium", "Experimental"] as const;
 const graphicTypeSchema = z.enum(["graphic", "emblem", "pattern", "plain"]);
 const sideGraphicTypeSchema = z.enum(["pattern", "stripe", "symbol", "plain"]);
 
-const outfitPlanSchema = z.object({
+const outfitConceptSchema = z.object({
   target: z.enum(["classic_shirt", "classic_pants"]),
   title: z.string().min(1),
   style: z.string().min(1),
@@ -32,32 +32,22 @@ const outfitPlanSchema = z.object({
   overallMood: z.string().min(1),
   front: z.object({ description: z.string().min(1), graphicType: graphicTypeSchema }),
   back: z.object({ description: z.string().min(1), graphicType: graphicTypeSchema }),
-  leftRegion: z.object({ description: z.string().min(1), graphicType: sideGraphicTypeSchema }),
-  rightRegion: z.object({ description: z.string().min(1), graphicType: sideGraphicTypeSchema }),
+  leftSleeve: z.object({ description: z.string().min(1), graphicType: sideGraphicTypeSchema }),
+  rightSleeve: z.object({ description: z.string().min(1), graphicType: sideGraphicTypeSchema }),
   details: z.array(z.string().min(1)).min(2).max(6),
-});
+}).strict();
 
 const regionAssetsSchema = z.object({
-  frontImage: z.string().min(1),
-  backImage: z.string().min(1),
-  leftRegionImage: z.string().min(1),
-  rightRegionImage: z.string().min(1),
-});
-
-const fallbackDraftSchema = z.object({
-  enabled: z.literal(true),
-  reason: z.string().min(1),
-  instructions: z.array(z.string().min(1)).min(3).max(8),
-  suggestedShapes: z.array(z.enum(["stripe", "block", "chevron", "emblem", "panel"]))
-    .min(2)
-    .max(5),
-});
+  frontImage: z.string().nullable(),
+  backImage: z.string().nullable(),
+  leftSleeveImage: z.string().nullable(),
+  rightSleeveImage: z.string().nullable(),
+}).strict();
 
 const generatedOutfitSchema = z.object({
-  plan: outfitPlanSchema,
-  assets: regionAssetsSchema.optional(),
-  fallbackDraft: fallbackDraftSchema.optional(),
-});
+  concept: outfitConceptSchema,
+  assets: regionAssetsSchema,
+}).strict();
 
 const generateOutfitRequestSchema = z.object({
   prompt: z.string().min(1),
@@ -69,7 +59,7 @@ const generateVariantsRequestSchema = z.object({
   prompt: z.string().min(1),
   target: z.enum(["classic_shirt", "classic_pants"]),
   stylePreset: z.enum(STYLE_PRESETS).optional(),
-  basePlan: outfitPlanSchema.optional(),
+  basePlan: outfitConceptSchema.optional(),
 });
 
 const generateVariantsResponseSchema = z.object({
@@ -178,6 +168,7 @@ function buildPlanPrompt(input: z.infer<typeof generateOutfitRequestSchema>, ext
     `Prompt: ${input.prompt}`,
     input.stylePreset ? `Style preset: ${input.stylePreset}` : "",
     extra ?? "",
+    "Return strict JSON with keys: target,title,style,baseColor,colorPalette,overallMood,front,back,leftSleeve,rightSleeve,details.",
     "Rules: no copyrighted logos, no placeholder text, no photoreal output, keep visuals avatar-wearable.",
   ].filter(Boolean).join("\n");
 }
@@ -198,17 +189,17 @@ async function generatePlan(input: z.infer<typeof generateOutfitRequestSchema>, 
     throw new Error("AI_EMPTY_PLAN");
   }
 
-  return outfitPlanSchema.parse(parseJson(content));
+  return outfitConceptSchema.parse(parseJson(content));
 }
 
-function visualPrompt(plan: z.infer<typeof outfitPlanSchema>, region: "front" | "back" | "left" | "right"): string {
+function visualPrompt(plan: z.infer<typeof outfitConceptSchema>, region: "front" | "back" | "left" | "right"): string {
   const regionDescription = region === "front"
     ? plan.front.description
     : region === "back"
       ? plan.back.description
       : region === "left"
-        ? plan.leftRegion.description
-        : plan.rightRegion.description;
+        ? plan.leftSleeve.description
+        : plan.rightSleeve.description;
 
   return [
     "You are generating a clean visual asset for a Roblox clothing region.",
@@ -228,7 +219,7 @@ function visualPrompt(plan: z.infer<typeof outfitPlanSchema>, region: "front" | 
   ].join("\n");
 }
 
-async function generateRegionImage(plan: z.infer<typeof outfitPlanSchema>, region: "front" | "back" | "left" | "right") {
+async function generateRegionImage(plan: z.infer<typeof outfitConceptSchema>, region: "front" | "back" | "left" | "right") {
   const response = await openai.images.generate({
     model: "gpt-image-1",
     prompt: visualPrompt(plan, region),
@@ -244,46 +235,37 @@ async function generateRegionImage(plan: z.infer<typeof outfitPlanSchema>, regio
   return normalizeImageDataUrl(base64, region);
 }
 
-function createFallbackDraft(reason: string): z.infer<typeof fallbackDraftSchema> {
-  return {
-    enabled: true,
-    reason,
-    instructions: [
-      "Fill target zones using baseColor as the foundation.",
-      "Add a contrasting stripe pattern to left/right regions.",
-      "Place one centered emblem shape in the front region.",
-      "Use the secondary palette color for edge trim details.",
-    ],
-    suggestedShapes: ["panel", "stripe", "emblem"],
-  };
-}
-
 async function buildOutfitResult(input: z.infer<typeof generateOutfitRequestSchema>, extra?: string) {
-  const plan = await generatePlan(input, extra);
+  const concept = await generatePlan(input, extra);
 
   try {
-    const [frontImage, backImage, leftRegionImage, rightRegionImage] = await Promise.all([
-      generateRegionImage(plan, "front"),
-      generateRegionImage(plan, "back"),
-      generateRegionImage(plan, "left"),
-      generateRegionImage(plan, "right"),
+    const [frontImage, backImage, leftSleeveImage, rightSleeveImage] = await Promise.all([
+      generateRegionImage(concept, "front"),
+      generateRegionImage(concept, "back"),
+      generateRegionImage(concept, "left"),
+      generateRegionImage(concept, "right"),
     ]);
 
     return generatedOutfitSchema.parse({
-      plan,
-      assets: { frontImage, backImage, leftRegionImage, rightRegionImage },
+      concept,
+      assets: { frontImage, backImage, leftSleeveImage, rightSleeveImage },
     });
   } catch (err) {
     const reason = err instanceof Error ? err.message : "IMAGE_GENERATION_FAILED";
     console.error("ai.generate-outfit.assets.failed", {
-      target: plan.target,
+      target: concept.target,
       prompt: input.prompt,
       stylePreset: input.stylePreset,
       reason,
     });
     return generatedOutfitSchema.parse({
-      plan,
-      fallbackDraft: createFallbackDraft(reason),
+      concept,
+      assets: {
+        frontImage: null,
+        backImage: null,
+        leftSleeveImage: null,
+        rightSleeveImage: null,
+      },
     });
   }
 }
@@ -370,7 +352,7 @@ router.post("/ai/remix-outfit", async (req, res): Promise<void> => {
   }
 
   try {
-    const sourcePlan = parsed.data.source.plan;
+    const sourcePlan = parsed.data.source.concept;
     const result = await buildOutfitResult(
       {
         prompt: `${sourcePlan.title}. ${sourcePlan.overallMood}. ${parsed.data.instruction}`,
@@ -414,7 +396,7 @@ router.post("/ai/generate-listing", async (req, res): Promise<void> => {
         },
         {
           role: "user",
-          content: JSON.stringify(parsed.data.result.plan),
+          content: JSON.stringify(parsed.data.result.concept),
         },
       ],
     });
