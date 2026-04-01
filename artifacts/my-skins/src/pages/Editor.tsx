@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useParams, Link } from "wouter";
 import * as fabric from "fabric";
-import { useGetProject, useSaveCanvas, useCreateExport } from "@workspace/api-client-react";
+import { type AiGeneratedOutfit, useGetProject, useSaveCanvas, useCreateExport } from "@workspace/api-client-react";
 import { useLanguage } from "@/hooks/use-language";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,13 +27,6 @@ interface AiConcept {
   designTips?: string[];
 }
 
-interface GeneratedAssets {
-  frontImage: string;
-  backImage: string;
-  sleeveImage: string;
-  colorPalette: string[];
-}
-
 interface TemplateZone {
   label: string;
   left: number;
@@ -42,16 +35,18 @@ interface TemplateZone {
   height: number;
 }
 
-const TEMPLATE_ZONES: Record<"shirt" | "pants", { front: TemplateZone; back: TemplateZone; sleeves: TemplateZone }> = {
+const TEMPLATE_ZONES: Record<"shirt" | "pants", { front: TemplateZone; back: TemplateZone; leftRegion: TemplateZone; rightRegion: TemplateZone }> = {
   shirt: {
     front: { label: "Front / Chest", left: 196, top: 118, width: 128, height: 128 },
     back: { label: "Back", left: 338, top: 118, width: 128, height: 128 },
-    sleeves: { label: "Sleeves", left: 44, top: 118, width: 128, height: 128 },
+    leftRegion: { label: "Left Sleeve", left: 44, top: 118, width: 128, height: 128 },
+    rightRegion: { label: "Right Sleeve", left: 481, top: 118, width: 88, height: 128 },
   },
   pants: {
     front: { label: "Front / Legs", left: 196, top: 288, width: 128, height: 192 },
     back: { label: "Back / Legs", left: 338, top: 288, width: 128, height: 192 },
-    sleeves: { label: "Side Legs", left: 44, top: 288, width: 128, height: 192 },
+    leftRegion: { label: "Left Leg", left: 44, top: 288, width: 128, height: 192 },
+    rightRegion: { label: "Right Leg", left: 481, top: 288, width: 88, height: 192 },
   },
 };
 
@@ -439,7 +434,7 @@ export default function Editor() {
     e.target.value = "";
   };
 
-  const addImageToZone = useCallback(async (source: string, zone: TemplateZone) => {
+  const addImageToZone = useCallback(async (source: string, zone: TemplateZone, layerName: string) => {
     if (!fabricRef.current) return;
     const image = await fabric.FabricImage.fromURL(source);
     image.set({
@@ -447,7 +442,7 @@ export default function Editor() {
       top: zone.top,
       selectable: true,
       evented: true,
-      data: { role: "ai-generated", zone: zone.label },
+      data: { role: "ai-generated", zone: zone.label, layerName },
     });
     image.scaleToWidth(zone.width);
     if ((image.getScaledHeight() ?? 0) > zone.height) {
@@ -456,23 +451,43 @@ export default function Editor() {
     fabricRef.current.add(image);
   }, []);
 
-  const applyAiDesignToCanvas = useCallback(async (assets: GeneratedAssets) => {
+  const applyAiOutfitToCanvas = useCallback(async (result: AiGeneratedOutfit) => {
     if (!fabricRef.current) return;
     const canvas = fabricRef.current;
     const type = (project?.type as "shirt" | "pants") ?? "shirt";
     const zones = TEMPLATE_ZONES[type];
+    const assets = result.assets;
+    if (!assets) {
+      console.error("canvas.apply.missing-assets", result);
+      toast({ title: language === "no" ? "Mangler AI-bilder" : "Missing AI assets", variant: "destructive" });
+      return;
+    }
 
     setDrawingMode(false);
-    await Promise.all([
-      addImageToZone(assets.frontImage, zones.front),
-      addImageToZone(assets.backImage, zones.back),
-      addImageToZone(assets.sleeveImage, zones.sleeves),
-    ]);
+    try {
+      canvas.getObjects().forEach((obj) => {
+        if ((obj.data as { role?: string } | undefined)?.role === "template-guide") {
+          canvas.remove(obj);
+        }
+      });
 
-    canvas.renderAll();
-    handleUseColors(assets.colorPalette);
-    addTemplateGuideLayer();
-    toast({ title: language === "no" ? "AI design lagt til!" : "AI design applied to canvas!" });
+      await Promise.all([
+        addImageToZone(assets.frontImage, zones.front, "AI Front"),
+        addImageToZone(assets.backImage, zones.back, "AI Back"),
+        addImageToZone(assets.leftRegionImage, zones.leftRegion, "AI Left Region"),
+        addImageToZone(assets.rightRegionImage, zones.rightRegion, "AI Right Region"),
+      ]);
+
+      canvas.backgroundColor = result.plan.baseColor;
+      canvas.renderAll();
+      handleUseColors(result.plan.colorPalette);
+      addTemplateGuideLayer();
+      toast({ title: language === "no" ? "AI design lagt til!" : "AI design applied to canvas!" });
+    } catch (error) {
+      console.error("canvas.apply.failure", error);
+      toast({ title: language === "no" ? "Kunne ikke bruke AI-design" : "Failed to apply AI design", variant: "destructive" });
+      addTemplateGuideLayer();
+    }
   }, [addImageToZone, addTemplateGuideLayer, handleUseColors, language, project?.type, toast]);
 
   const zoomIn = () => {
@@ -674,7 +689,7 @@ export default function Editor() {
                 <AiPanel
                   projectType={(project?.type as "shirt" | "pants") ?? "shirt"}
                   onUseColors={handleUseColors}
-                  onApplyAssets={applyAiDesignToCanvas}
+                  onApplyAssets={applyAiOutfitToCanvas}
                 />
               </TabsContent>
             </div>

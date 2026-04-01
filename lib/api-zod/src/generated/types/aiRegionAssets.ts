@@ -6,8 +6,9 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export interface AiPaletteResponse {
-  colors: string[];
-  name: string;
-  description?: string;
+export interface AiRegionAssets {
+  frontImage: string;
+  backImage: string;
+  leftRegionImage: string;
+  rightRegionImage: string;
 }

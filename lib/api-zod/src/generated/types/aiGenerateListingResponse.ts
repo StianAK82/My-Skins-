@@ -6,7 +6,8 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export interface AiPaletteRequest {
-  prompt: string;
-  style?: string;
+export interface AiGenerateListingResponse {
+  title: string;
+  description: string;
+  tags: string[];
 }

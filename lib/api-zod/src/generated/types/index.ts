@@ -6,12 +6,26 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export * from "./aiGenerateRequest";
-export * from "./aiGenerateRequestType";
-export * from "./aiGenerateResponse";
-export * from "./aiGeneration";
-export * from "./aiPaletteRequest";
-export * from "./aiPaletteResponse";
+export * from "./aiFallbackDraft";
+export * from "./aiFallbackDraftSuggestedShapesItem";
+export * from "./aiFrontBackRegion";
+export * from "./aiFrontBackRegionGraphicType";
+export * from "./aiGeneratedOutfit";
+export * from "./aiGenerateListingRequest";
+export * from "./aiGenerateListingResponse";
+export * from "./aiGenerateOutfitRequest";
+export * from "./aiGenerateVariantsRequest";
+export * from "./aiGenerateVariantsResponse";
+export * from "./aiHistoryEntry";
+export * from "./aiOutfitPlan";
+export * from "./aiRegionAssets";
+export * from "./aiRemixOutfitRequest";
+export * from "./aiSideRegion";
+export * from "./aiSideRegionGraphicType";
+export * from "./aiStylePreset";
+export * from "./aiTarget";
+export * from "./aiVariantResult";
+export * from "./aiVariantResultVariant";
 export * from "./createExportRequest";
 export * from "./createExportRequestFormat";
 export * from "./createExportRequestQuality";
