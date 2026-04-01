@@ -12,7 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 
-const STYLE_PRESETS = ["Streetwear", "Anime", "Cyberpunk", "Y2K", "Minimal", "Fantasy", "Sport", "Luxury"] as const;
+const STYLE_PRESETS = ["Streetwear", "Anime", "Sport", "Cyberpunk", "Minimal"] as const;
 const VARIANT_ORDER = ["Clean", "Bold", "Premium", "Experimental"] as const;
 
 type EditorTarget = "shirt" | "pants";
@@ -68,7 +68,11 @@ export function AiPanel({ projectType, onUseColors, onApplyAssets }: AiPanelProp
       const result = await generateOutfit.mutateAsync({ data: { prompt: prompt.trim(), target, stylePreset: selectedStyle || undefined } });
       setVariants([{ label: "Base", result }]);
       setActiveVariant(0);
-      toast({ title: "Outfit generated", description: "Preview regions and apply to canvas." });
+      const visibleRegions = Object.values(result.assets ?? {}).filter(Boolean).length;
+      toast({
+        title: visibleRegions > 0 ? "Outfit generated" : "Outfit generated with fallback",
+        description: visibleRegions > 0 ? "Preview regions and apply to canvas." : "Assets were missing, fallback layers will be used.",
+      });
     } catch (error) {
       toast({ title: "AI Error", description: error instanceof Error ? error.message : "Generation failed", variant: "destructive" });
     }

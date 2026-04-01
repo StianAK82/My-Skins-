@@ -19,10 +19,9 @@ import {
 const STYLE_PRESETS = [
   { id: "streetwear", label: "Streetwear", emoji: "🏙️" },
   { id: "anime", label: "Anime", emoji: "⭐" },
+  { id: "sport", label: "Sport", emoji: "🏅" },
   { id: "cyberpunk", label: "Cyberpunk", emoji: "🌐" },
-  { id: "y2k", label: "Y2K", emoji: "✨" },
   { id: "minimal", label: "Minimal", emoji: "◻️" },
-  { id: "fantasy", label: "Fantasy", emoji: "🔮" },
 ];
 
 const CREATION_MODES = [

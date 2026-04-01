@@ -12,7 +12,7 @@ import { AiPanel } from "@/components/editor/AiPanel";
 import { AvatarPreview } from "@/components/editor/AvatarPreview";
 import {
   Save, Download, ArrowLeft, Image as ImageIcon, Type, Square, Circle,
-  PenTool, Trash2, ZoomIn, ZoomOut, Layers, Sparkles, ChevronDown, X, Copy, Lock, Unlock, MoveUp, MoveDown
+  PenTool, Trash2, ZoomIn, ZoomOut, Layers, Sparkles, ChevronDown, X, Copy, Lock, Unlock, MoveUp, MoveDown, Grid3X3, Group, Ungroup
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { z } from "zod";
@@ -46,19 +46,20 @@ interface ModuleDefinition {
   color: string;
 }
 
+type StylePreset = "streetwear" | "anime" | "sport" | "cyberpunk" | "minimal";
+
 const MODULE_LIBRARY: ModuleDefinition[] = [
   { id: "mod-sleeve-stripe", name: "Sleeve Stripe", category: "Clothing Parts", shape: "stripe", color: "#ef4444" },
   { id: "mod-pocket", name: "Pocket", category: "Clothing Parts", shape: "rect", color: "#334155" },
   { id: "mod-collar", name: "Collar", category: "Clothing Parts", shape: "rect", color: "#0f172a" },
   { id: "mod-flame", name: "Flame Emblem", category: "Graphics", shape: "circle", color: "#f97316" },
-  { id: "mod-star", name: "Star Emblem", category: "Symbols", shape: "circle", color: "#facc15" },
+  { id: "mod-star", name: "Star Emblem", category: "Graphics", shape: "circle", color: "#facc15" },
   { id: "mod-cyber", name: "Cyber Trim", category: "Patterns", shape: "stripe", color: "#22d3ee" },
-  { id: "mod-hat", name: "Hat Shape", category: "Headwear", shape: "rect", color: "#7c3aed" },
-  { id: "mod-hair", name: "Hair Silhouette", category: "Hair", shape: "circle", color: "#111827" },
-  { id: "mod-beard", name: "Beard Shape", category: "Facial Hair", shape: "circle", color: "#78350f" },
-  { id: "mod-shoe", name: "Shoe Accent", category: "Footwear", shape: "rect", color: "#1d4ed8" },
-  { id: "mod-zipper", name: "Zipper Detail", category: "Extra Details", shape: "stripe", color: "#e2e8f0" },
+  { id: "mod-fade", name: "Fade Band", category: "Patterns", shape: "stripe", color: "#1d4ed8" },
+  { id: "mod-neon-glow", name: "Neon Glow", category: "Effects", shape: "circle", color: "#a855f7" },
+  { id: "mod-speed-lines", name: "Speed Lines", category: "Effects", shape: "stripe", color: "#14b8a6" },
   { id: "mod-backpack", name: "Backpack Mark", category: "Accessories", shape: "rect", color: "#10b981" },
+  { id: "mod-chain", name: "Chain Accent", category: "Accessories", shape: "stripe", color: "#cbd5e1" },
 ];
 
 const generatedOutfitSchema = z.object({
@@ -268,6 +269,9 @@ export default function Editor() {
   const [creationMode, setCreationMode] = useState("ai");
   const [avatarProfile, setAvatarProfile] = useState({ avatarType: "neutral", bodyType: "regular" });
   const [activeModuleCategory, setActiveModuleCategory] = useState("Clothing Parts");
+  const [selectedStylePreset, setSelectedStylePreset] = useState<StylePreset>("streetwear");
+  const [snapEnabled, setSnapEnabled] = useState(true);
+  const [draggingModuleId, setDraggingModuleId] = useState<string | null>(null);
 
   const { data: project, isLoading } = useGetProject(id);
   const saveCanvas = useSaveCanvas();
@@ -334,6 +338,30 @@ export default function Editor() {
     });
   }, [project?.type]);
 
+  const ensureVisibleStarterDesign = useCallback((preset: StylePreset = "streetwear") => {
+    if (!fabricRef.current) return;
+    const canvas = fabricRef.current;
+    const type = (project?.type as "shirt" | "pants") ?? "shirt";
+    const zones = TEMPLATE_ZONES[type];
+    const hasUserObjects = canvas.getObjects().some((obj) => (obj.data as { role?: string } | undefined)?.role !== "template-guide");
+    if (hasUserObjects) return;
+
+    const stylePalettes: Record<StylePreset, string[]> = {
+      streetwear: ["#111827", "#ef4444", "#e5e7eb"],
+      anime: ["#f472b6", "#fde047", "#1d4ed8"],
+      sport: ["#0f172a", "#22c55e", "#f8fafc"],
+      cyberpunk: ["#0b1120", "#22d3ee", "#a855f7"],
+      minimal: ["#f8fafc", "#334155", "#94a3b8"],
+    };
+    const palette = stylePalettes[preset];
+    canvas.backgroundColor = palette[0];
+    addFallbackShapeToZone(zones.front, palette[1], "Starter Front");
+    addFallbackShapeToZone(zones.back, palette[2], "Starter Back");
+    addFallbackShapeToZone(zones.leftRegion, palette[1], "Starter Left Sleeve");
+    addFallbackShapeToZone(zones.rightRegion, palette[2], "Starter Right Sleeve");
+    canvas.renderAll();
+  }, [addFallbackShapeToZone, project?.type]);
+
   // Initialize Canvas
   useEffect(() => {
     if (!canvasRef.current || !project) return;
@@ -395,9 +423,17 @@ export default function Editor() {
     canvas.on("selection:created", (e) => setSelectedObject(e.selected?.[0] || null));
     canvas.on("selection:updated", (e) => setSelectedObject(e.selected?.[0] || null));
     canvas.on("selection:cleared", () => setSelectedObject(null));
+    canvas.on("object:moving", (e) => {
+      if (!snapEnabled || !e.target) return;
+      const grid = 8;
+      e.target.set({
+        left: Math.round((e.target.left ?? 0) / grid) * grid,
+        top: Math.round((e.target.top ?? 0) / grid) * grid,
+      });
+    });
 
     return () => { canvas.dispose(); fabricRef.current = null; };
-  }, [addTemplateGuideLayer, project?.id]);
+  }, [addTemplateGuideLayer, project?.id, snapEnabled]);
 
   // Drawing mode
   useEffect(() => {
@@ -607,6 +643,14 @@ export default function Editor() {
     fabricRef.current.renderAll();
   };
 
+  const addModuleAt = (module: ModuleDefinition, left: number, top: number) => {
+    addModule(module);
+    const obj = fabricRef.current?.getActiveObject();
+    if (!obj || !fabricRef.current) return;
+    obj.set({ left, top });
+    fabricRef.current.renderAll();
+  };
+
   const duplicateSelected = () => {
     if (!fabricRef.current || !selectedObject) return;
     selectedObject.clone().then((cloned) => {
@@ -649,6 +693,24 @@ export default function Editor() {
     fabricRef.current.discardActiveObject();
     fabricRef.current.renderAll();
     setSelectedObject(null);
+  };
+
+  const groupSelection = () => {
+    if (!fabricRef.current) return;
+    const active = fabricRef.current.getActiveObject();
+    if (active && active.type === "activeSelection") {
+      (active as fabric.ActiveSelection).toGroup();
+      fabricRef.current.renderAll();
+    }
+  };
+
+  const ungroupSelection = () => {
+    if (!fabricRef.current) return;
+    const active = fabricRef.current.getActiveObject();
+    if (active && active.type === "group") {
+      (active as fabric.Group).toActiveSelection();
+      fabricRef.current.renderAll();
+    }
   };
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -844,10 +906,18 @@ export default function Editor() {
         });
       }
       if (parsed.creationMode) setCreationMode(parsed.creationMode);
+      if (parsed.stylePreset && ["streetwear", "anime", "sport", "cyberpunk", "minimal"].includes(parsed.stylePreset)) {
+        setSelectedStylePreset(parsed.stylePreset as StylePreset);
+      }
     } catch (error) {
       console.error("editor.meta.invalid", error);
     }
   }, [project?.id]);
+
+  useEffect(() => {
+    if (!project?.id || !fabricRef.current) return;
+    ensureVisibleStarterDesign(selectedStylePreset);
+  }, [ensureVisibleStarterDesign, project?.id, selectedStylePreset]);
 
   const zoomIn = () => {
     if (!fabricRef.current) return;
@@ -914,6 +984,9 @@ export default function Editor() {
           </Button>
           <Button size="sm" variant="secondary" onClick={() => setPreviewOpen(true)} disabled={!avatarTextureUrl}>
             Preview on Avatar
+          </Button>
+          <Button size="sm" variant={snapEnabled ? "default" : "outline"} onClick={() => setSnapEnabled((prev) => !prev)}>
+            <Grid3X3 className="w-3.5 h-3.5 mr-1" /> Snap
           </Button>
         </div>
       </header>
@@ -1073,11 +1146,29 @@ export default function Editor() {
                     ))}
                   </div>
                 </div>
+                <div>
+                  <p className="text-[10px] text-muted-foreground mb-2 uppercase tracking-wide">Style</p>
+                  <div className="grid grid-cols-2 gap-1">
+                    {(["streetwear", "anime", "sport", "cyberpunk", "minimal"] as const).map((preset) => (
+                      <Button
+                        key={preset}
+                        size="sm"
+                        variant={selectedStylePreset === preset ? "default" : "outline"}
+                        className="h-7 text-[10px] capitalize"
+                        onClick={() => setSelectedStylePreset(preset)}
+                      >
+                        {preset}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
                 <div className="grid grid-cols-2 gap-2">
                   {MODULE_LIBRARY.filter((module) => module.category === activeModuleCategory).map((module) => (
                     <button
                       key={module.id}
                       onClick={() => addModule(module)}
+                      draggable
+                      onDragStart={() => setDraggingModuleId(module.id)}
                       className="border rounded-md p-2 text-left hover:border-primary/60 transition-colors"
                     >
                       <div className="w-full h-8 rounded mb-1" style={{ backgroundColor: module.color, opacity: 0.85 }} />
@@ -1102,7 +1193,19 @@ export default function Editor() {
         {/* Canvas */}
         <main className="flex-1 bg-[#1a1a2e] relative flex items-center justify-center overflow-auto p-8">
           <div className="shadow-2xl relative">
-            <canvas ref={canvasRef} />
+            <canvas
+              ref={canvasRef}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={(e) => {
+                e.preventDefault();
+                if (!draggingModuleId || !fabricRef.current) return;
+                const module = MODULE_LIBRARY.find((m) => m.id === draggingModuleId);
+                if (!module) return;
+                const rect = (e.target as HTMLCanvasElement).getBoundingClientRect();
+                addModuleAt(module, e.clientX - rect.left, e.clientY - rect.top);
+                setDraggingModuleId(null);
+              }}
+            />
           </div>
         </main>
 
@@ -1208,6 +1311,12 @@ export default function Editor() {
                 </Button>
                 <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => moveLayer("down")}>
                   <MoveDown className="w-3.5 h-3.5 mr-1" /> Down
+                </Button>
+                <Button variant="outline" size="sm" className="h-8 text-xs" onClick={groupSelection}>
+                  <Group className="w-3.5 h-3.5 mr-1" /> Group
+                </Button>
+                <Button variant="outline" size="sm" className="h-8 text-xs" onClick={ungroupSelection}>
+                  <Ungroup className="w-3.5 h-3.5 mr-1" /> Ungroup
                 </Button>
               </div>
             </div>
