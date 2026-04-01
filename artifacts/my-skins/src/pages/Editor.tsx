@@ -436,6 +436,9 @@ export default function Editor() {
 
   const addImageToZone = useCallback(async (source: string, zone: TemplateZone, layerName: string) => {
     if (!fabricRef.current) return;
+    if (!source.startsWith("data:image/png;base64,") && !source.startsWith("data:image/svg+xml")) {
+      throw new Error(`Invalid image format for ${layerName}`);
+    }
     const image = await fabric.FabricImage.fromURL(source);
     image.set({
       left: zone.left,
@@ -451,44 +454,88 @@ export default function Editor() {
     fabricRef.current.add(image);
   }, []);
 
+  const addFallbackShapeToZone = useCallback((zone: TemplateZone, color: string, layerName: string) => {
+    if (!fabricRef.current) return;
+    const stripe = new fabric.Rect({
+      left: zone.left,
+      top: zone.top,
+      width: zone.width,
+      height: zone.height * 0.28,
+      fill: color,
+      opacity: 0.85,
+      selectable: true,
+      evented: true,
+      data: { role: "ai-generated", zone: zone.label, layerName: `${layerName} Stripe` },
+    });
+    const emblem = new fabric.Circle({
+      left: zone.left + (zone.width * 0.5) - 20,
+      top: zone.top + (zone.height * 0.5) - 20,
+      radius: 20,
+      fill: color,
+      opacity: 0.75,
+      selectable: true,
+      evented: true,
+      data: { role: "ai-generated", zone: zone.label, layerName: `${layerName} Emblem` },
+    });
+    fabricRef.current.add(stripe);
+    fabricRef.current.add(emblem);
+  }, []);
+
   const applyAiOutfitToCanvas = useCallback(async (result: AiGeneratedOutfit) => {
     if (!fabricRef.current) return;
     const canvas = fabricRef.current;
     const type = (project?.type as "shirt" | "pants") ?? "shirt";
     const zones = TEMPLATE_ZONES[type];
     const assets = result.assets;
-    if (!assets) {
-      console.error("canvas.apply.missing-assets", result);
-      toast({ title: language === "no" ? "Mangler AI-bilder" : "Missing AI assets", variant: "destructive" });
-      return;
-    }
 
     setDrawingMode(false);
     try {
+      canvas.backgroundColor = result.plan.baseColor;
+
       canvas.getObjects().forEach((obj) => {
         if ((obj.data as { role?: string } | undefined)?.role === "template-guide") {
           canvas.remove(obj);
         }
       });
 
-      await Promise.all([
-        addImageToZone(assets.frontImage, zones.front, "AI Front"),
-        addImageToZone(assets.backImage, zones.back, "AI Back"),
-        addImageToZone(assets.leftRegionImage, zones.leftRegion, "AI Left Region"),
-        addImageToZone(assets.rightRegionImage, zones.rightRegion, "AI Right Region"),
-      ]);
+      const attempts: Array<{ src?: string; zone: TemplateZone; name: string }> = [
+        { src: assets?.frontImage, zone: zones.front, name: "AI Front" },
+        { src: assets?.backImage, zone: zones.back, name: "AI Back" },
+        { src: assets?.leftRegionImage, zone: zones.leftRegion, name: "AI Left Region" },
+        { src: assets?.rightRegionImage, zone: zones.rightRegion, name: "AI Right Region" },
+      ];
 
-      canvas.backgroundColor = result.plan.baseColor;
+      let applied = 0;
+      for (const attempt of attempts) {
+        if (!attempt.src) {
+          console.error("canvas.apply.missing-asset", { layer: attempt.name });
+          addFallbackShapeToZone(attempt.zone, result.plan.colorPalette[1] ?? "#ffffff", attempt.name);
+          continue;
+        }
+        try {
+          await addImageToZone(attempt.src, attempt.zone, attempt.name);
+          applied += 1;
+        } catch (error) {
+          console.error("canvas.apply.asset-failure", { layer: attempt.name, error });
+          addFallbackShapeToZone(attempt.zone, result.plan.colorPalette[2] ?? "#111111", attempt.name);
+        }
+      }
+
       canvas.renderAll();
       handleUseColors(result.plan.colorPalette);
       addTemplateGuideLayer();
-      toast({ title: language === "no" ? "AI design lagt til!" : "AI design applied to canvas!" });
+      toast({
+        title: language === "no" ? "AI design lagt til!" : "AI design applied to canvas!",
+        description: applied === 4
+          ? undefined
+          : (language === "no" ? "Noen regioner brukte fallback-lag." : "Some regions used fallback layers."),
+      });
     } catch (error) {
       console.error("canvas.apply.failure", error);
       toast({ title: language === "no" ? "Kunne ikke bruke AI-design" : "Failed to apply AI design", variant: "destructive" });
       addTemplateGuideLayer();
     }
-  }, [addImageToZone, addTemplateGuideLayer, handleUseColors, language, project?.type, toast]);
+  }, [addFallbackShapeToZone, addImageToZone, addTemplateGuideLayer, handleUseColors, language, project?.type, toast]);
 
   const zoomIn = () => {
     if (!fabricRef.current) return;

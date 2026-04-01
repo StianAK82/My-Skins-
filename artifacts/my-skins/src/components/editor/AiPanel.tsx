@@ -43,6 +43,25 @@ export function AiPanel({ projectType, onUseColors, onApplyAssets }: AiPanelProp
 
   const target = selectedTarget === "shirt" ? "classic_shirt" : "classic_pants";
 
+  const buildFallbackPreview = (label: string) => {
+    if (!current) return "";
+    const palette = current.plan.colorPalette;
+    const primary = palette[0] ?? current.plan.baseColor;
+    const secondary = palette[1] ?? "#ffffff";
+    const accent = palette[2] ?? "#111111";
+    const data = `
+      <svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+        <rect width="512" height="512" fill="${current.plan.baseColor}" />
+        <rect x="48" y="72" width="416" height="368" rx="24" fill="${primary}" opacity="0.28" />
+        <rect x="56" y="112" width="400" height="34" rx="17" fill="${secondary}" opacity="0.9" />
+        <rect x="56" y="366" width="400" height="24" rx="12" fill="${accent}" opacity="0.85" />
+        <circle cx="256" cy="256" r="82" fill="${secondary}" opacity="0.85" />
+        <circle cx="256" cy="256" r="42" fill="${accent}" opacity="0.9" />
+      </svg>
+    `;
+    return `data:image/svg+xml;utf8,${encodeURIComponent(data)}#${encodeURIComponent(label)}`;
+  };
+
   const handleGenerate = async () => {
     if (!prompt.trim()) return;
     try {
@@ -140,7 +159,7 @@ export function AiPanel({ projectType, onUseColors, onApplyAssets }: AiPanelProp
               { label: "Right Region", src: current.assets?.rightRegionImage },
             ].map((item) => (
               <div key={item.label} className="border rounded-lg overflow-hidden bg-muted/20">
-                {item.src ? <img src={item.src} alt={item.label} className="w-full aspect-square object-contain" /> : <div className="aspect-square p-2 text-[10px] text-muted-foreground">Image fallback draft active</div>}
+                <img src={item.src || buildFallbackPreview(item.label)} alt={item.label} className="w-full aspect-square object-contain" />
                 <div className="text-[10px] px-2 py-1 uppercase text-muted-foreground">{item.label}</div>
               </div>
             ))}
