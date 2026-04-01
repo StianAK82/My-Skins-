@@ -6,8 +6,10 @@ import { useLanguage } from "@/hooks/use-language";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { AiPanel } from "@/components/editor/AiPanel";
+import { AvatarPreview } from "@/components/editor/AvatarPreview";
 import {
   Save, Download, ArrowLeft, Image as ImageIcon, Type, Square, Circle,
   PenTool, Trash2, ZoomIn, ZoomOut, Layers, Sparkles, ChevronDown, X
@@ -214,6 +216,8 @@ export default function Editor() {
   const [brushSize, setBrushSize] = useState(8);
   const [aiConcept, setAiConcept] = useState<AiConcept | null>(null);
   const [showConcept, setShowConcept] = useState(true);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [avatarTextureUrl, setAvatarTextureUrl] = useState("");
 
   const { data: project, isLoading } = useGetProject(id);
   const saveCanvas = useSaveCanvas();
@@ -344,6 +348,37 @@ export default function Editor() {
       canvas.freeDrawingBrush.width = brushSize;
     }
   }, [drawingMode, strokeColor, brushSize]);
+
+  useEffect(() => {
+    if (!fabricRef.current) return;
+    const canvas = fabricRef.current;
+    let timeout: ReturnType<typeof setTimeout> | null = null;
+
+    const updatePreview = () => {
+      if (timeout) clearTimeout(timeout);
+      timeout = setTimeout(() => {
+        if (!fabricRef.current) return;
+        const dataUrl = fabricRef.current.toDataURL({ format: "png", multiplier: 1, quality: 0.92 });
+        setAvatarTextureUrl(dataUrl);
+      }, 140);
+    };
+
+    updatePreview();
+    canvas.on("object:added", updatePreview);
+    canvas.on("object:removed", updatePreview);
+    canvas.on("object:modified", updatePreview);
+    canvas.on("path:created", updatePreview);
+    canvas.on("after:render", updatePreview);
+
+    return () => {
+      if (timeout) clearTimeout(timeout);
+      canvas.off("object:added", updatePreview);
+      canvas.off("object:removed", updatePreview);
+      canvas.off("object:modified", updatePreview);
+      canvas.off("path:created", updatePreview);
+      canvas.off("after:render", updatePreview);
+    };
+  }, [project?.id]);
 
   const handleSave = async () => {
     if (!fabricRef.current) return;
@@ -590,6 +625,9 @@ export default function Editor() {
           <Button size="sm" onClick={handleExport}>
             <Download className="w-4 h-4 mr-1.5" />
             {t("editor.export")}
+          </Button>
+          <Button size="sm" variant="secondary" onClick={() => setPreviewOpen(true)} disabled={!avatarTextureUrl}>
+            Preview on Avatar
           </Button>
         </div>
       </header>
@@ -845,6 +883,21 @@ export default function Editor() {
           )}
         </aside>
       </div>
+
+      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+        <DialogContent className="w-[90vw] max-w-5xl p-0 overflow-hidden">
+          <DialogHeader className="px-6 pt-6 pb-0">
+            <DialogTitle>Preview on Avatar</DialogTitle>
+          </DialogHeader>
+          {avatarTextureUrl ? (
+            <AvatarPreview textureUrl={avatarTextureUrl} className="border-0 rounded-none" />
+          ) : (
+            <div className="h-[420px] flex items-center justify-center text-sm text-muted-foreground">
+              Add content on the canvas to preview your design.
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
