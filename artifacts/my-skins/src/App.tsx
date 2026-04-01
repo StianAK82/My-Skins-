@@ -15,6 +15,8 @@ import Projects from "@/pages/Projects";
 import Settings from "@/pages/Settings";
 import Editor from "@/pages/Editor";
 import ShareView from "@/pages/Share";
+import PaymentSuccess from "@/pages/PaymentSuccess";
+import PaymentCancelled from "@/pages/PaymentCancelled";
 
 const queryClient = new QueryClient();
 
@@ -48,6 +50,8 @@ function Router() {
       <Route path="/settings" component={() => <ProtectedRoute component={Settings} />} />
       <Route path="/editor/:id" component={() => <AuthGuard><Editor /></AuthGuard>} />
       <Route path="/share/:token" component={ShareView} />
+      <Route path="/payment-success" component={() => <ProtectedRoute component={PaymentSuccess} />} />
+      <Route path="/payment-cancelled" component={() => <ProtectedRoute component={PaymentCancelled} />} />
       <Route component={NotFound} />
     </Switch>
   );

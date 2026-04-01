@@ -8,6 +8,7 @@ import aiRouter from "./ai";
 import exportsRouter from "./exports";
 import robloxRouter from "./roblox";
 import shareRouter from "./share";
+import paymentsRouter from "./payments";
 
 const router: IRouter = Router();
 
@@ -20,5 +21,6 @@ router.use(aiRouter);
 router.use(exportsRouter);
 router.use(robloxRouter);
 router.use(shareRouter);
+router.use(paymentsRouter);
 
 export default router;
