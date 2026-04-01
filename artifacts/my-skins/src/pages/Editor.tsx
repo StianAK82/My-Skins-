@@ -15,6 +15,7 @@ import {
   PenTool, Trash2, ZoomIn, ZoomOut, Layers, Sparkles, ChevronDown, X
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { z } from "zod";
 
 interface AiConcept {
   title?: string;
@@ -36,6 +37,25 @@ interface TemplateZone {
   width: number;
   height: number;
 }
+
+const generatedOutfitSchema = z.object({
+  concept: z.object({
+    title: z.string(),
+    style: z.string(),
+    baseColor: z.string().regex(/^#([0-9a-fA-F]{6})$/),
+    colorPalette: z.array(z.string().regex(/^#([0-9a-fA-F]{6})$/)).min(3),
+    front: z.object({ description: z.string() }),
+    back: z.object({ description: z.string() }),
+    leftSleeve: z.object({ description: z.string() }),
+    rightSleeve: z.object({ description: z.string() }),
+  }).strict(),
+  assets: z.object({
+    frontImage: z.string().nullable(),
+    backImage: z.string().nullable(),
+    leftSleeveImage: z.string().nullable(),
+    rightSleeveImage: z.string().nullable(),
+  }).strict(),
+}).strict();
 
 const TEMPLATE_ZONES: Record<"shirt" | "pants", { front: TemplateZone; back: TemplateZone; leftRegion: TemplateZone; rightRegion: TemplateZone }> = {
   shirt: {
@@ -545,15 +565,23 @@ export default function Editor() {
     e.target.value = "";
   };
 
+  const normalizeAssetSrc = useCallback((source: string, layerName: string) => {
+    const trimmed = source.trim();
+    if (!trimmed) throw new Error(`Empty image payload for ${layerName}`);
+    if (trimmed.startsWith("data:image/")) return trimmed;
+    if (/^https?:\/\//i.test(trimmed) || trimmed.startsWith("blob:")) return trimmed;
+    return `data:image/png;base64,${trimmed}`;
+  }, []);
+
   const addImageToZone = useCallback(async (source: string, zone: TemplateZone, layerName: string) => {
     if (!fabricRef.current) return;
-    if (!source.startsWith("data:image/png;base64,") && !source.startsWith("data:image/svg+xml")) {
-      throw new Error(`Invalid image format for ${layerName}`);
-    }
-    const image = await fabric.FabricImage.fromURL(source);
+    const normalizedSource = normalizeAssetSrc(source, layerName);
+    const image = await fabric.FabricImage.fromURL(normalizedSource, { crossOrigin: "anonymous" });
     image.set({
-      left: zone.left,
-      top: zone.top,
+      left: zone.left + (zone.width / 2),
+      top: zone.top + (zone.height / 2),
+      originX: "center",
+      originY: "center",
       selectable: true,
       evented: true,
       data: { role: "ai-generated", zone: zone.label, layerName },
@@ -563,7 +591,7 @@ export default function Editor() {
       image.scaleToHeight(zone.height);
     }
     fabricRef.current.add(image);
-  }, []);
+  }, [normalizeAssetSrc]);
 
   const addFallbackShapeToZone = useCallback((zone: TemplateZone, color: string, layerName: string) => {
     if (!fabricRef.current) return;
@@ -601,7 +629,7 @@ export default function Editor() {
 
     setDrawingMode(false);
     try {
-      canvas.backgroundColor = result.plan.baseColor;
+      canvas.backgroundColor = result.concept.baseColor;
 
       canvas.getObjects().forEach((obj) => {
         if ((obj.data as { role?: string } | undefined)?.role === "template-guide") {
@@ -612,15 +640,15 @@ export default function Editor() {
       const attempts: Array<{ src?: string; zone: TemplateZone; name: string }> = [
         { src: assets?.frontImage, zone: zones.front, name: "AI Front" },
         { src: assets?.backImage, zone: zones.back, name: "AI Back" },
-        { src: assets?.leftRegionImage, zone: zones.leftRegion, name: "AI Left Region" },
-        { src: assets?.rightRegionImage, zone: zones.rightRegion, name: "AI Right Region" },
+        { src: assets?.leftSleeveImage, zone: zones.leftRegion, name: "AI Left Sleeve" },
+        { src: assets?.rightSleeveImage, zone: zones.rightRegion, name: "AI Right Sleeve" },
       ];
 
       let applied = 0;
       for (const attempt of attempts) {
         if (!attempt.src) {
           console.error("canvas.apply.missing-asset", { layer: attempt.name });
-          addFallbackShapeToZone(attempt.zone, result.plan.colorPalette[1] ?? "#ffffff", attempt.name);
+          addFallbackShapeToZone(attempt.zone, result.concept.colorPalette[1] ?? "#ffffff", attempt.name);
           continue;
         }
         try {
@@ -628,12 +656,16 @@ export default function Editor() {
           applied += 1;
         } catch (error) {
           console.error("canvas.apply.asset-failure", { layer: attempt.name, error });
-          addFallbackShapeToZone(attempt.zone, result.plan.colorPalette[2] ?? "#111111", attempt.name);
+          addFallbackShapeToZone(attempt.zone, result.concept.colorPalette[2] ?? "#111111", attempt.name);
         }
       }
 
+      if (applied === 0) {
+        throw new Error("Design generation failed. No assets were applied to the canvas.");
+      }
+
       canvas.renderAll();
-      handleUseColors(result.plan.colorPalette);
+      handleUseColors(result.concept.colorPalette);
       addTemplateGuideLayer();
       toast({
         title: language === "no" ? "AI design lagt til!" : "AI design applied to canvas!",
@@ -647,6 +679,26 @@ export default function Editor() {
       addTemplateGuideLayer();
     }
   }, [addFallbackShapeToZone, addImageToZone, addTemplateGuideLayer, handleUseColors, language, project?.type, toast]);
+
+  useEffect(() => {
+    if (!project?.id || !fabricRef.current) return;
+    const key = `my-skins:pending-ai:${project.id}`;
+    const pending = sessionStorage.getItem(key);
+    if (!pending) return;
+    sessionStorage.removeItem(key);
+    try {
+      const parsed = generatedOutfitSchema.parse(JSON.parse(pending));
+      console.info("editor.ai.pipeline.received", { projectId: project.id });
+      void applyAiOutfitToCanvas(parsed as AiGeneratedOutfit);
+    } catch (error) {
+      console.error("editor.ai.pipeline.invalid-payload", error);
+      toast({
+        title: "Design generation failed",
+        description: "Design generation failed. No assets were applied to the canvas.",
+        variant: "destructive",
+      });
+    }
+  }, [applyAiOutfitToCanvas, project?.id, toast]);
 
   const zoomIn = () => {
     if (!fabricRef.current) return;
