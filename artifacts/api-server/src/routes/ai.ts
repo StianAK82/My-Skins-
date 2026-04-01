@@ -121,6 +121,44 @@ function parseJson(content: string): unknown {
   return JSON.parse(content);
 }
 
+function isPngBase64(base64: string): boolean {
+  try {
+    const normalized = base64.replace(/\s/g, "");
+    const bytes = Buffer.from(normalized, "base64");
+    return bytes.length > 8
+      && bytes[0] === 0x89
+      && bytes[1] === 0x50
+      && bytes[2] === 0x4e
+      && bytes[3] === 0x47;
+  } catch {
+    return false;
+  }
+}
+
+function normalizeImageDataUrl(value: string, region: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    throw new Error(`AI_IMAGE_EMPTY_${region.toUpperCase()}`);
+  }
+
+  if (trimmed.startsWith("data:image/png;base64,")) {
+    const raw = trimmed.slice("data:image/png;base64,".length);
+    if (!isPngBase64(raw)) {
+      throw new Error(`AI_IMAGE_INVALID_PNG_${region.toUpperCase()}`);
+    }
+    return trimmed;
+  }
+
+  if (trimmed.startsWith("data:image/")) {
+    throw new Error(`AI_IMAGE_UNSUPPORTED_FORMAT_${region.toUpperCase()}`);
+  }
+
+  if (!isPngBase64(trimmed)) {
+    throw new Error(`AI_IMAGE_INVALID_BASE64_${region.toUpperCase()}`);
+  }
+  return `data:image/png;base64,${trimmed}`;
+}
+
 function sendSchemaError(res: Response, details: string): void {
   res.status(422).json({ error: "Invalid AI response schema", details });
 }
@@ -203,7 +241,7 @@ async function generateRegionImage(plan: z.infer<typeof outfitPlanSchema>, regio
     throw new Error(`AI_IMAGE_EMPTY_${region.toUpperCase()}`);
   }
 
-  return `data:image/png;base64,${base64}`;
+  return normalizeImageDataUrl(base64, region);
 }
 
 function createFallbackDraft(reason: string): z.infer<typeof fallbackDraftSchema> {
@@ -236,9 +274,16 @@ async function buildOutfitResult(input: z.infer<typeof generateOutfitRequestSche
       assets: { frontImage, backImage, leftRegionImage, rightRegionImage },
     });
   } catch (err) {
+    const reason = err instanceof Error ? err.message : "IMAGE_GENERATION_FAILED";
+    console.error("ai.generate-outfit.assets.failed", {
+      target: plan.target,
+      prompt: input.prompt,
+      stylePreset: input.stylePreset,
+      reason,
+    });
     return generatedOutfitSchema.parse({
       plan,
-      fallbackDraft: createFallbackDraft(err instanceof Error ? err.message : "IMAGE_GENERATION_FAILED"),
+      fallbackDraft: createFallbackDraft(reason),
     });
   }
 }
