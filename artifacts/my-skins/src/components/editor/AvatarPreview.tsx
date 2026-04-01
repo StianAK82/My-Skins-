@@ -1,9 +1,12 @@
-import { type ComponentType, useEffect, useState } from "react";
+import { type ComponentType, useEffect, useMemo, useState } from "react";
+import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 
 type AvatarPreviewProps = {
   textureUrl: string;
   className?: string;
+  avatarType?: string;
+  bodyType?: string;
 };
 
 type ThreeModules = {
@@ -21,9 +24,17 @@ function loadAvatarModules() {
   ]);
 }
 
-export function AvatarPreview({ textureUrl, className }: AvatarPreviewProps) {
+export function AvatarPreview({ textureUrl, className, avatarType = "neutral", bodyType = "regular" }: AvatarPreviewProps) {
   const [modules, setModules] = useState<ThreeModules | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [view, setView] = useState<"front" | "back">("front");
+  const [zoom, setZoom] = useState(1);
+
+  const bodyScale = useMemo(() => {
+    if (bodyType === "slim") return 0.9;
+    if (bodyType === "athletic") return 1.08;
+    return 1;
+  }, [bodyType]);
 
   useEffect(() => {
     let active = true;
@@ -53,9 +64,14 @@ export function AvatarPreview({ textureUrl, className }: AvatarPreviewProps) {
     return (
       <Card className={className}>
         <div className="p-4 text-sm text-muted-foreground border-b border-border">Avatar Preview</div>
+        <div className="px-4 pt-3 flex items-center gap-2">
+          <Button size="sm" variant={view === "front" ? "default" : "outline"} onClick={() => setView("front")}>Front</Button>
+          <Button size="sm" variant={view === "back" ? "default" : "outline"} onClick={() => setView("back")}>Back</Button>
+        </div>
         <div className="h-[420px] flex flex-col items-center justify-center gap-3 p-4">
           <p className="text-sm text-muted-foreground text-center">{error ?? "Loading 3D preview..."}</p>
-          <img src={textureUrl} alt="2D avatar preview" className="max-h-[300px] w-auto rounded border border-border" />
+          <img src={textureUrl} alt="2D avatar preview" className="max-h-[300px] w-auto rounded border border-border" style={{ transform: `scale(${zoom}) ${view === "back" ? "scaleX(-1)" : ""}` }} />
+          <input type="range" min="0.7" max="1.6" step="0.05" value={zoom} onChange={(e) => setZoom(Number(e.target.value))} />
         </div>
       </Card>
     );
@@ -73,8 +89,8 @@ export function AvatarPreview({ textureUrl, className }: AvatarPreviewProps) {
           <ambientLight intensity={0.75} />
           <directionalLight position={[3, 4, 3]} intensity={1.2} />
           <mesh position={[0, 1, 0]}>
-            <boxGeometry args={[1.3, 1.7, 0.8]} />
-            <meshStandardMaterial color="#334155" />
+            <boxGeometry args={[1.3 * bodyScale, 1.7 * bodyScale, 0.8]} />
+            <meshStandardMaterial map={null} color={avatarType === "female" ? "#475569" : avatarType === "male" ? "#334155" : "#3f3f46"} />
           </mesh>
           {OrbitControls ? <OrbitControls enablePan={false} minDistance={2.5} maxDistance={8} /> : null}
         </Canvas>

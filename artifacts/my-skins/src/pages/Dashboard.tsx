@@ -25,6 +25,25 @@ const STYLE_PRESETS = [
   { id: "fantasy", label: "Fantasy", emoji: "🔮" },
 ];
 
+const CREATION_MODES = [
+  { id: "ai", label: "AI Design", description: "Prompt-driven draft generation" },
+  { id: "manual", label: "Build Manually", description: "Modular drag-and-build workflow" },
+  { id: "template", label: "Start From Template", description: "Blank template with guides" },
+  { id: "remix", label: "Remix Existing Design", description: "Pick an existing project to remix" },
+] as const;
+
+const AVATAR_OPTIONS = [
+  { id: "neutral", label: "Neutral" },
+  { id: "male", label: "Male" },
+  { id: "female", label: "Female" },
+] as const;
+
+const BODY_TYPES = [
+  { id: "slim", label: "Slim" },
+  { id: "regular", label: "Regular" },
+  { id: "athletic", label: "Athletic" },
+] as const;
+
 const ITEM_TYPES = [
   { id: "shirt",   label: "Shirt",   labelNo: "Skjorte",  emoji: "👕", roblox: "shirt" },
   { id: "pants",   label: "Pants",   labelNo: "Bukse",    emoji: "👖", roblox: "pants" },
@@ -110,8 +129,11 @@ export default function Dashboard() {
   const { toast } = useToast();
 
   const [prompt, setPrompt] = useState("");
+  const [creationMode, setCreationMode] = useState<(typeof CREATION_MODES)[number]["id"]>("ai");
   const [selectedType, setSelectedType] = useState("shirt");
   const [selectedStyle, setSelectedStyle] = useState("");
+  const [avatarType, setAvatarType] = useState<(typeof AVATAR_OPTIONS)[number]["id"]>("neutral");
+  const [bodyType, setBodyType] = useState<(typeof BODY_TYPES)[number]["id"]>("regular");
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatingStep, setGeneratingStep] = useState("");
   const [failedStep, setFailedStep] = useState("");
@@ -152,7 +174,11 @@ export default function Dashboard() {
       console.info("dashboard.ai.step.visuals.completed", { projectId: result.id });
 
       setGeneratingStep("Applying to canvas...");
-      sessionStorage.setItem(`my-skins:pending-ai:${result.id}`, JSON.stringify(generated));
+      sessionStorage.setItem(`my-skins:pending-ai:${result.id}`, JSON.stringify({
+        ...generated,
+        avatar: { avatarType, bodyType },
+        creationMode,
+      }));
       console.info("dashboard.ai.step.apply.queued", { projectId: result.id });
 
       setGeneratingStep("Done");
@@ -166,6 +192,35 @@ export default function Dashboard() {
       setIsGenerating(false);
       setGeneratingStep("");
     }
+  };
+
+  const handleCreateByMode = async () => {
+    if (creationMode === "ai") {
+      await handleAiCreate();
+      return;
+    }
+
+    if (creationMode === "remix") {
+      const existing = projects[0];
+      if (!existing) {
+        toast({ title: "No projects to remix", description: "Create at least one design first.", variant: "destructive" });
+        return;
+      }
+      setLocation(`/editor/${existing.id}`);
+      return;
+    }
+
+    const targetType = currentItemType.roblox as "shirt" | "pants";
+    const title = creationMode === "manual"
+      ? `Manual ${currentItemType.label}`
+      : `Template ${currentItemType.label}`;
+    const project = await createBlankProject(targetType, title);
+    sessionStorage.setItem(`my-skins:editor-meta:${project.id}`, JSON.stringify({
+      avatar: { avatarType, bodyType },
+      creationMode,
+      stylePreset: selectedStyle || null,
+    }));
+    setLocation(`/editor/${project.id}`);
   };
 
   const handleBlankCreate = async (type: "shirt" | "pants") => {
@@ -225,6 +280,61 @@ export default function Dashboard() {
                 : "Describe any clothing or item — AI builds the design for you in seconds."}
             </p>
 
+            {/* Creation mode selector */}
+            <div className="mb-4">
+              <p className="text-xs text-muted-foreground uppercase tracking-wide mb-2">
+                Creation mode
+              </p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                {CREATION_MODES.map((mode) => (
+                  <button
+                    key={mode.id}
+                    onClick={() => setCreationMode(mode.id)}
+                    className={`text-left rounded-lg border px-3 py-2 transition-all ${
+                      creationMode === mode.id
+                        ? "border-primary bg-primary/10"
+                        : "border-border hover:border-primary/40"
+                    }`}
+                  >
+                    <p className="text-sm font-semibold">{mode.label}</p>
+                    <p className="text-xs text-muted-foreground">{mode.description}</p>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Avatar and body selectors */}
+            <div className="mb-4 grid md:grid-cols-2 gap-3">
+              <div>
+                <p className="text-xs text-muted-foreground uppercase tracking-wide mb-2">Avatar</p>
+                <div className="flex flex-wrap gap-2">
+                  {AVATAR_OPTIONS.map((avatar) => (
+                    <button
+                      key={avatar.id}
+                      onClick={() => setAvatarType(avatar.id)}
+                      className={`px-3 py-1.5 rounded-full border text-sm ${avatarType === avatar.id ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground"}`}
+                    >
+                      {avatar.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground uppercase tracking-wide mb-2">Body type</p>
+                <div className="flex flex-wrap gap-2">
+                  {BODY_TYPES.map((body) => (
+                    <button
+                      key={body.id}
+                      onClick={() => setBodyType(body.id)}
+                      className={`px-3 py-1.5 rounded-full border text-sm ${bodyType === body.id ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground"}`}
+                    >
+                      {body.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
             {/* Item type selector */}
             <div className="mb-4">
               <p className="text-xs text-muted-foreground uppercase tracking-wide mb-2">
@@ -283,7 +393,7 @@ export default function Dashboard() {
                 rows={3}
                 className="w-full bg-transparent px-5 pt-4 pb-2 text-base resize-none outline-none placeholder:text-muted-foreground/50 leading-relaxed"
                 placeholder={examples[placeholderIdx]}
-                disabled={isGenerating}
+                disabled={isGenerating || creationMode !== "ai"}
               />
 
               <div className="flex items-center justify-between px-5 pb-4 pt-1">
@@ -297,15 +407,15 @@ export default function Dashboard() {
                     {language === "no" ? "Ctrl+Enter for å lage" : "Ctrl+Enter to create"}
                   </span>
                   <Button
-                    onClick={handleAiCreate}
-                    disabled={!prompt.trim() || isGenerating}
+                    onClick={handleCreateByMode}
+                    disabled={isGenerating || (creationMode === "ai" && !prompt.trim())}
                     className="gap-2 px-6"
                     size="sm"
                   >
                     {isGenerating ? (
                       <><Loader2 className="w-4 h-4 animate-spin" />{language === "no" ? "Lager..." : "Creating..."}</>
                     ) : (
-                      <><Sparkles className="w-4 h-4" />{language === "no" ? "Lag med AI" : "Create with AI"}</>
+                      <><Sparkles className="w-4 h-4" />{creationMode === "ai" ? (language === "no" ? "Lag med AI" : "Create with AI") : "Continue to editor"}</>
                     )}
                   </Button>
                 </div>

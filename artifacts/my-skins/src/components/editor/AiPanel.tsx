@@ -20,7 +20,7 @@ type EditorTarget = "shirt" | "pants";
 interface AiPanelProps {
   projectType: EditorTarget;
   onUseColors?: (colors: string[]) => void;
-  onApplyAssets?: (result: AiGeneratedOutfit) => Promise<void> | void;
+  onApplyAssets?: (result: AiGeneratedOutfit) => Promise<unknown> | unknown;
 }
 
 export function AiPanel({ projectType, onUseColors, onApplyAssets }: AiPanelProps) {
