@@ -12,7 +12,7 @@ import { AiPanel } from "@/components/editor/AiPanel";
 import { AvatarPreview } from "@/components/editor/AvatarPreview";
 import {
   Save, Download, ArrowLeft, Image as ImageIcon, Type, Square, Circle,
-  PenTool, Trash2, ZoomIn, ZoomOut, Layers, Sparkles, ChevronDown, X
+  PenTool, Trash2, ZoomIn, ZoomOut, Layers, Sparkles, ChevronDown, X, Copy, Lock, Unlock, MoveUp, MoveDown
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { z } from "zod";
@@ -37,6 +37,29 @@ interface TemplateZone {
   width: number;
   height: number;
 }
+
+interface ModuleDefinition {
+  id: string;
+  name: string;
+  category: string;
+  shape: "rect" | "circle" | "stripe";
+  color: string;
+}
+
+const MODULE_LIBRARY: ModuleDefinition[] = [
+  { id: "mod-sleeve-stripe", name: "Sleeve Stripe", category: "Clothing Parts", shape: "stripe", color: "#ef4444" },
+  { id: "mod-pocket", name: "Pocket", category: "Clothing Parts", shape: "rect", color: "#334155" },
+  { id: "mod-collar", name: "Collar", category: "Clothing Parts", shape: "rect", color: "#0f172a" },
+  { id: "mod-flame", name: "Flame Emblem", category: "Graphics", shape: "circle", color: "#f97316" },
+  { id: "mod-star", name: "Star Emblem", category: "Symbols", shape: "circle", color: "#facc15" },
+  { id: "mod-cyber", name: "Cyber Trim", category: "Patterns", shape: "stripe", color: "#22d3ee" },
+  { id: "mod-hat", name: "Hat Shape", category: "Headwear", shape: "rect", color: "#7c3aed" },
+  { id: "mod-hair", name: "Hair Silhouette", category: "Hair", shape: "circle", color: "#111827" },
+  { id: "mod-beard", name: "Beard Shape", category: "Facial Hair", shape: "circle", color: "#78350f" },
+  { id: "mod-shoe", name: "Shoe Accent", category: "Footwear", shape: "rect", color: "#1d4ed8" },
+  { id: "mod-zipper", name: "Zipper Detail", category: "Extra Details", shape: "stripe", color: "#e2e8f0" },
+  { id: "mod-backpack", name: "Backpack Mark", category: "Accessories", shape: "rect", color: "#10b981" },
+];
 
 const generatedOutfitSchema = z.object({
   concept: z.object({
@@ -242,6 +265,9 @@ export default function Editor() {
   const [paymentOpen, setPaymentOpen] = useState(false);
   const [isBuyingCredit, setIsBuyingCredit] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [creationMode, setCreationMode] = useState("ai");
+  const [avatarProfile, setAvatarProfile] = useState({ avatarType: "neutral", bodyType: "regular" });
+  const [activeModuleCategory, setActiveModuleCategory] = useState("Clothing Parts");
 
   const { data: project, isLoading } = useGetProject(id);
   const saveCanvas = useSaveCanvas();
@@ -540,6 +566,83 @@ export default function Editor() {
     fabricRef.current.renderAll();
   };
 
+  const addModule = (module: ModuleDefinition) => {
+    if (!fabricRef.current) return;
+    setDrawingMode(false);
+    let object: fabric.Object;
+    if (module.shape === "circle") {
+      object = new fabric.Circle({
+        left: 160,
+        top: 160,
+        radius: 36,
+        fill: module.color,
+        opacity: 0.9,
+        data: { role: "module", category: module.category, moduleName: module.name, layerName: module.name },
+      });
+    } else if (module.shape === "stripe") {
+      object = new fabric.Rect({
+        left: 120,
+        top: 120,
+        width: 160,
+        height: 22,
+        fill: module.color,
+        rx: 8,
+        opacity: 0.9,
+        data: { role: "module", category: module.category, moduleName: module.name, layerName: module.name },
+      });
+    } else {
+      object = new fabric.Rect({
+        left: 120,
+        top: 120,
+        width: 110,
+        height: 90,
+        rx: 12,
+        fill: module.color,
+        opacity: 0.9,
+        data: { role: "module", category: module.category, moduleName: module.name, layerName: module.name },
+      });
+    }
+    fabricRef.current.add(object);
+    fabricRef.current.setActiveObject(object);
+    fabricRef.current.renderAll();
+  };
+
+  const duplicateSelected = () => {
+    if (!fabricRef.current || !selectedObject) return;
+    selectedObject.clone().then((cloned) => {
+      cloned.set({
+        left: (selectedObject.left ?? 0) + 20,
+        top: (selectedObject.top ?? 0) + 20,
+      });
+      fabricRef.current?.add(cloned);
+      fabricRef.current?.setActiveObject(cloned);
+      fabricRef.current?.renderAll();
+    });
+  };
+
+  const moveLayer = (direction: "up" | "down") => {
+    if (!fabricRef.current || !selectedObject) return;
+    if (direction === "up") fabricRef.current.bringObjectForward(selectedObject);
+    else fabricRef.current.sendObjectBackwards(selectedObject);
+    fabricRef.current.renderAll();
+  };
+
+  const toggleObjectLock = () => {
+    if (!selectedObject || !fabricRef.current) return;
+    const locked = Boolean(selectedObject.lockMovementX);
+    selectedObject.set({
+      lockMovementX: !locked,
+      lockMovementY: !locked,
+      lockRotation: !locked,
+      lockScalingX: !locked,
+      lockScalingY: !locked,
+      selectable: locked,
+      evented: locked,
+    });
+    fabricRef.current.renderAll();
+    setSelectedObject({ ...selectedObject } as fabric.Object);
+  };
+
   const deleteSelected = () => {
     if (!fabricRef.current) return;
     fabricRef.current.getActiveObjects().forEach(obj => fabricRef.current?.remove(obj));
@@ -644,41 +747,59 @@ export default function Editor() {
         { src: assets?.rightSleeveImage, zone: zones.rightRegion, name: "AI Right Sleeve" },
       ];
 
-      let applied = 0;
+      let visibleLayers = 0;
       for (const attempt of attempts) {
         if (!attempt.src) {
           console.error("canvas.apply.missing-asset", { layer: attempt.name });
           addFallbackShapeToZone(attempt.zone, result.concept.colorPalette[1] ?? "#ffffff", attempt.name);
+          visibleLayers += 2;
           continue;
         }
         try {
           await addImageToZone(attempt.src, attempt.zone, attempt.name);
-          applied += 1;
+          visibleLayers += 1;
+          console.info("canvas.apply.asset-success", { layer: attempt.name });
         } catch (error) {
           console.error("canvas.apply.asset-failure", { layer: attempt.name, error });
           addFallbackShapeToZone(attempt.zone, result.concept.colorPalette[2] ?? "#111111", attempt.name);
+          visibleLayers += 2;
         }
       }
 
-      if (applied === 0) {
-        throw new Error("Design generation failed. No assets were applied to the canvas.");
+      if (visibleLayers === 0) {
+        throw new Error("Design generation failed. No visible assets were applied.");
       }
 
       canvas.renderAll();
+      setAiConcept({
+        title: result.concept.title,
+        style: result.concept.style,
+        backgroundColor: result.concept.baseColor,
+        colors: result.concept.colorPalette.map((hex, index) => ({ hex, name: `Color ${index + 1}` })),
+        description: `${result.concept.front.description} / ${result.concept.back.description}`,
+      });
+      setShowConcept(true);
       handleUseColors(result.concept.colorPalette);
       addTemplateGuideLayer();
       toast({
         title: language === "no" ? "AI design lagt til!" : "AI design applied to canvas!",
-        description: applied === 4
+        description: visibleLayers >= 4
           ? undefined
           : (language === "no" ? "Noen regioner brukte fallback-lag." : "Some regions used fallback layers."),
       });
+      console.info("canvas.apply.completed", { visibleLayers, projectId: project?.id });
+      return true;
     } catch (error) {
       console.error("canvas.apply.failure", error);
-      toast({ title: language === "no" ? "Kunne ikke bruke AI-design" : "Failed to apply AI design", variant: "destructive" });
+      toast({
+        title: language === "no" ? "Kunne ikke bruke AI-design" : "Failed to apply AI design",
+        description: "Design generation failed. No visible assets were applied.",
+        variant: "destructive",
+      });
       addTemplateGuideLayer();
+      return false;
     }
-  }, [addFallbackShapeToZone, addImageToZone, addTemplateGuideLayer, handleUseColors, language, project?.type, toast]);
+  }, [addFallbackShapeToZone, addImageToZone, addTemplateGuideLayer, handleUseColors, language, project?.id, project?.type, toast]);
 
   useEffect(() => {
     if (!project?.id || !fabricRef.current) return;
@@ -689,16 +810,44 @@ export default function Editor() {
     try {
       const parsed = generatedOutfitSchema.parse(JSON.parse(pending));
       console.info("editor.ai.pipeline.received", { projectId: project.id });
-      void applyAiOutfitToCanvas(parsed as AiGeneratedOutfit);
+      void applyAiOutfitToCanvas(parsed as AiGeneratedOutfit).then((applied) => {
+        if (!applied) {
+          toast({
+            title: "Design generation failed",
+            description: "Design generation failed. No visible assets were applied.",
+            variant: "destructive",
+          });
+        }
+      });
     } catch (error) {
       console.error("editor.ai.pipeline.invalid-payload", error);
       toast({
         title: "Design generation failed",
-        description: "Design generation failed. No assets were applied to the canvas.",
+        description: "Invalid AI payload schema. No visible assets were applied.",
         variant: "destructive",
       });
     }
   }, [applyAiOutfitToCanvas, project?.id, toast]);
+
+  useEffect(() => {
+    if (!project?.id) return;
+    const key = `my-skins:editor-meta:${project.id}`;
+    const raw = sessionStorage.getItem(key);
+    if (!raw) return;
+    sessionStorage.removeItem(key);
+    try {
+      const parsed = JSON.parse(raw) as { avatar?: { avatarType?: string; bodyType?: string }; creationMode?: string };
+      if (parsed.avatar?.avatarType || parsed.avatar?.bodyType) {
+        setAvatarProfile({
+          avatarType: parsed.avatar.avatarType ?? "neutral",
+          bodyType: parsed.avatar.bodyType ?? "regular",
+        });
+      }
+      if (parsed.creationMode) setCreationMode(parsed.creationMode);
+    } catch (error) {
+      console.error("editor.meta.invalid", error);
+    }
+  }, [project?.id]);
 
   const zoomIn = () => {
     if (!fabricRef.current) return;
@@ -729,6 +878,8 @@ export default function Editor() {
           <div className="font-semibold text-sm truncate max-w-[180px]">{project?.title}</div>
           <div className="flex items-center gap-1">
             <span className="text-xs bg-muted px-2 py-0.5 rounded uppercase text-muted-foreground">{project?.type}</span>
+            <span className="text-xs bg-muted px-2 py-0.5 rounded uppercase text-muted-foreground">{creationMode}</span>
+            <span className="text-xs bg-muted px-2 py-0.5 rounded">{avatarProfile.avatarType}/{avatarProfile.bodyType}</span>
             {project?.isAiGenerated && (
               <span className="text-xs bg-primary/20 text-primary px-2 py-0.5 rounded uppercase font-semibold flex items-center gap-0.5">
                 <Sparkles className="w-2.5 h-2.5" /> AI
@@ -786,6 +937,9 @@ export default function Editor() {
             <TabsList className="w-full justify-start rounded-none border-b border-border h-10 bg-transparent p-0 shrink-0">
               <TabsTrigger value="tools" className="flex-1 rounded-none text-xs data-[state=active]:border-b-2 data-[state=active]:border-primary h-full">
                 {t("editor.tools")}
+              </TabsTrigger>
+              <TabsTrigger value="modules" className="flex-1 rounded-none text-xs data-[state=active]:border-b-2 data-[state=active]:border-primary h-full">
+                Builder
               </TabsTrigger>
               <TabsTrigger value="ai" className="flex-1 rounded-none text-xs data-[state=active]:border-b-2 data-[state=active]:border-primary h-full">
                 ✨ AI
@@ -904,6 +1058,35 @@ export default function Editor() {
                 </div>
               </TabsContent>
 
+              <TabsContent value="modules" className="m-0 p-3 space-y-3">
+                <div>
+                  <p className="text-[10px] text-muted-foreground mb-2 uppercase tracking-wide">Categories</p>
+                  <div className="flex flex-wrap gap-1">
+                    {Array.from(new Set(MODULE_LIBRARY.map((m) => m.category))).map((category) => (
+                      <button
+                        key={category}
+                        onClick={() => setActiveModuleCategory(category)}
+                        className={`px-2 py-1 text-[10px] rounded border ${activeModuleCategory === category ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground"}`}
+                      >
+                        {category}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  {MODULE_LIBRARY.filter((module) => module.category === activeModuleCategory).map((module) => (
+                    <button
+                      key={module.id}
+                      onClick={() => addModule(module)}
+                      className="border rounded-md p-2 text-left hover:border-primary/60 transition-colors"
+                    >
+                      <div className="w-full h-8 rounded mb-1" style={{ backgroundColor: module.color, opacity: 0.85 }} />
+                      <p className="text-xs font-medium leading-tight">{module.name}</p>
+                    </button>
+                  ))}
+                </div>
+              </TabsContent>
+
               {/* AI Tab */}
               <TabsContent value="ai" className="m-0">
                 <AiPanel
@@ -932,7 +1115,9 @@ export default function Editor() {
 
           {selectedObject ? (
             <div className="space-y-3">
-              <div className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded capitalize">{selectedObject.type}</div>
+              <div className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded capitalize">
+                {(selectedObject.data as { layerName?: string } | undefined)?.layerName ?? selectedObject.type}
+              </div>
 
               {(selectedObject.type === "i-text" || selectedObject.type === "text") && (
                 <div className="space-y-2">
@@ -1010,6 +1195,21 @@ export default function Editor() {
                 <Trash2 className="w-3.5 h-3.5 mr-1.5" />
                 {t("common.delete")}
               </Button>
+              <div className="grid grid-cols-2 gap-1">
+                <Button variant="outline" size="sm" className="h-8 text-xs" onClick={duplicateSelected}>
+                  <Copy className="w-3.5 h-3.5 mr-1" /> Duplicate
+                </Button>
+                <Button variant="outline" size="sm" className="h-8 text-xs" onClick={toggleObjectLock}>
+                  {selectedObject.lockMovementX ? <Unlock className="w-3.5 h-3.5 mr-1" /> : <Lock className="w-3.5 h-3.5 mr-1" />}
+                  {selectedObject.lockMovementX ? "Unlock" : "Lock"}
+                </Button>
+                <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => moveLayer("up")}>
+                  <MoveUp className="w-3.5 h-3.5 mr-1" /> Up
+                </Button>
+                <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => moveLayer("down")}>
+                  <MoveDown className="w-3.5 h-3.5 mr-1" /> Down
+                </Button>
+              </div>
             </div>
           ) : (
             <div className="text-xs text-muted-foreground text-center py-8 leading-relaxed">
@@ -1025,7 +1225,12 @@ export default function Editor() {
             <DialogTitle>Preview on Avatar</DialogTitle>
           </DialogHeader>
           {avatarTextureUrl ? (
-            <AvatarPreview textureUrl={avatarTextureUrl} className="border-0 rounded-none" />
+            <AvatarPreview
+              textureUrl={avatarTextureUrl}
+              avatarType={avatarProfile.avatarType}
+              bodyType={avatarProfile.bodyType}
+              className="border-0 rounded-none"
+            />
           ) : (
             <div className="h-[420px] flex items-center justify-center text-sm text-muted-foreground">
               Add content on the canvas to preview your design.
