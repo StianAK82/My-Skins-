@@ -37,6 +37,7 @@ router.get("/auth/me", async (req, res): Promise<void> => {
     timezone: profile.timezone,
     plan: profile.plan,
     aiCredits: profile.aiCredits,
+    credits: user.credits,
     createdAt: user.createdAt,
   });
 });
@@ -81,6 +82,7 @@ router.patch("/auth/profile", async (req, res): Promise<void> => {
     timezone: profile.timezone,
     plan: profile.plan,
     aiCredits: profile.aiCredits,
+    credits: user.credits,
     createdAt: user.createdAt,
   });
 });

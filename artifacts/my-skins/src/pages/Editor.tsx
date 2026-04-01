@@ -218,10 +218,25 @@ export default function Editor() {
   const [showConcept, setShowConcept] = useState(true);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [avatarTextureUrl, setAvatarTextureUrl] = useState("");
+  const [credits, setCredits] = useState(0);
+  const [paymentOpen, setPaymentOpen] = useState(false);
+  const [isBuyingCredit, setIsBuyingCredit] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
 
   const { data: project, isLoading } = useGetProject(id);
   const saveCanvas = useSaveCanvas();
   const createExport = useCreateExport();
+
+  const refreshCredits = useCallback(async () => {
+    try {
+      const res = await fetch("/api/credits", { credentials: "include" });
+      if (!res.ok) return;
+      const data = await res.json() as { credits?: number };
+      setCredits(data.credits ?? 0);
+    } catch (error) {
+      console.error("credit.refresh.failed", error);
+    }
+  }, []);
 
   // These must be declared BEFORE the canvas useEffect that depends on them
   const handleUseColors = useCallback((colors: string[]) => {
@@ -380,6 +395,10 @@ export default function Editor() {
     };
   }, [project?.id]);
 
+  useEffect(() => {
+    void refreshCredits();
+  }, [refreshCredits]);
+
   const handleSave = async () => {
     if (!fabricRef.current) return;
     const canvasJSON = fabricRef.current.toJSON();
@@ -404,6 +423,63 @@ export default function Editor() {
     a.download = `${project?.title ?? "design"}.png`;
     a.click();
     createExport.mutate({ data: { projectId: id, format: "png" } });
+  };
+
+  const handleBuyCredit = async () => {
+    setIsBuyingCredit(true);
+    try {
+      const res = await fetch("/api/payments/create-checkout-session", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+      });
+      const data = await res.json() as { checkoutUrl?: string; error?: string };
+      if (!res.ok || !data.checkoutUrl) {
+        throw new Error(data.error ?? "Unable to create checkout session.");
+      }
+      window.location.href = data.checkoutUrl;
+    } catch (error) {
+      toast({
+        title: "Payment failed",
+        description: error instanceof Error ? error.message : "Could not start checkout.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsBuyingCredit(false);
+    }
+  };
+
+  const handleUploadToRoblox = async () => {
+    if (!id) return;
+    if (credits < 1) {
+      setPaymentOpen(true);
+      return;
+    }
+
+    setIsUploading(true);
+    try {
+      const res = await fetch("/api/roblox/upload", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ projectId: id }),
+      });
+      const data = await res.json() as { error?: string; message?: string; creditsRemaining?: number };
+      if (!res.ok) {
+        if (data.error === "INSUFFICIENT_CREDITS") setPaymentOpen(true);
+        throw new Error(data.message ?? "Upload failed.");
+      }
+      setCredits(data.creditsRemaining ?? Math.max(0, credits - 1));
+      toast({ title: "Uploaded to Roblox", description: data.message ?? "Upload completed successfully." });
+    } catch (error) {
+      toast({
+        title: "Upload failed",
+        description: error instanceof Error ? error.message : "Could not upload to Roblox.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsUploading(false);
+    }
   };
 
   const addText = () => {
@@ -610,6 +686,10 @@ export default function Editor() {
         </div>
 
         <div className="flex items-center gap-2">
+          <span className="text-xs font-medium px-2 py-1 rounded bg-muted">Credits: {credits}</span>
+          <Button size="sm" variant="outline" onClick={() => setPaymentOpen(true)}>
+            Buy 1 Credit (10 NOK)
+          </Button>
           <Button variant="ghost" size="icon" onClick={zoomOut}><ZoomOut className="w-4 h-4" /></Button>
           <Button variant="ghost" size="icon" onClick={zoomIn}><ZoomIn className="w-4 h-4" /></Button>
           {selectedObject && (
@@ -625,6 +705,9 @@ export default function Editor() {
           <Button size="sm" onClick={handleExport}>
             <Download className="w-4 h-4 mr-1.5" />
             {t("editor.export")}
+          </Button>
+          <Button size="sm" onClick={handleUploadToRoblox} disabled={credits < 1 || isUploading}>
+            {isUploading ? "Uploading..." : "Upload to Roblox (1 Credit)"}
           </Button>
           <Button size="sm" variant="secondary" onClick={() => setPreviewOpen(true)} disabled={!avatarTextureUrl}>
             Preview on Avatar
@@ -896,6 +979,21 @@ export default function Editor() {
               Add content on the canvas to preview your design.
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={paymentOpen} onOpenChange={setPaymentOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Buy Roblox Upload Credit</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 text-sm">
+            <p>You need 1 credit (10 NOK) to upload to Roblox.</p>
+            <p className="text-muted-foreground">Current credits: <strong>{credits}</strong></p>
+            <Button className="w-full" onClick={handleBuyCredit} disabled={isBuyingCredit}>
+              {isBuyingCredit ? "Opening Stripe..." : "Buy 1 Credit (10 NOK)"}
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

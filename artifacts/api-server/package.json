@@ -20,7 +20,8 @@
     "openid-client": "^6.8.2",
     "pino": "^9",
     "pino-http": "^10",
-    "zod": "catalog:"
+    "zod": "catalog:",
+    "stripe": "^18.2.1"
   },
   "devDependencies": {
     "@types/cookie-parser": "^1.4.10",
