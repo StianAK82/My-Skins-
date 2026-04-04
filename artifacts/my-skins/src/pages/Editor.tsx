@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useParams, Link } from "wouter";
 import * as fabric from "fabric";
-import { useGetProject, useSaveCanvas, useCreateExport } from "@workspace/api-client-react";
+import { useGetProject, useSaveCanvas, useCreateExport, useGetMe } from "@workspace/api-client-react";
 import { useLanguage } from "@/hooks/use-language";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -50,6 +50,8 @@ interface ModuleDefinition {
 }
 
 type StylePreset = "streetwear" | "anime" | "sport" | "cyberpunk" | "minimal";
+type EditorMetaState = { avatar?: { avatarType?: string; bodyType?: string }; creationMode?: string; stylePreset?: StylePreset };
+type FabricObjectMeta = { role?: string; layerName?: string; zone?: string; moduleId?: string };
 
 const MODULE_LIBRARY: ModuleDefinition[] = [
   { id: "mod-sleeve-stripe", name: "Sleeve Stripe", category: "Clothing Parts", shape: "stripe", color: "#ef4444" },
@@ -64,6 +66,7 @@ const MODULE_LIBRARY: ModuleDefinition[] = [
   { id: "mod-backpack", name: "Backpack Mark", category: "Accessories", shape: "rect", color: "#10b981" },
   { id: "mod-chain", name: "Chain Accent", category: "Accessories", shape: "stripe", color: "#cbd5e1" },
 ];
+const STYLE_PRESET_VALUES: StylePreset[] = ["streetwear", "anime", "sport", "cyberpunk", "minimal"];
 
 const TEMPLATE_ZONES: Record<"shirt" | "pants", { front: TemplateZone; back: TemplateZone; leftRegion: TemplateZone; rightRegion: TemplateZone }> = {
   shirt: {
@@ -88,6 +91,14 @@ function parseAiConcept(canvasData: string | null | undefined): AiConcept | null
   } catch {
     return null;
   }
+}
+
+function getObjectMeta(obj: fabric.Object): FabricObjectMeta {
+  return (obj as fabric.Object & { data?: FabricObjectMeta }).data ?? {};
+}
+
+function isStylePreset(value: unknown): value is StylePreset {
+  return typeof value === "string" && STYLE_PRESET_VALUES.includes(value as StylePreset);
 }
 
 function AiConceptBanner({ concept, onClose, onUseColors }: {
@@ -258,19 +269,9 @@ export default function Editor() {
   const [draggingModuleId, setDraggingModuleId] = useState<string | null>(null);
 
   const { data: project, isLoading } = useGetProject(id);
+  const { data: me, refetch: refetchMe } = useGetMe();
   const saveCanvas = useSaveCanvas();
   const createExport = useCreateExport();
-
-  const refreshCredits = useCallback(async () => {
-    try {
-      const res = await fetch("/api/credits", { credentials: "include" });
-      if (!res.ok) return;
-      const data = await res.json() as { credits?: number };
-      setCredits(data.credits ?? 0);
-    } catch (error) {
-      console.error("credit.refresh.failed", error);
-    }
-  }, []);
 
   // These must be declared BEFORE the canvas useEffect that depends on them
   const handleUseColors = useCallback((colors: string[]) => {
@@ -286,7 +287,7 @@ export default function Editor() {
     const zones = TEMPLATE_ZONES[type];
 
     canvas.getObjects().forEach((obj) => {
-      if ((obj.data as { role?: string } | undefined)?.role === "template-guide") {
+      if (getObjectMeta(obj).role === "template-guide") {
         canvas.remove(obj);
       }
     });
@@ -327,7 +328,7 @@ export default function Editor() {
     const canvas = fabricRef.current;
     const type = (project?.type as "shirt" | "pants") ?? "shirt";
     const zones = TEMPLATE_ZONES[type];
-    const hasUserObjects = canvas.getObjects().some((obj) => (obj.data as { role?: string } | undefined)?.role !== "template-guide");
+    const hasUserObjects = canvas.getObjects().some((obj) => getObjectMeta(obj).role !== "template-guide");
     if (hasUserObjects) return;
 
     const stylePalettes: Record<StylePreset, string[]> = {
@@ -344,7 +345,7 @@ export default function Editor() {
     addFallbackShapeToZone(zones.leftRegion, palette[1], "Starter Left Sleeve");
     addFallbackShapeToZone(zones.rightRegion, palette[2], "Starter Right Sleeve");
     canvas.renderAll();
-  }, [addFallbackShapeToZone, project?.type]);
+  }, [project?.type]);
 
   // Initialize Canvas
   useEffect(() => {
@@ -462,8 +463,8 @@ export default function Editor() {
   }, [project?.id]);
 
   useEffect(() => {
-    void refreshCredits();
-  }, [refreshCredits]);
+    setCredits(me?.aiCredits ?? 0);
+  }, [me?.aiCredits]);
 
   const handleSave = async () => {
     if (!fabricRef.current) return;
@@ -473,7 +474,7 @@ export default function Editor() {
     const dataUrl = fabricRef.current.toDataURL({ format: "png", quality: 0.5, multiplier: 0.5 });
 
     saveCanvas.mutate(
-      { data: { canvasData: json, thumbnailUrl: dataUrl } },
+      { id, data: { canvasData: json, thumbnailUrl: dataUrl } },
       {
         onSuccess: () => toast({ title: language === "no" ? "Lagret!" : "Saved!", description: language === "no" ? "Prosjektet er lagret." : "Project saved." }),
         onError: () => toast({ title: language === "no" ? "Feil" : "Error", description: language === "no" ? "Klarte ikke å lagre." : "Failed to save.", variant: "destructive" }),
@@ -544,6 +545,7 @@ export default function Editor() {
       });
     } finally {
       setIsUploading(false);
+      void refetchMe();
     }
   };
 
@@ -682,7 +684,11 @@ export default function Editor() {
     if (!fabricRef.current) return;
     const active = fabricRef.current.getActiveObject();
     if (active && active.type === "activeSelection") {
-      (active as fabric.ActiveSelection).toGroup();
+      const selection = active as fabric.ActiveSelection;
+      const grouped = new fabric.Group(selection.getObjects());
+      fabricRef.current.remove(selection);
+      fabricRef.current.add(grouped);
+      fabricRef.current.setActiveObject(grouped);
       fabricRef.current.renderAll();
     }
   };
@@ -691,7 +697,12 @@ export default function Editor() {
     if (!fabricRef.current) return;
     const active = fabricRef.current.getActiveObject();
     if (active && active.type === "group") {
-      (active as fabric.Group).toActiveSelection();
+      const group = active as fabric.Group;
+      const items = group.removeAll();
+      fabricRef.current.remove(group);
+      const selection = new fabric.ActiveSelection(items, { canvas: fabricRef.current });
+      fabricRef.current.setActiveObject(selection);
+      fabricRef.current.requestRenderAll();
       fabricRef.current.renderAll();
     }
   };
@@ -713,7 +724,7 @@ export default function Editor() {
     e.target.value = "";
   };
 
-  const addFallbackShapeToZone = useCallback((zone: TemplateZone, color: string, layerName: string) => {
+  function addFallbackShapeToZone(zone: TemplateZone, color: string, layerName: string) {
     if (!fabricRef.current) return;
     const stripe = new fabric.Rect({
       left: zone.left,
@@ -738,7 +749,7 @@ export default function Editor() {
     });
     fabricRef.current.add(stripe);
     fabricRef.current.add(emblem);
-  }, []);
+  }
 
   const applyAiOutfitToCanvas = useCallback(async (result: NormalizedAiResponse) => {
     if (!fabricRef.current) return false;
@@ -750,7 +761,7 @@ export default function Editor() {
       canvas.backgroundColor = plan.backgroundColor;
 
       canvas.getObjects().forEach((obj) => {
-        if ((obj.data as { role?: string } | undefined)?.role === "template-guide") {
+        if (getObjectMeta(obj).role === "template-guide") {
           canvas.remove(obj);
         }
       });
@@ -836,7 +847,7 @@ export default function Editor() {
     if (!raw) return;
     sessionStorage.removeItem(key);
     try {
-      const parsed = JSON.parse(raw) as { avatar?: { avatarType?: string; bodyType?: string }; creationMode?: string };
+      const parsed = JSON.parse(raw) as EditorMetaState;
       if (parsed.avatar?.avatarType || parsed.avatar?.bodyType) {
         setAvatarProfile({
           avatarType: parsed.avatar.avatarType ?? "neutral",
@@ -844,8 +855,8 @@ export default function Editor() {
         });
       }
       if (parsed.creationMode) setCreationMode(parsed.creationMode);
-      if (parsed.stylePreset && ["streetwear", "anime", "sport", "cyberpunk", "minimal"].includes(parsed.stylePreset)) {
-        setSelectedStylePreset(parsed.stylePreset as StylePreset);
+      if (isStylePreset(parsed.stylePreset)) {
+        setSelectedStylePreset(parsed.stylePreset);
       }
     } catch (error) {
       console.error("editor.meta.invalid", error);
@@ -1157,7 +1168,7 @@ export default function Editor() {
           {selectedObject ? (
             <div className="space-y-3">
               <div className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded capitalize">
-                {(selectedObject.data as { layerName?: string } | undefined)?.layerName ?? selectedObject.type}
+                {getObjectMeta(selectedObject).layerName ?? selectedObject.type}
               </div>
 
               {(selectedObject.type === "i-text" || selectedObject.type === "text") && (
@@ -1223,7 +1234,7 @@ export default function Editor() {
                       <span className="text-[9px] text-muted-foreground">{axis === "left" ? "X" : "Y"}</span>
                       <Input
                         type="number"
-                        value={Math.round((selectedObject as Record<string, number>)[axis] ?? 0)}
+                        value={Math.round(axis === "left" ? (selectedObject.left ?? 0) : (selectedObject.top ?? 0))}
                         onChange={e => { selectedObject.set(axis as "left" | "top", parseInt(e.target.value) || 0); fabricRef.current?.renderAll(); }}
                         className="h-7 text-xs mt-0.5"
                       />

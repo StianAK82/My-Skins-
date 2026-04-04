@@ -18,7 +18,7 @@ export const useLanguageStore = create<LanguageStore>((set) => ({
 
 export function useLanguage() {
   const { language, setLanguage } = useLanguageStore();
-  const { data: user } = useGetMe({ query: { retry: false } });
+  const { data: user } = useGetMe({ query: { queryKey: ["/api/auth/me"], retry: false } });
 
   useEffect(() => {
     if (user?.language && ["en", "no", "es"].includes(user.language)) {
