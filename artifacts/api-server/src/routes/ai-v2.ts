@@ -1,0 +1,152 @@
+import { Router, type IRouter } from "express";
+import { z } from "zod";
+import { aiGenerateRequestSchema, aiImproveRequestSchema } from "../lib/ai-contracts";
+import { aiGenerationService } from "../services/ai/ai-generation.service";
+import { aiHistoryService } from "../services/ai/ai-history.service";
+
+const router: IRouter = Router();
+
+function ensureAuthenticated(req: any, res: any): boolean {
+  if (!req.isAuthenticated()) {
+    res.status(401).json({ error: "Unauthorized" });
+    return false;
+  }
+  return true;
+}
+
+function getUserId(req: any): string {
+  return (req.user as { id: string }).id;
+}
+
+function schema422(res: any, err: z.ZodError | SyntaxError) {
+  res.status(422).json({
+    error: "Invalid AI response schema",
+    details: err instanceof z.ZodError ? err.issues.map((i) => `${i.path.join(".")}: ${i.message}`) : ["AI returned non-JSON content"],
+  });
+}
+
+router.post("/ai/generate", async (req, res): Promise<void> => {
+  if (!ensureAuthenticated(req, res)) return;
+  const parsed = aiGenerateRequestSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Invalid request", details: parsed.error.flatten() });
+    return;
+  }
+
+  try {
+    res.json(await aiGenerationService.generateDesign(getUserId(req), parsed.data));
+  } catch (err) {
+    if (err instanceof z.ZodError || err instanceof SyntaxError) return schema422(res, err);
+    req.log.error({ err }, "ai.v2.generate.failed");
+    res.status(500).json({ error: "AI generation failed" });
+  }
+});
+
+router.post("/ai/improve", async (req, res): Promise<void> => {
+  if (!ensureAuthenticated(req, res)) return;
+  const parsed = aiImproveRequestSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Invalid request", details: parsed.error.flatten() });
+    return;
+  }
+
+  try {
+    res.json(await aiGenerationService.improveDesign(getUserId(req), parsed.data.instruction, parsed.data.design, "improve"));
+  } catch (err) {
+    if (err instanceof z.ZodError || err instanceof SyntaxError) return schema422(res, err);
+    req.log.error({ err }, "ai.v2.improve.failed");
+    res.status(500).json({ error: "AI improve failed" });
+  }
+});
+
+router.post("/ai/remix", async (req, res): Promise<void> => {
+  if (!ensureAuthenticated(req, res)) return;
+  const parsed = aiImproveRequestSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Invalid request", details: parsed.error.flatten() });
+    return;
+  }
+
+  try {
+    res.json(await aiGenerationService.improveDesign(getUserId(req), parsed.data.instruction, parsed.data.design, "remix"));
+  } catch (err) {
+    if (err instanceof z.ZodError || err instanceof SyntaxError) return schema422(res, err);
+    req.log.error({ err }, "ai.v2.remix.failed");
+    res.status(500).json({ error: "AI remix failed" });
+  }
+});
+
+router.post("/ai/generate-idea", async (req, res): Promise<void> => {
+  if (!ensureAuthenticated(req, res)) return;
+  const parsed = aiGenerateRequestSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Invalid request", details: parsed.error.flatten() });
+    return;
+  }
+
+  try {
+    res.json(await aiGenerationService.generateIdea(parsed.data));
+  } catch (err) {
+    if (err instanceof z.ZodError || err instanceof SyntaxError) return schema422(res, err);
+    req.log.error({ err }, "ai.v2.generate-idea.failed");
+    res.status(500).json({ error: "AI idea generation failed" });
+  }
+});
+
+router.post("/ai/generate-modules", async (req, res): Promise<void> => {
+  if (!ensureAuthenticated(req, res)) return;
+  const parsed = aiGenerateRequestSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Invalid request", details: parsed.error.flatten() });
+    return;
+  }
+
+  try {
+    res.json(await aiGenerationService.generateModules(parsed.data));
+  } catch (err) {
+    if (err instanceof z.ZodError || err instanceof SyntaxError) return schema422(res, err);
+    req.log.error({ err }, "ai.v2.generate-modules.failed");
+    res.status(500).json({ error: "AI modules generation failed" });
+  }
+});
+
+router.post("/ai/generate-palette", async (req, res): Promise<void> => {
+  if (!ensureAuthenticated(req, res)) return;
+  const parsed = aiGenerateRequestSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Invalid request", details: parsed.error.flatten() });
+    return;
+  }
+
+  try {
+    res.json(await aiGenerationService.generatePalette(parsed.data));
+  } catch (err) {
+    if (err instanceof z.ZodError || err instanceof SyntaxError) return schema422(res, err);
+    req.log.error({ err }, "ai.v2.generate-palette.failed");
+    res.status(500).json({ error: "AI palette generation failed" });
+  }
+});
+
+router.post("/ai/generate-layout", async (req, res): Promise<void> => {
+  if (!ensureAuthenticated(req, res)) return;
+  const parsed = aiGenerateRequestSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Invalid request", details: parsed.error.flatten() });
+    return;
+  }
+
+  try {
+    res.json(await aiGenerationService.generateLayout(parsed.data));
+  } catch (err) {
+    if (err instanceof z.ZodError || err instanceof SyntaxError) return schema422(res, err);
+    req.log.error({ err }, "ai.v2.generate-layout.failed");
+    res.status(500).json({ error: "AI layout generation failed" });
+  }
+});
+
+router.get("/ai/history", async (req, res): Promise<void> => {
+  if (!ensureAuthenticated(req, res)) return;
+  res.json(await aiHistoryService.listUserHistory(getUserId(req)));
+});
+
+export default router;

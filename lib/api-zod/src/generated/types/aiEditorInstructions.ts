@@ -6,8 +6,8 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export interface AiGenerateListingResponse {
-  title: string;
-  description: string;
-  tags: string[];
+export interface AiEditorInstructions {
+  baseTemplate: string;
+  recommendedPreset: string;
+  notes: string[];
 }

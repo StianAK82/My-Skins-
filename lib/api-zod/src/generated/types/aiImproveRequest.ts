@@ -5,9 +5,9 @@
  * My Skins API specification
  * OpenAPI spec version: 0.1.0
  */
-import type { AiGeneratedOutfit } from "./aiGeneratedOutfit";
+import type { AiDesign } from "./aiDesign";
 
-export interface AiRemixOutfitRequest {
+export interface AiImproveRequest {
   instruction: string;
-  source: AiGeneratedOutfit;
+  design: AiDesign;
 }

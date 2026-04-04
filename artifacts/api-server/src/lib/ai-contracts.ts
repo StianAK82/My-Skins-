@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 export const itemTypeSchema = z.enum(["classic_shirt", "classic_pants"]);
+export const aiLifecycleStatusSchema = z.enum(["queued", "processing", "completed", "degraded", "failed"]);
 
 const hexColorSchema = z.string().regex(/^#[0-9A-Fa-f]{6}$/);
 
@@ -91,6 +92,28 @@ export const aiGenerateRequestSchema = z.object({
 export const aiImproveRequestSchema = z.object({
   instruction: z.string().min(1),
   design: aiDesignSchema,
+}).strict();
+
+export const aiHistoryEntrySchema = z.object({
+  id: z.string(),
+  prompt: z.string(),
+  style: z.string().nullable(),
+  type: z.string().nullable(),
+  createdAt: z.string(),
+  status: aiLifecycleStatusSchema,
+  result: aiDesignSchema,
+}).strict();
+
+export const aiResponseMetaSchema = z.object({
+  generationId: z.string(),
+  status: aiLifecycleStatusSchema,
+  warnings: z.array(z.string()).default([]),
+  deprecated: z.boolean().default(false),
+}).strict();
+
+export const aiDesignResponseSchema = z.object({
+  meta: aiResponseMetaSchema,
+  result: aiDesignSchema,
 }).strict();
 
 export function validatePlacementForItemType(design: z.infer<typeof aiDesignSchema>): boolean {
