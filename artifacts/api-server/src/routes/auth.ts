@@ -3,6 +3,7 @@ import { z } from "zod";
 import { Router, type IRouter, type Request, type Response } from "express";
 import { db, usersTable } from "@workspace/db";
 import { and, eq, sql } from "drizzle-orm";
+import { logger } from "../lib/logger";
 import {
   clearSession,
   getOidcConfig,
@@ -43,6 +44,7 @@ const LogoutMobileSessionResponse = z.object({
 
 const OIDC_COOKIE_TTL = 10 * 60 * 1000;
 let authSchemaValidated = false;
+let authSchemaDiagnosticLogged = false;
 
 const router: IRouter = Router();
 
@@ -174,6 +176,13 @@ async function upsertUser(claims: Record<string, unknown>) {
 async function ensureAuthSchemaReady() {
   if (authSchemaValidated) return;
 
+  const runtimeDbResult = await db.execute(sql<{
+    current_database: string;
+    current_schema: string;
+  }>`
+    SELECT current_database() AS current_database, current_schema() AS current_schema
+  `);
+
   const columnsResult = await db.execute(sql<{
     auth_provider: "YES" | "NO";
     auth_provider_user_id: "YES" | "NO";
@@ -186,6 +195,22 @@ async function ensureAuthSchemaReady() {
   `);
 
   const [columns] = columnsResult.rows;
+  const columnsReady =
+    Boolean(columns) &&
+    columns.auth_provider === "YES" &&
+    columns.auth_provider_user_id === "YES";
+
+  const uniqueIndexResult = await db.execute(sql<{ index_exists: boolean }>`
+    SELECT EXISTS (
+      SELECT 1
+      FROM pg_indexes
+      WHERE schemaname = 'public'
+        AND tablename = 'users'
+        AND indexname = 'users_auth_provider_subject_uidx'
+    ) AS index_exists
+  `);
+  const [uniqueIndex] = uniqueIndexResult.rows;
+
   if (!columns || columns.auth_provider !== "YES" || columns.auth_provider_user_id !== "YES") {
     throw new Error(
       "users table is missing external identity columns (auth_provider, auth_provider_user_id). Run the 0001_users_external_identity migration.",
@@ -201,6 +226,31 @@ async function ensureAuthSchemaReady() {
 
   const [idDefault] = idDefaultResult.rows;
   const defaultExpr = idDefault?.column_default ?? "";
+  const idDefaultIsDbGenerated = /gen_random_uuid\(\)|uuid_generate_v4\(\)/.test(defaultExpr);
+  if (!authSchemaDiagnosticLogged) {
+    authSchemaDiagnosticLogged = true;
+    const [runtimeDb] = runtimeDbResult.rows;
+    logger.info(
+      {
+        authFlowVersion: "external_identity_v1",
+        authLookupMode: "users(auth_provider, auth_provider_user_id)",
+        runtimeDb: runtimeDb?.current_database ?? "unknown",
+        runtimeSchema: runtimeDb?.current_schema ?? "unknown",
+        usersColumnsReady: columnsReady,
+        usersProviderIndexReady: uniqueIndex?.index_exists ?? false,
+        usersIdDbGenerated: idDefaultIsDbGenerated,
+        usersIdDefaultExpression: defaultExpr || null,
+      },
+      "Auth startup diagnostics",
+    );
+  }
+
+  if (!uniqueIndex?.index_exists) {
+    throw new Error(
+      "users table is missing users_auth_provider_subject_uidx on (auth_provider, auth_provider_user_id). Run the 0001_users_external_identity migration.",
+    );
+  }
+
   if (!/gen_random_uuid\(\)|uuid_generate_v4\(\)/.test(defaultExpr)) {
     throw new Error(
       "users.id must be database-generated (gen_random_uuid/uuid_generate_v4) to avoid assigning provider subject IDs.",
