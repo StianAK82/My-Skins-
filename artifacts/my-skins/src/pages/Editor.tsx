@@ -519,13 +519,23 @@ export default function Editor() {
 
     setIsUploading(true);
     try {
-      const data = await uploadToRoblox(id) as { error?: string; message?: string; creditsRemaining?: number; status?: string };
+      const data = await uploadToRoblox(id) as { error?: string; message?: string; status?: string; events?: Array<{ message?: string }> };
       if (data.error) {
         if (data.error === "INSUFFICIENT_CREDITS") setPaymentOpen(true);
         throw new Error(data.message ?? "Upload failed.");
       }
-      setCredits(data.creditsRemaining ?? Math.max(0, credits - 1));
-      toast({ title: "Roblox upload job created", description: data.message ?? `Current status: ${data.status ?? "queued"}.` });
+      const status = data.status ?? "queued";
+      const latestMessage = data.events?.at(-1)?.message;
+      if (status === "blocked" || status === "failed") {
+        toast({
+          title: status === "blocked" ? "Upload blocked" : "Upload failed",
+          description: latestMessage ?? "Roblox upload could not proceed with the current integration state.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      toast({ title: "Roblox upload job created", description: latestMessage ?? `Current status: ${status}.` });
     } catch (error) {
       toast({
         title: "Upload failed",

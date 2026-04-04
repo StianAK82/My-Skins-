@@ -1,33 +1,22 @@
+import {
+  createRobloxUpload,
+  getRobloxLogin,
+  getRobloxStatus as getRobloxStatusApi,
+  getRobloxUpload,
+} from "@workspace/api-client-react";
+
 export async function getRobloxStatus() {
-  const response = await fetch("/api/roblox/status", {
-    method: "GET",
-    credentials: "include",
-  });
-  return response.json();
+  return getRobloxStatusApi();
 }
 
 export async function getRobloxLoginUrl() {
-  const response = await fetch("/api/roblox/login", {
-    method: "GET",
-    credentials: "include",
-  });
-  return response.json();
+  return getRobloxLogin();
 }
 
 export async function uploadToRoblox(projectId: string) {
-  const response = await fetch("/api/roblox/upload", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    credentials: "include",
-    body: JSON.stringify({ projectId }),
-  });
-  return response.json();
+  return createRobloxUpload({ projectId });
 }
 
 export async function getRobloxUploadStatus(uploadJobId: string) {
-  const response = await fetch(`/api/roblox/upload/${uploadJobId}`, {
-    method: "GET",
-    credentials: "include",
-  });
-  return response.json();
+  return getRobloxUpload(uploadJobId);
 }

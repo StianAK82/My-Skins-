@@ -700,7 +700,7 @@ export const GetAiHistoryResponseItem = zod.object({
 export const GetAiHistoryResponse = zod.array(GetAiHistoryResponseItem);
 
 /**
- * @summary Export a project as PNG
+ * @summary Create an export lifecycle job
  */
 export const CreateExportBody = zod.object({
   projectId: zod.string(),
@@ -708,40 +708,161 @@ export const CreateExportBody = zod.object({
   quality: zod.enum(["standard", "high"]).optional(),
 });
 
-export const CreateExportResponse = zod.object({
-  id: zod.string(),
-  projectId: zod.string(),
-  url: zod.string().optional(),
-  format: zod.string(),
-  size: zod.number().optional(),
-  width: zod.number().optional(),
-  height: zod.number().optional(),
-  createdAt: zod.coerce.date(),
-});
-
 /**
- * @summary Get export history
+ * @summary List export lifecycle jobs
  */
 export const GetExportsResponseItem = zod.object({
-  id: zod.string(),
-  projectId: zod.string(),
-  url: zod.string().optional(),
-  format: zod.string(),
-  size: zod.number().optional(),
-  width: zod.number().optional(),
-  height: zod.number().optional(),
+  jobId: zod.string().uuid(),
+  projectId: zod.string().uuid(),
+  format: zod.enum(["png"]),
+  status: zod.enum(["queued", "processing", "completed", "failed"]),
   createdAt: zod.coerce.date(),
+  completedAt: zod.coerce.date().nullable(),
+  artifact: zod.union([
+    zod.object({
+      id: zod.string(),
+      url: zod.string(),
+      width: zod.number(),
+      height: zod.number(),
+      size: zod.number().optional(),
+    }),
+    zod.null(),
+  ]),
 });
 export const GetExportsResponse = zod.array(GetExportsResponseItem);
 
 /**
- * @summary Get Roblox connection status
+ * @summary Get a specific export lifecycle job
  */
-export const GetRobloxConnectionResponse = zod.object({
+export const GetExportJobParams = zod.object({
+  jobId: zod.coerce.string().uuid(),
+});
+
+export const GetExportJobResponse = zod.object({
+  jobId: zod.string().uuid(),
+  projectId: zod.string().uuid(),
+  format: zod.enum(["png"]),
+  status: zod.enum(["queued", "processing", "completed", "failed"]),
+  createdAt: zod.coerce.date(),
+  completedAt: zod.coerce.date().nullable(),
+  artifact: zod.union([
+    zod.object({
+      id: zod.string(),
+      url: zod.string(),
+      width: zod.number(),
+      height: zod.number(),
+      size: zod.number().optional(),
+    }),
+    zod.null(),
+  ]),
+});
+
+/**
+ * @summary Get current billing lifecycle state
+ */
+export const GetBillingStateResponse = zod.object({
+  plans: zod.array(zod.string()),
+  subscription: zod.union([
+    zod.object({
+      id: zod.string(),
+      userId: zod.string(),
+      providerSubscriptionId: zod.string(),
+      status: zod.string(),
+      currentPeriodEnd: zod.coerce.date().nullable(),
+      createdAt: zod.coerce.date(),
+    }),
+    zod.null(),
+  ]),
+  entitlements: zod.array(
+    zod.object({
+      id: zod.string(),
+      userId: zod.string(),
+      key: zod.string(),
+      source: zod.string(),
+      status: zod.string(),
+      createdAt: zod.coerce.date(),
+    }),
+  ),
+  invoices: zod.array(
+    zod.object({
+      id: zod.string(),
+      subscriptionId: zod.string().nullable(),
+      providerInvoiceId: zod.string(),
+      status: zod.string(),
+      amountPaid: zod.number(),
+      createdAt: zod.coerce.date(),
+    }),
+  ),
+});
+
+/**
+ * @summary Get Roblox integration connection status
+ */
+export const GetRobloxStatusResponse = zod.object({
+  configured: zod.boolean(),
   connected: zod.boolean(),
-  robloxUserId: zod.string().optional(),
-  robloxUsername: zod.string().optional(),
-  connectedAt: zod.coerce.date().optional(),
+  connection: zod
+    .object({
+      robloxUserId: zod.string(),
+      robloxUsername: zod.string(),
+      connectedAt: zod.coerce.date(),
+    })
+    .nullable(),
+});
+
+/**
+ * @summary Create Roblox OAuth login URL with PKCE
+ */
+export const GetRobloxLoginResponse = zod.object({
+  authorizeUrl: zod.string(),
+});
+
+/**
+ * @summary Complete Roblox OAuth callback
+ */
+export const RobloxCallbackQueryParams = zod.object({
+  state: zod.coerce.string(),
+  code: zod.coerce.string(),
+});
+
+export const RobloxCallbackResponse = zod.object({
+  success: zod.boolean(),
+  connected: zod.boolean(),
+});
+
+/**
+ * @summary Create a Roblox upload lifecycle job
+ */
+export const CreateRobloxUploadBody = zod.object({
+  projectId: zod.string(),
+});
+
+/**
+ * @summary Get Roblox upload lifecycle job
+ */
+export const GetRobloxUploadParams = zod.object({
+  uploadJobId: zod.coerce.string().uuid(),
+});
+
+export const GetRobloxUploadResponse = zod.object({
+  uploadJobId: zod.string(),
+  projectId: zod.string(),
+  status: zod.enum(["queued", "processing", "completed", "failed", "blocked"]),
+  events: zod.array(
+    zod.object({
+      id: zod.string(),
+      uploadJobId: zod.string(),
+      status: zod.enum([
+        "queued",
+        "processing",
+        "completed",
+        "failed",
+        "blocked",
+      ]),
+      message: zod.string(),
+      createdAt: zod.coerce.date(),
+    }),
+  ),
 });
 
 /**

@@ -1,4 +1,6 @@
 export type ProjectType = "shirt" | "pants" | string;
+export type ExportLifecycleStatus = "queued" | "processing" | "completed" | "failed";
+export type RobloxUploadLifecycleStatus = "queued" | "processing" | "completed" | "failed" | "blocked";
 
 export function resolveExportDimensions(projectType: ProjectType): { width: number; height: number } {
   if (projectType === "shirt" || projectType === "pants") {
@@ -29,5 +31,50 @@ export function resolveCreatorIdentity(input: {
   return {
     displayName: input.profileDisplayName ?? input.userFirstName ?? input.userDisplayName ?? "Creator",
     username: input.profileUsername ?? input.userEmail ?? null,
+  };
+}
+
+export function resolveRobloxUploadBlockedReason(input: {
+  configured: boolean;
+  hasConnectionToken: boolean;
+  activationReady: boolean;
+}): RobloxUploadTerminalReason | null {
+  if (!input.configured) return "not_configured";
+  if (!input.hasConnectionToken) return "missing_connection";
+  if (input.activationReady) return "activation_pending";
+  return null;
+}
+
+export type ExportJobRecord = {
+  jobId: string;
+  projectId: string;
+  format: string;
+  status: string;
+  createdAt: Date;
+  completedAt: Date | null;
+  artifactId: string | null;
+  artifactUrl: string | null;
+  width: number | null;
+  height: number | null;
+  size: number | null;
+};
+
+export function toExportJobResponse(row: ExportJobRecord) {
+  return {
+    jobId: row.jobId,
+    projectId: row.projectId,
+    format: row.format,
+    status: row.status as ExportLifecycleStatus,
+    createdAt: row.createdAt,
+    completedAt: row.completedAt,
+    artifact: row.artifactId && row.artifactUrl
+      ? {
+          id: row.artifactId,
+          url: row.artifactUrl,
+          width: row.width,
+          height: row.height,
+          size: row.size,
+        }
+      : null,
   };
 }

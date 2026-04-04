@@ -263,22 +263,124 @@ export interface CreateExportRequest {
   quality?: CreateExportRequestQuality;
 }
 
-export interface ExportResult {
+export type ExportLifecycleStatus =
+  (typeof ExportLifecycleStatus)[keyof typeof ExportLifecycleStatus];
+
+export const ExportLifecycleStatus = {
+  queued: "queued",
+  processing: "processing",
+  completed: "completed",
+  failed: "failed",
+} as const;
+
+export interface ExportArtifact {
   id: string;
-  projectId: string;
-  url?: string;
-  format: string;
+  url: string;
+  width: number;
+  height: number;
   size?: number;
-  width?: number;
-  height?: number;
+}
+
+export type ExportJobFormat =
+  (typeof ExportJobFormat)[keyof typeof ExportJobFormat];
+
+export const ExportJobFormat = {
+  png: "png",
+} as const;
+
+export interface ExportJob {
+  jobId: string;
+  projectId: string;
+  format: ExportJobFormat;
+  status: ExportLifecycleStatus;
+  createdAt: string;
+  completedAt: string | null;
+  artifact: ExportArtifact | null;
+}
+
+export interface BillingSubscription {
+  id: string;
+  userId: string;
+  providerSubscriptionId: string;
+  status: string;
+  currentPeriodEnd: string | null;
   createdAt: string;
 }
 
-export interface RobloxConnection {
+export interface BillingEntitlement {
+  id: string;
+  userId: string;
+  key: string;
+  source: string;
+  status: string;
+  createdAt: string;
+}
+
+export interface BillingInvoice {
+  id: string;
+  subscriptionId: string | null;
+  providerInvoiceId: string;
+  status: string;
+  amountPaid: number;
+  createdAt: string;
+}
+
+export interface BillingState {
+  plans: string[];
+  subscription: BillingSubscription | null;
+  entitlements: BillingEntitlement[];
+  invoices: BillingInvoice[];
+}
+
+export type RobloxStatusConnection = {
+  robloxUserId: string;
+  robloxUsername: string;
+  connectedAt: string;
+} | null;
+
+export interface RobloxStatus {
+  configured: boolean;
   connected: boolean;
-  robloxUserId?: string;
-  robloxUsername?: string;
-  connectedAt?: string;
+  connection: RobloxStatusConnection;
+}
+
+export interface RobloxLoginUrl {
+  authorizeUrl: string;
+}
+
+export interface RobloxCallbackResponse {
+  success: boolean;
+  connected: boolean;
+}
+
+export type RobloxUploadStatus =
+  (typeof RobloxUploadStatus)[keyof typeof RobloxUploadStatus];
+
+export const RobloxUploadStatus = {
+  queued: "queued",
+  processing: "processing",
+  completed: "completed",
+  failed: "failed",
+  blocked: "blocked",
+} as const;
+
+export interface RobloxUploadEvent {
+  id: string;
+  uploadJobId: string;
+  status: RobloxUploadStatus;
+  message: string;
+  createdAt: string;
+}
+
+export interface CreateRobloxUploadRequest {
+  projectId: string;
+}
+
+export interface RobloxUploadJob {
+  uploadJobId: string;
+  projectId: string;
+  status: RobloxUploadStatus;
+  events: RobloxUploadEvent[];
 }
 
 export interface CreateShareRequest {
@@ -318,3 +420,8 @@ export const GetProjectsType = {
   shirt: "shirt",
   pants: "pants",
 } as const;
+
+export type RobloxCallbackParams = {
+  state: string;
+  code: string;
+};

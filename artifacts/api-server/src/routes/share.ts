@@ -8,9 +8,10 @@ import { resolveCreatorIdentity } from "../lib/lifecycle";
 const router: IRouter = Router();
 
 const createShareSchema = z.object({
-  projectId: z.string().min(1),
+  projectId: z.string().uuid(),
   isPublic: z.boolean().optional(),
 });
+const shareTokenSchema = z.object({ token: z.string().min(8).max(64) });
 
 router.post("/share", async (req, res): Promise<void> => {
   if (!req.isAuthenticated()) {
@@ -57,7 +58,12 @@ router.post("/share", async (req, res): Promise<void> => {
 });
 
 router.get("/share/:token", async (req, res): Promise<void> => {
-  const token = Array.isArray(req.params.token) ? req.params.token[0] : req.params.token;
+  const parsedToken = shareTokenSchema.safeParse(req.params);
+  if (!parsedToken.success) {
+    res.status(400).json({ error: "Invalid share token", details: parsedToken.error.flatten() });
+    return;
+  }
+  const { token } = parsedToken.data;
 
   const [shareLink] = await db
     .select()

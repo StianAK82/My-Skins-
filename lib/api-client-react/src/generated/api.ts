@@ -26,17 +26,23 @@ import type {
   AiModules,
   AiPalette,
   AuthUser,
+  BillingState,
   CreateExportRequest,
   CreateProjectRequest,
+  CreateRobloxUploadRequest,
   CreateShareRequest,
   DashboardSummary,
   Error,
-  ExportResult,
+  ExportJob,
   GetProjectsParams,
   HealthStatus,
   Project,
   ProjectList,
-  RobloxConnection,
+  RobloxCallbackParams,
+  RobloxCallbackResponse,
+  RobloxLoginUrl,
+  RobloxStatus,
+  RobloxUploadJob,
   SaveCanvasRequest,
   ShareLink,
   SharedProjectView,
@@ -1797,7 +1803,7 @@ export function useGetAiHistory<
 }
 
 /**
- * @summary Export a project as PNG
+ * @summary Create an export lifecycle job
  */
 export const getCreateExportUrl = () => {
   return `/api/exports`;
@@ -1806,8 +1812,8 @@ export const getCreateExportUrl = () => {
 export const createExport = async (
   createExportRequest: CreateExportRequest,
   options?: RequestInit,
-): Promise<ExportResult> => {
-  return customFetch<ExportResult>(getCreateExportUrl(), {
+): Promise<ExportJob> => {
+  return customFetch<ExportJob>(getCreateExportUrl(), {
     ...options,
     method: "POST",
     headers: { "Content-Type": "application/json", ...options?.headers },
@@ -1860,7 +1866,7 @@ export type CreateExportMutationBody = BodyType<CreateExportRequest>;
 export type CreateExportMutationError = ErrorType<unknown>;
 
 /**
- * @summary Export a project as PNG
+ * @summary Create an export lifecycle job
  */
 export const useCreateExport = <
   TError = ErrorType<unknown>,
@@ -1883,7 +1889,7 @@ export const useCreateExport = <
 };
 
 /**
- * @summary Get export history
+ * @summary List export lifecycle jobs
  */
 export const getGetExportsUrl = () => {
   return `/api/exports`;
@@ -1891,8 +1897,8 @@ export const getGetExportsUrl = () => {
 
 export const getExports = async (
   options?: RequestInit,
-): Promise<ExportResult[]> => {
-  return customFetch<ExportResult[]>(getGetExportsUrl(), {
+): Promise<ExportJob[]> => {
+  return customFetch<ExportJob[]>(getGetExportsUrl(), {
     ...options,
     method: "GET",
   });
@@ -1934,7 +1940,7 @@ export type GetExportsQueryResult = NonNullable<
 export type GetExportsQueryError = ErrorType<unknown>;
 
 /**
- * @summary Get export history
+ * @summary List export lifecycle jobs
  */
 
 export function useGetExports<
@@ -1958,31 +1964,118 @@ export function useGetExports<
 }
 
 /**
- * @summary Get Roblox connection status
+ * @summary Get a specific export lifecycle job
  */
-export const getGetRobloxConnectionUrl = () => {
-  return `/api/roblox/connect`;
+export const getGetExportJobUrl = (jobId: string) => {
+  return `/api/exports/${jobId}`;
 };
 
-export const getRobloxConnection = async (
+export const getExportJob = async (
+  jobId: string,
   options?: RequestInit,
-): Promise<RobloxConnection> => {
-  return customFetch<RobloxConnection>(getGetRobloxConnectionUrl(), {
+): Promise<ExportJob> => {
+  return customFetch<ExportJob>(getGetExportJobUrl(jobId), {
     ...options,
     method: "GET",
   });
 };
 
-export const getGetRobloxConnectionQueryKey = () => {
-  return [`/api/roblox/connect`] as const;
+export const getGetExportJobQueryKey = (jobId: string) => {
+  return [`/api/exports/${jobId}`] as const;
 };
 
-export const getGetRobloxConnectionQueryOptions = <
-  TData = Awaited<ReturnType<typeof getRobloxConnection>>,
+export const getGetExportJobQueryOptions = <
+  TData = Awaited<ReturnType<typeof getExportJob>>,
+  TError = ErrorType<Error>,
+>(
+  jobId: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getExportJob>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetExportJobQueryKey(jobId);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getExportJob>>> = ({
+    signal,
+  }) => getExportJob(jobId, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!jobId,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getExportJob>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetExportJobQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getExportJob>>
+>;
+export type GetExportJobQueryError = ErrorType<Error>;
+
+/**
+ * @summary Get a specific export lifecycle job
+ */
+
+export function useGetExportJob<
+  TData = Awaited<ReturnType<typeof getExportJob>>,
+  TError = ErrorType<Error>,
+>(
+  jobId: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getExportJob>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetExportJobQueryOptions(jobId, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Get current billing lifecycle state
+ */
+export const getGetBillingStateUrl = () => {
+  return `/api/billing/state`;
+};
+
+export const getBillingState = async (
+  options?: RequestInit,
+): Promise<BillingState> => {
+  return customFetch<BillingState>(getGetBillingStateUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetBillingStateQueryKey = () => {
+  return [`/api/billing/state`] as const;
+};
+
+export const getGetBillingStateQueryOptions = <
+  TData = Awaited<ReturnType<typeof getBillingState>>,
   TError = ErrorType<unknown>,
 >(options?: {
   query?: UseQueryOptions<
-    Awaited<ReturnType<typeof getRobloxConnection>>,
+    Awaited<ReturnType<typeof getBillingState>>,
     TError,
     TData
   >;
@@ -1990,40 +2083,459 @@ export const getGetRobloxConnectionQueryOptions = <
 }) => {
   const { query: queryOptions, request: requestOptions } = options ?? {};
 
-  const queryKey = queryOptions?.queryKey ?? getGetRobloxConnectionQueryKey();
+  const queryKey = queryOptions?.queryKey ?? getGetBillingStateQueryKey();
 
-  const queryFn: QueryFunction<
-    Awaited<ReturnType<typeof getRobloxConnection>>
-  > = ({ signal }) => getRobloxConnection({ signal, ...requestOptions });
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getBillingState>>> = ({
+    signal,
+  }) => getBillingState({ signal, ...requestOptions });
 
   return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
-    Awaited<ReturnType<typeof getRobloxConnection>>,
+    Awaited<ReturnType<typeof getBillingState>>,
     TError,
     TData
   > & { queryKey: QueryKey };
 };
 
-export type GetRobloxConnectionQueryResult = NonNullable<
-  Awaited<ReturnType<typeof getRobloxConnection>>
+export type GetBillingStateQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getBillingState>>
 >;
-export type GetRobloxConnectionQueryError = ErrorType<unknown>;
+export type GetBillingStateQueryError = ErrorType<unknown>;
 
 /**
- * @summary Get Roblox connection status
+ * @summary Get current billing lifecycle state
  */
 
-export function useGetRobloxConnection<
-  TData = Awaited<ReturnType<typeof getRobloxConnection>>,
+export function useGetBillingState<
+  TData = Awaited<ReturnType<typeof getBillingState>>,
   TError = ErrorType<unknown>,
 >(options?: {
   query?: UseQueryOptions<
-    Awaited<ReturnType<typeof getRobloxConnection>>,
+    Awaited<ReturnType<typeof getBillingState>>,
     TError,
     TData
   >;
   request?: SecondParameter<typeof customFetch>;
 }): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
-  const queryOptions = getGetRobloxConnectionQueryOptions(options);
+  const queryOptions = getGetBillingStateQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Get Roblox integration connection status
+ */
+export const getGetRobloxStatusUrl = () => {
+  return `/api/roblox/status`;
+};
+
+export const getRobloxStatus = async (
+  options?: RequestInit,
+): Promise<RobloxStatus> => {
+  return customFetch<RobloxStatus>(getGetRobloxStatusUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetRobloxStatusQueryKey = () => {
+  return [`/api/roblox/status`] as const;
+};
+
+export const getGetRobloxStatusQueryOptions = <
+  TData = Awaited<ReturnType<typeof getRobloxStatus>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getRobloxStatus>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetRobloxStatusQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getRobloxStatus>>> = ({
+    signal,
+  }) => getRobloxStatus({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getRobloxStatus>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetRobloxStatusQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getRobloxStatus>>
+>;
+export type GetRobloxStatusQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get Roblox integration connection status
+ */
+
+export function useGetRobloxStatus<
+  TData = Awaited<ReturnType<typeof getRobloxStatus>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getRobloxStatus>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetRobloxStatusQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Create Roblox OAuth login URL with PKCE
+ */
+export const getGetRobloxLoginUrl = () => {
+  return `/api/roblox/login`;
+};
+
+export const getRobloxLogin = async (
+  options?: RequestInit,
+): Promise<RobloxLoginUrl> => {
+  return customFetch<RobloxLoginUrl>(getGetRobloxLoginUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetRobloxLoginQueryKey = () => {
+  return [`/api/roblox/login`] as const;
+};
+
+export const getGetRobloxLoginQueryOptions = <
+  TData = Awaited<ReturnType<typeof getRobloxLogin>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getRobloxLogin>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetRobloxLoginQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getRobloxLogin>>> = ({
+    signal,
+  }) => getRobloxLogin({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getRobloxLogin>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetRobloxLoginQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getRobloxLogin>>
+>;
+export type GetRobloxLoginQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Create Roblox OAuth login URL with PKCE
+ */
+
+export function useGetRobloxLogin<
+  TData = Awaited<ReturnType<typeof getRobloxLogin>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getRobloxLogin>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetRobloxLoginQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Complete Roblox OAuth callback
+ */
+export const getRobloxCallbackUrl = (params: RobloxCallbackParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/roblox/callback?${stringifiedParams}`
+    : `/api/roblox/callback`;
+};
+
+export const robloxCallback = async (
+  params: RobloxCallbackParams,
+  options?: RequestInit,
+): Promise<RobloxCallbackResponse> => {
+  return customFetch<RobloxCallbackResponse>(getRobloxCallbackUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getRobloxCallbackQueryKey = (params?: RobloxCallbackParams) => {
+  return [`/api/roblox/callback`, ...(params ? [params] : [])] as const;
+};
+
+export const getRobloxCallbackQueryOptions = <
+  TData = Awaited<ReturnType<typeof robloxCallback>>,
+  TError = ErrorType<unknown>,
+>(
+  params: RobloxCallbackParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof robloxCallback>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getRobloxCallbackQueryKey(params);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof robloxCallback>>> = ({
+    signal,
+  }) => robloxCallback(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof robloxCallback>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type RobloxCallbackQueryResult = NonNullable<
+  Awaited<ReturnType<typeof robloxCallback>>
+>;
+export type RobloxCallbackQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Complete Roblox OAuth callback
+ */
+
+export function useRobloxCallback<
+  TData = Awaited<ReturnType<typeof robloxCallback>>,
+  TError = ErrorType<unknown>,
+>(
+  params: RobloxCallbackParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof robloxCallback>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getRobloxCallbackQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Create a Roblox upload lifecycle job
+ */
+export const getCreateRobloxUploadUrl = () => {
+  return `/api/roblox/upload`;
+};
+
+export const createRobloxUpload = async (
+  createRobloxUploadRequest: CreateRobloxUploadRequest,
+  options?: RequestInit,
+): Promise<RobloxUploadJob> => {
+  return customFetch<RobloxUploadJob>(getCreateRobloxUploadUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(createRobloxUploadRequest),
+  });
+};
+
+export const getCreateRobloxUploadMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createRobloxUpload>>,
+    TError,
+    { data: BodyType<CreateRobloxUploadRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createRobloxUpload>>,
+  TError,
+  { data: BodyType<CreateRobloxUploadRequest> },
+  TContext
+> => {
+  const mutationKey = ["createRobloxUpload"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createRobloxUpload>>,
+    { data: BodyType<CreateRobloxUploadRequest> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return createRobloxUpload(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateRobloxUploadMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createRobloxUpload>>
+>;
+export type CreateRobloxUploadMutationBody =
+  BodyType<CreateRobloxUploadRequest>;
+export type CreateRobloxUploadMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Create a Roblox upload lifecycle job
+ */
+export const useCreateRobloxUpload = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createRobloxUpload>>,
+    TError,
+    { data: BodyType<CreateRobloxUploadRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createRobloxUpload>>,
+  TError,
+  { data: BodyType<CreateRobloxUploadRequest> },
+  TContext
+> => {
+  return useMutation(getCreateRobloxUploadMutationOptions(options));
+};
+
+/**
+ * @summary Get Roblox upload lifecycle job
+ */
+export const getGetRobloxUploadUrl = (uploadJobId: string) => {
+  return `/api/roblox/upload/${uploadJobId}`;
+};
+
+export const getRobloxUpload = async (
+  uploadJobId: string,
+  options?: RequestInit,
+): Promise<RobloxUploadJob> => {
+  return customFetch<RobloxUploadJob>(getGetRobloxUploadUrl(uploadJobId), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetRobloxUploadQueryKey = (uploadJobId: string) => {
+  return [`/api/roblox/upload/${uploadJobId}`] as const;
+};
+
+export const getGetRobloxUploadQueryOptions = <
+  TData = Awaited<ReturnType<typeof getRobloxUpload>>,
+  TError = ErrorType<unknown>,
+>(
+  uploadJobId: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getRobloxUpload>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetRobloxUploadQueryKey(uploadJobId);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getRobloxUpload>>> = ({
+    signal,
+  }) => getRobloxUpload(uploadJobId, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!uploadJobId,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getRobloxUpload>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetRobloxUploadQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getRobloxUpload>>
+>;
+export type GetRobloxUploadQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get Roblox upload lifecycle job
+ */
+
+export function useGetRobloxUpload<
+  TData = Awaited<ReturnType<typeof getRobloxUpload>>,
+  TError = ErrorType<unknown>,
+>(
+  uploadJobId: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getRobloxUpload>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetRobloxUploadQueryOptions(uploadJobId, options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;
