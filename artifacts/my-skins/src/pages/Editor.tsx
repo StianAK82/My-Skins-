@@ -16,6 +16,8 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { normalizeAiResponse, type NormalizedAiResponse } from "@/lib/ai/normalize-ai-response";
+import { createCheckoutSession } from "@/lib/billing/billing-client";
+import { uploadToRoblox } from "@/lib/roblox/upload-client";
 import { buildEditorApplyPlan } from "@/lib/ai/editor-apply-plan";
 
 interface AiConcept {
@@ -492,13 +494,8 @@ export default function Editor() {
   const handleBuyCredit = async () => {
     setIsBuyingCredit(true);
     try {
-      const res = await fetch("/api/payments/create-checkout-session", {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-      });
-      const data = await res.json() as { checkoutUrl?: string; error?: string };
-      if (!res.ok || !data.checkoutUrl) {
+      const data = await createCheckoutSession("pro") as { checkoutUrl?: string; error?: string };
+      if (!data.checkoutUrl) {
         throw new Error(data.error ?? "Unable to create checkout session.");
       }
       window.location.href = data.checkoutUrl;
@@ -522,19 +519,13 @@ export default function Editor() {
 
     setIsUploading(true);
     try {
-      const res = await fetch("/api/roblox/upload", {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ projectId: id }),
-      });
-      const data = await res.json() as { error?: string; message?: string; creditsRemaining?: number };
-      if (!res.ok) {
+      const data = await uploadToRoblox(id) as { error?: string; message?: string; creditsRemaining?: number; status?: string };
+      if (data.error) {
         if (data.error === "INSUFFICIENT_CREDITS") setPaymentOpen(true);
         throw new Error(data.message ?? "Upload failed.");
       }
       setCredits(data.creditsRemaining ?? Math.max(0, credits - 1));
-      toast({ title: "Uploaded to Roblox", description: data.message ?? "Upload completed successfully." });
+      toast({ title: "Roblox upload job created", description: data.message ?? `Current status: ${data.status ?? "queued"}.` });
     } catch (error) {
       toast({
         title: "Upload failed",
