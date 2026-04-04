@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { deriveRobloxUploadTerminalState, resolveCreatorIdentity, resolveExportDimensions, resolveRobloxUploadBlockedReason, toExportJobResponse } from "./lifecycle";
+import { deriveRobloxUploadTerminalState, resolveCreatorIdentity, resolveExportDimensions, resolveRobloxUploadBlockedReason, toExportJobResponse } from "./lifecycle.ts";
 
 test("resolveExportDimensions returns canonical classic template dimensions", () => {
   assert.deepEqual(resolveExportDimensions("shirt"), { width: 585, height: 559 });

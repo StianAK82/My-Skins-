@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { aiDesignSchema, validatePlacementForItemType } from "./ai-contracts";
+import { aiDesignSchema, validatePlacementForItemType } from "./ai-contracts.ts";
 
 const base = {
   title: "Neon Drift",
