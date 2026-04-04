@@ -49,7 +49,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/User"
+                $ref: "#/components/schemas/AuthUser"
         "401":
           description: Unauthorized
           content:
@@ -270,81 +270,138 @@ paths:
                 items:
                   $ref: "#/components/schemas/Project"
 
-  /ai/generate-outfit:
+  /ai/generate:
     post:
-      operationId: generateOutfit
+      operationId: aiGenerateDesign
       tags: [ai]
-      summary: Generate a Roblox classic shirt or pants outfit result
+      summary: Generate canonical AI design payload
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/AiGenerateOutfitRequest"
+              $ref: "#/components/schemas/AiGenerateRequest"
       responses:
         "200":
-          description: Generated outfit result
+          description: Generated design response
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/AiGeneratedOutfit"
+                $ref: "#/components/schemas/AiDesignResponse"
 
-  /ai/generate-variants:
+  /ai/generate-idea:
     post:
-      operationId: generateOutfitVariants
+      operationId: aiGenerateIdea
       tags: [ai]
-      summary: Generate four purposeful outfit variants
+      summary: Generate AI concept summary
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/AiGenerateVariantsRequest"
+              $ref: "#/components/schemas/AiGenerateRequest"
       responses:
         "200":
-          description: Outfit variants
+          description: Generated idea response
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/AiGenerateVariantsResponse"
+                $ref: "#/components/schemas/AiIdea"
 
-  /ai/remix-outfit:
+  /ai/improve:
     post:
-      operationId: remixOutfit
+      operationId: aiImproveDesign
       tags: [ai]
-      summary: Remix an existing generated outfit while preserving concept
+      summary: Improve an existing AI design
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/AiRemixOutfitRequest"
+              $ref: "#/components/schemas/AiImproveRequest"
       responses:
         "200":
-          description: Remixed outfit
+          description: Improved design response
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/AiGeneratedOutfit"
+                $ref: "#/components/schemas/AiDesignResponse"
 
-  /ai/generate-listing:
+  /ai/remix:
     post:
-      operationId: generateAiListing
+      operationId: aiRemixDesign
       tags: [ai]
-      summary: Generate listing metadata from a generated outfit
+      summary: Remix an existing AI design
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/AiGenerateListingRequest"
+              $ref: "#/components/schemas/AiImproveRequest"
       responses:
         "200":
-          description: Listing metadata
+          description: Remixed design response
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/AiGenerateListingResponse"
+                $ref: "#/components/schemas/AiDesignResponse"
+
+  /ai/generate-modules:
+    post:
+      operationId: aiGenerateModules
+      tags: [ai]
+      summary: Generate modules for an item type
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AiGenerateRequest"
+      responses:
+        "200":
+          description: Generated modules
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiModules"
+
+  /ai/generate-palette:
+    post:
+      operationId: aiGeneratePalette
+      tags: [ai]
+      summary: Generate color palette for an item type
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AiGenerateRequest"
+      responses:
+        "200":
+          description: Generated palette
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiPalette"
+
+  /ai/generate-layout:
+    post:
+      operationId: aiGenerateLayout
+      tags: [ai]
+      summary: Generate placement/layout notes
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AiGenerateRequest"
+      responses:
+        "200":
+          description: Generated layout
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiLayout"
 
   /ai/history:
     get:
@@ -525,6 +582,11 @@ components:
         - aiCredits
         - createdAt
 
+
+    AuthUser:
+      allOf:
+        - $ref: "#/components/schemas/User"
+
     UpdateProfileRequest:
       type: object
       properties:
@@ -653,197 +715,175 @@ components:
         - aiGenerations
         - robloxConnected
 
-    AiTarget:
+    AiItemType:
       type: string
       enum: [classic_shirt, classic_pants]
 
-    AiStylePreset:
+    AiLifecycleStatus:
       type: string
-      enum: [Streetwear, Anime, Cyberpunk, Y2K, Minimal, Fantasy, Sport, Luxury]
+      enum: [queued, processing, completed, degraded, failed]
 
-    AiFrontBackRegion:
+    AiGenerateRequest:
       type: object
       properties:
-        description:
+        prompt:
           type: string
-        graphicType:
-          type: string
-          enum: [graphic, emblem, pattern, plain]
-      required: [description, graphicType]
-
-    AiSideRegion:
-      type: object
-      properties:
-        description:
-          type: string
-        graphicType:
-          type: string
-          enum: [pattern, stripe, symbol, plain]
-      required: [description, graphicType]
-
-    AiOutfitPlan:
-      type: object
-      properties:
-        target:
-          $ref: "#/components/schemas/AiTarget"
-        title:
-          type: string
+        itemType:
+          $ref: "#/components/schemas/AiItemType"
         style:
           type: string
-        baseColor:
+        theme:
           type: string
-          pattern: "^#([0-9a-fA-F]{6})$"
+      required: [prompt, itemType]
+
+    AiDesignModule:
+      type: object
+      properties:
+        id: { type: string }
+        type: { type: string }
+        label: { type: string }
+        color: { type: string, pattern: "^#([0-9a-fA-F]{6})$" }
+        position:
+          type: object
+          properties:
+            x: { type: number }
+            y: { type: number }
+          required: [x, y]
+        scale: { type: number }
+        rotation: { type: number }
+        opacity: { type: number }
+        layer: { type: number }
+      required: [id, type, label, color, position, scale, rotation, opacity, layer]
+
+    AiPlacement:
+      type: object
+      properties:
+        front: { type: string }
+        back: { type: string }
+        leftSleeve: { type: string }
+        rightSleeve: { type: string }
+        leftLeg: { type: string }
+        rightLeg: { type: string }
+      required: [front, back, leftSleeve, rightSleeve, leftLeg, rightLeg]
+
+    AiEditorInstructions:
+      type: object
+      properties:
+        baseTemplate: { type: string }
+        recommendedPreset: { type: string }
+        notes:
+          type: array
+          items: { type: string }
+      required: [baseTemplate, recommendedPreset, notes]
+
+    AiDesign:
+      type: object
+      properties:
+        title: { type: string }
+        itemType:
+          $ref: "#/components/schemas/AiItemType"
+        style: { type: string }
+        target: { type: string, enum: [roblox] }
+        theme: { type: string }
         colorPalette:
           type: array
-          minItems: 3
-          maxItems: 6
-          items:
-            type: string
-            pattern: "^#([0-9a-fA-F]{6})$"
-        overallMood:
-          type: string
-        front:
-          $ref: "#/components/schemas/AiFrontBackRegion"
-        back:
-          $ref: "#/components/schemas/AiFrontBackRegion"
-        leftRegion:
-          $ref: "#/components/schemas/AiSideRegion"
-        rightRegion:
-          $ref: "#/components/schemas/AiSideRegion"
-        details:
+          items: { type: string, pattern: "^#([0-9a-fA-F]{6})$" }
+        designElements:
           type: array
-          minItems: 2
+          items: { type: string }
+        placement:
+          $ref: "#/components/schemas/AiPlacement"
+        modules:
+          type: array
           items:
-            type: string
-      required:
-        - target
-        - title
-        - style
-        - baseColor
-        - colorPalette
-        - overallMood
-        - front
-        - back
-        - leftRegion
-        - rightRegion
-        - details
+            $ref: "#/components/schemas/AiDesignModule"
+        editorInstructions:
+          $ref: "#/components/schemas/AiEditorInstructions"
+      required: [title, itemType, style, target, theme, colorPalette, designElements, placement, modules, editorInstructions]
 
-    AiRegionAssets:
+    AiResponseMeta:
       type: object
       properties:
-        frontImage:
-          type: string
-        backImage:
-          type: string
-        leftRegionImage:
-          type: string
-        rightRegionImage:
-          type: string
-      required: [frontImage, backImage, leftRegionImage, rightRegionImage]
-
-    AiFallbackDraft:
-      type: object
-      properties:
-        enabled:
+        generationId: { type: string }
+        status:
+          $ref: "#/components/schemas/AiLifecycleStatus"
+        warnings:
+          type: array
+          items: { type: string }
+        deprecated:
           type: boolean
-          enum: [true]
-        reason:
-          type: string
-        instructions:
-          type: array
-          items:
-            type: string
-        suggestedShapes:
-          type: array
-          items:
-            type: string
-            enum: [stripe, block, chevron, emblem, panel]
-      required: [enabled, reason, instructions, suggestedShapes]
+      required: [generationId, status, warnings]
 
-    AiGeneratedOutfit:
+    AiDesignResponse:
       type: object
       properties:
-        plan:
-          $ref: "#/components/schemas/AiOutfitPlan"
-        assets:
-          $ref: "#/components/schemas/AiRegionAssets"
-        fallbackDraft:
-          $ref: "#/components/schemas/AiFallbackDraft"
-      required: [plan]
-
-    AiGenerateOutfitRequest:
-      type: object
-      properties:
-        prompt:
-          type: string
-        target:
-          $ref: "#/components/schemas/AiTarget"
-        stylePreset:
-          $ref: "#/components/schemas/AiStylePreset"
-      required: [prompt, target]
-
-    AiGenerateVariantsRequest:
-      type: object
-      properties:
-        prompt:
-          type: string
-        target:
-          $ref: "#/components/schemas/AiTarget"
-        stylePreset:
-          $ref: "#/components/schemas/AiStylePreset"
-        basePlan:
-          $ref: "#/components/schemas/AiOutfitPlan"
-      required: [prompt, target]
-
-    AiVariantResult:
-      type: object
-      properties:
-        variant:
-          type: string
-          enum: [Clean, Bold, Premium, Experimental]
+        meta:
+          $ref: "#/components/schemas/AiResponseMeta"
         result:
-          $ref: "#/components/schemas/AiGeneratedOutfit"
-      required: [variant, result]
+          $ref: "#/components/schemas/AiDesign"
+      required: [meta, result]
 
-    AiGenerateVariantsResponse:
+    AiImproveRequest:
       type: object
       properties:
-        variants:
+        instruction: { type: string }
+        design:
+          $ref: "#/components/schemas/AiDesign"
+      required: [instruction, design]
+
+    AiIdea:
+      type: object
+      properties:
+        title: { type: string }
+        itemType:
+          $ref: "#/components/schemas/AiItemType"
+        style: { type: string }
+        theme: { type: string }
+        summary: { type: string }
+        colorPalette:
           type: array
-          minItems: 4
-          maxItems: 4
-          items:
-            $ref: "#/components/schemas/AiVariantResult"
-      required: [variants]
+          items: { type: string, pattern: "^#([0-9a-fA-F]{6})$" }
+        designElements:
+          type: array
+          items: { type: string }
+      required: [title, itemType, style, theme, summary, colorPalette, designElements]
 
-    AiRemixOutfitRequest:
+    AiModules:
       type: object
       properties:
-        instruction:
-          type: string
-        source:
-          $ref: "#/components/schemas/AiGeneratedOutfit"
-      required: [instruction, source]
-
-    AiGenerateListingRequest:
-      type: object
-      properties:
-        result:
-          $ref: "#/components/schemas/AiGeneratedOutfit"
-      required: [result]
-
-    AiGenerateListingResponse:
-      type: object
-      properties:
-        title:
-          type: string
-        description:
-          type: string
-        tags:
+        itemType:
+          $ref: "#/components/schemas/AiItemType"
+        modules:
           type: array
           items:
-            type: string
-      required: [title, description, tags]
+            $ref: "#/components/schemas/AiDesignModule"
+      required: [itemType, modules]
+
+    AiPalette:
+      type: object
+      properties:
+        itemType:
+          $ref: "#/components/schemas/AiItemType"
+        paletteName: { type: string }
+        colors:
+          type: array
+          items: { type: string, pattern: "^#([0-9a-fA-F]{6})$" }
+        usageNotes:
+          type: array
+          items: { type: string }
+      required: [itemType, paletteName, colors, usageNotes]
+
+    AiLayout:
+      type: object
+      properties:
+        itemType:
+          $ref: "#/components/schemas/AiItemType"
+        placement:
+          $ref: "#/components/schemas/AiPlacement"
+        notes:
+          type: array
+          items: { type: string }
+      required: [itemType, placement, notes]
 
     AiHistoryEntry:
       type: object
@@ -861,9 +901,11 @@ components:
         createdAt:
           type: string
           format: date-time
+        status:
+          $ref: "#/components/schemas/AiLifecycleStatus"
         result:
-          $ref: "#/components/schemas/AiGeneratedOutfit"
-      required: [id, prompt, createdAt, result]
+          $ref: "#/components/schemas/AiDesign"
+      required: [id, prompt, createdAt, status, result]
 
     CreateExportRequest:
       type: object

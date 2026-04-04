@@ -1,11 +1,11 @@
 import { useMemo, useState } from "react";
-import { z } from "zod";
 import { Sparkles, Loader2, Wand2, RefreshCcw, Check, AlertTriangle } from "lucide-react";
-import { type AiGeneratedOutfit } from "@workspace/api-client-react";
+import { aiGenerateDesign, aiImproveDesign, aiRemixDesign, type AiDesign } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
+import { normalizeAiResponse, type NormalizedAiResponse } from "@/lib/ai/normalize-ai-response";
 
 const STYLE_PRESETS = ["Streetwear", "Anime", "Sport", "Cyberpunk", "Minimal", "Fantasy", "Luxury", "Cute", "Tactical"] as const;
 
@@ -14,82 +14,7 @@ type EditorTarget = "shirt" | "pants";
 interface AiPanelProps {
   projectType: EditorTarget;
   onUseColors?: (colors: string[]) => void;
-  onApplyAssets?: (result: AiGeneratedOutfit) => Promise<unknown> | unknown;
-}
-
-const moduleSchema = z.object({
-  id: z.string(),
-  type: z.string(),
-  label: z.string(),
-  color: z.string(),
-  position: z.object({ x: z.number(), y: z.number() }),
-  scale: z.number(),
-  rotation: z.number(),
-  opacity: z.number(),
-  layer: z.number(),
-});
-
-const aiDesignSchema = z.object({
-  title: z.string(),
-  itemType: z.enum(["classic_shirt", "classic_pants"]),
-  style: z.string(),
-  target: z.literal("roblox"),
-  theme: z.string(),
-  colorPalette: z.array(z.string()).min(2),
-  designElements: z.array(z.string()).min(1),
-  placement: z.object({
-    front: z.string(),
-    back: z.string(),
-    leftSleeve: z.string(),
-    rightSleeve: z.string(),
-    leftLeg: z.string(),
-    rightLeg: z.string(),
-  }),
-  modules: z.array(moduleSchema),
-  editorInstructions: z.object({
-    baseTemplate: z.string(),
-    recommendedPreset: z.string(),
-    notes: z.array(z.string()),
-  }),
-});
-
-type AiDesign = z.infer<typeof aiDesignSchema>;
-
-async function postAi(path: string, body: unknown): Promise<AiDesign> {
-  const response = await fetch(`/api/ai/${path}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    credentials: "include",
-    body: JSON.stringify(body),
-  });
-
-  const payload = await response.json();
-  if (!response.ok) {
-    throw new Error(payload?.error ?? "AI request failed");
-  }
-
-  return aiDesignSchema.parse(payload);
-}
-
-function toLegacyOutfit(design: AiDesign): AiGeneratedOutfit {
-  return {
-    concept: {
-      title: design.title,
-      style: design.style,
-      baseColor: design.colorPalette[0],
-      colorPalette: design.colorPalette,
-      front: { description: design.placement.front },
-      back: { description: design.placement.back },
-      leftSleeve: { description: design.placement.leftSleeve },
-      rightSleeve: { description: design.placement.rightSleeve },
-    },
-    assets: {
-      frontImage: null,
-      backImage: null,
-      leftSleeveImage: null,
-      rightSleeveImage: null,
-    },
-  };
+  onApplyAssets?: (result: NormalizedAiResponse) => Promise<unknown> | unknown;
 }
 
 export function AiPanel({ projectType, onUseColors, onApplyAssets }: AiPanelProps) {
@@ -99,19 +24,12 @@ export function AiPanel({ projectType, onUseColors, onApplyAssets }: AiPanelProp
   const [remixInstruction, setRemixInstruction] = useState("");
   const [selectedStyle, setSelectedStyle] = useState<(typeof STYLE_PRESETS)[number] | "">("");
   const [selectedTarget, setSelectedTarget] = useState<EditorTarget>(projectType);
-  const [current, setCurrent] = useState<AiDesign | null>(null);
+  const [current, setCurrent] = useState<NormalizedAiResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const palette = useMemo(() => current?.colorPalette ?? [], [current]);
+  const palette = useMemo(() => current?.result.colorPalette ?? [], [current]);
   const itemType = selectedTarget === "shirt" ? "classic_shirt" : "classic_pants";
-
-  const requestBody = {
-    prompt: prompt.trim(),
-    itemType,
-    style: selectedStyle || undefined,
-    theme: selectedStyle || undefined,
-  };
 
   const runAction = async (mode: "generate" | "improve" | "remix") => {
     if (!prompt.trim() || loading) return;
@@ -119,9 +37,15 @@ export function AiPanel({ projectType, onUseColors, onApplyAssets }: AiPanelProp
     setErrorMessage(null);
     try {
       const next = mode === "generate"
-        ? await postAi("generate", requestBody)
-        : await postAi(mode, { instruction: remixInstruction.trim(), design: current });
+        ? normalizeAiResponse(await aiGenerateDesign({ prompt: prompt.trim(), itemType, style: selectedStyle || undefined, theme: selectedStyle || undefined }))
+        : normalizeAiResponse(await (mode === "improve"
+          ? aiImproveDesign({ instruction: remixInstruction.trim(), design: current?.result as AiDesign })
+          : aiRemixDesign({ instruction: remixInstruction.trim(), design: current?.result as AiDesign })));
+
       setCurrent(next);
+      if (next.meta.status !== "completed") {
+        throw new Error(`AI returned status ${next.meta.status}`);
+      }
       toast({ title: mode === "generate" ? "Structured design ready" : "Design refined", description: "Review card details before applying." });
     } catch (error) {
       const message = error instanceof Error ? error.message : "AI request failed";
@@ -169,36 +93,19 @@ export function AiPanel({ projectType, onUseColors, onApplyAssets }: AiPanelProp
         <Button size="sm" variant="outline" onClick={() => void runAction("improve")} disabled={!current || !remixInstruction.trim() || loading}>Refine</Button>
       </div>
 
-      {errorMessage && (
-        <div className="rounded-md border border-destructive/40 bg-destructive/10 p-2 text-xs text-destructive flex gap-2 items-start">
-          <AlertTriangle className="w-3.5 h-3.5 mt-0.5" />
-          <div>
-            <p className="font-medium">Structured output rejected</p>
-            <p>{errorMessage}</p>
-          </div>
-        </div>
-      )}
+      {errorMessage && <div className="rounded-md border border-destructive/40 bg-destructive/10 p-2 text-xs text-destructive flex gap-2 items-start"><AlertTriangle className="w-3.5 h-3.5 mt-0.5" /><div><p className="font-medium">Structured output rejected</p><p>{errorMessage}</p></div></div>}
 
       {current && (
         <div className="border rounded-xl p-3 space-y-2">
           <div className="space-y-1">
-            <p className="text-xs font-semibold">{current.title}</p>
-            <p className="text-[11px] text-muted-foreground">{current.theme} · {current.style} · {current.itemType}</p>
-            <div className="flex flex-wrap gap-1">{current.designElements.map((element) => <Badge key={element} variant="outline" className="text-[10px]">{element}</Badge>)}</div>
+            <p className="text-xs font-semibold">{current.result.title}</p>
+            <p className="text-[11px] text-muted-foreground">{current.result.theme} · {current.result.style} · {current.result.itemType}</p>
+            <div className="flex flex-wrap gap-1">{current.result.designElements.map((element) => <Badge key={element} variant="outline" className="text-[10px]">{element}</Badge>)}</div>
           </div>
-
-          <div className="grid grid-cols-2 gap-2 text-[10px] text-muted-foreground">
-            <div className="border rounded p-2">Front: {current.placement.front}</div>
-            <div className="border rounded p-2">Back: {current.placement.back}</div>
-            <div className="border rounded p-2">Left: {current.itemType === "classic_shirt" ? current.placement.leftSleeve : current.placement.leftLeg}</div>
-            <div className="border rounded p-2">Right: {current.itemType === "classic_shirt" ? current.placement.rightSleeve : current.placement.rightLeg}</div>
-          </div>
-
           <div className="flex flex-wrap gap-1">{palette.map((hex, i) => <Badge key={`${hex}-${i}`} variant="outline" className="text-[10px]">{hex}</Badge>)}</div>
-
           <div className="grid grid-cols-2 gap-2">
             <Button size="sm" variant="outline" onClick={() => onUseColors?.(palette)}><Check className="w-3 h-3 mr-1" />Apply Palette</Button>
-            <Button size="sm" onClick={() => onApplyAssets?.(toLegacyOutfit(current))}><Sparkles className="w-3 h-3 mr-1" />Apply to design</Button>
+            <Button size="sm" onClick={() => onApplyAssets?.(current)}><Sparkles className="w-3 h-3 mr-1" />Apply to design</Button>
           </div>
         </div>
       )}

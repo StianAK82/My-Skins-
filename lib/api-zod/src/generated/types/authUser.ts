@@ -5,10 +5,6 @@
  * My Skins API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { User } from "./user";
 
-export interface AiRegionAssets {
-  frontImage: string;
-  backImage: string;
-  leftRegionImage: string;
-  rightRegionImage: string;
-}
+export type AuthUser = User;

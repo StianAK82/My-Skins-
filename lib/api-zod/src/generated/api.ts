@@ -216,464 +216,436 @@ export const GetRecentProjectsResponse = zod.array(
 );
 
 /**
- * @summary Generate a Roblox classic shirt or pants outfit result
+ * @summary Generate canonical AI design payload
  */
-export const GenerateOutfitBody = zod.object({
+export const AiGenerateDesignBody = zod.object({
   prompt: zod.string(),
-  target: zod.enum(["classic_shirt", "classic_pants"]),
-  stylePreset: zod
-    .enum([
-      "Streetwear",
-      "Anime",
-      "Cyberpunk",
-      "Y2K",
-      "Minimal",
-      "Fantasy",
-      "Sport",
-      "Luxury",
-    ])
-    .optional(),
+  itemType: zod.enum(["classic_shirt", "classic_pants"]),
+  style: zod.string().optional(),
+  theme: zod.string().optional(),
 });
 
-export const generateOutfitResponsePlanBaseColorRegExp = new RegExp(
+export const aiGenerateDesignResponseResultColorPaletteItemRegExp = new RegExp(
   "^#([0-9a-fA-F]{6})$",
 );
-export const generateOutfitResponsePlanColorPaletteItemRegExp = new RegExp(
+export const aiGenerateDesignResponseResultModulesItemColorRegExp = new RegExp(
   "^#([0-9a-fA-F]{6})$",
 );
-export const generateOutfitResponsePlanColorPaletteMin = 3;
-export const generateOutfitResponsePlanColorPaletteMax = 6;
 
-export const generateOutfitResponsePlanDetailsMin = 2;
-
-export const GenerateOutfitResponse = zod.object({
-  plan: zod.object({
-    target: zod.enum(["classic_shirt", "classic_pants"]),
-    title: zod.string(),
-    style: zod.string(),
-    baseColor: zod.string().regex(generateOutfitResponsePlanBaseColorRegExp),
-    colorPalette: zod
-      .array(
-        zod.string().regex(generateOutfitResponsePlanColorPaletteItemRegExp),
-      )
-      .min(generateOutfitResponsePlanColorPaletteMin)
-      .max(generateOutfitResponsePlanColorPaletteMax),
-    overallMood: zod.string(),
-    front: zod.object({
-      description: zod.string(),
-      graphicType: zod.enum(["graphic", "emblem", "pattern", "plain"]),
-    }),
-    back: zod.object({
-      description: zod.string(),
-      graphicType: zod.enum(["graphic", "emblem", "pattern", "plain"]),
-    }),
-    leftRegion: zod.object({
-      description: zod.string(),
-      graphicType: zod.enum(["pattern", "stripe", "symbol", "plain"]),
-    }),
-    rightRegion: zod.object({
-      description: zod.string(),
-      graphicType: zod.enum(["pattern", "stripe", "symbol", "plain"]),
-    }),
-    details: zod.array(zod.string()).min(generateOutfitResponsePlanDetailsMin),
+export const AiGenerateDesignResponse = zod.object({
+  meta: zod.object({
+    generationId: zod.string(),
+    status: zod.enum([
+      "queued",
+      "processing",
+      "completed",
+      "degraded",
+      "failed",
+    ]),
+    warnings: zod.array(zod.string()),
+    deprecated: zod.boolean().optional(),
   }),
-  assets: zod
-    .object({
-      frontImage: zod.string(),
-      backImage: zod.string(),
-      leftRegionImage: zod.string(),
-      rightRegionImage: zod.string(),
-    })
-    .optional(),
-  fallbackDraft: zod
-    .object({
-      enabled: zod.literal(true),
-      reason: zod.string(),
-      instructions: zod.array(zod.string()),
-      suggestedShapes: zod.array(
-        zod.enum(["stripe", "block", "chevron", "emblem", "panel"]),
-      ),
-    })
-    .optional(),
-});
-
-/**
- * @summary Generate four purposeful outfit variants
- */
-export const generateOutfitVariantsBodyBasePlanBaseColorRegExp = new RegExp(
-  "^#([0-9a-fA-F]{6})$",
-);
-export const generateOutfitVariantsBodyBasePlanColorPaletteItemRegExp =
-  new RegExp("^#([0-9a-fA-F]{6})$");
-export const generateOutfitVariantsBodyBasePlanColorPaletteMin = 3;
-export const generateOutfitVariantsBodyBasePlanColorPaletteMax = 6;
-
-export const generateOutfitVariantsBodyBasePlanDetailsMin = 2;
-
-export const GenerateOutfitVariantsBody = zod.object({
-  prompt: zod.string(),
-  target: zod.enum(["classic_shirt", "classic_pants"]),
-  stylePreset: zod
-    .enum([
-      "Streetwear",
-      "Anime",
-      "Cyberpunk",
-      "Y2K",
-      "Minimal",
-      "Fantasy",
-      "Sport",
-      "Luxury",
-    ])
-    .optional(),
-  basePlan: zod
-    .object({
-      target: zod.enum(["classic_shirt", "classic_pants"]),
-      title: zod.string(),
-      style: zod.string(),
-      baseColor: zod
-        .string()
-        .regex(generateOutfitVariantsBodyBasePlanBaseColorRegExp),
-      colorPalette: zod
-        .array(
-          zod
-            .string()
-            .regex(generateOutfitVariantsBodyBasePlanColorPaletteItemRegExp),
-        )
-        .min(generateOutfitVariantsBodyBasePlanColorPaletteMin)
-        .max(generateOutfitVariantsBodyBasePlanColorPaletteMax),
-      overallMood: zod.string(),
-      front: zod.object({
-        description: zod.string(),
-        graphicType: zod.enum(["graphic", "emblem", "pattern", "plain"]),
-      }),
-      back: zod.object({
-        description: zod.string(),
-        graphicType: zod.enum(["graphic", "emblem", "pattern", "plain"]),
-      }),
-      leftRegion: zod.object({
-        description: zod.string(),
-        graphicType: zod.enum(["pattern", "stripe", "symbol", "plain"]),
-      }),
-      rightRegion: zod.object({
-        description: zod.string(),
-        graphicType: zod.enum(["pattern", "stripe", "symbol", "plain"]),
-      }),
-      details: zod
-        .array(zod.string())
-        .min(generateOutfitVariantsBodyBasePlanDetailsMin),
-    })
-    .optional(),
-});
-
-export const generateOutfitVariantsResponseVariantsItemResultPlanBaseColorRegExp =
-  new RegExp("^#([0-9a-fA-F]{6})$");
-export const generateOutfitVariantsResponseVariantsItemResultPlanColorPaletteItemRegExp =
-  new RegExp("^#([0-9a-fA-F]{6})$");
-export const generateOutfitVariantsResponseVariantsItemResultPlanColorPaletteMin = 3;
-export const generateOutfitVariantsResponseVariantsItemResultPlanColorPaletteMax = 6;
-
-export const generateOutfitVariantsResponseVariantsItemResultPlanDetailsMin = 2;
-
-export const generateOutfitVariantsResponseVariantsMin = 4;
-export const generateOutfitVariantsResponseVariantsMax = 4;
-
-export const GenerateOutfitVariantsResponse = zod.object({
-  variants: zod
-    .array(
-      zod.object({
-        variant: zod.enum(["Clean", "Bold", "Premium", "Experimental"]),
-        result: zod.object({
-          plan: zod.object({
-            target: zod.enum(["classic_shirt", "classic_pants"]),
-            title: zod.string(),
-            style: zod.string(),
-            baseColor: zod
-              .string()
-              .regex(
-                generateOutfitVariantsResponseVariantsItemResultPlanBaseColorRegExp,
-              ),
-            colorPalette: zod
-              .array(
-                zod
-                  .string()
-                  .regex(
-                    generateOutfitVariantsResponseVariantsItemResultPlanColorPaletteItemRegExp,
-                  ),
-              )
-              .min(
-                generateOutfitVariantsResponseVariantsItemResultPlanColorPaletteMin,
-              )
-              .max(
-                generateOutfitVariantsResponseVariantsItemResultPlanColorPaletteMax,
-              ),
-            overallMood: zod.string(),
-            front: zod.object({
-              description: zod.string(),
-              graphicType: zod.enum(["graphic", "emblem", "pattern", "plain"]),
-            }),
-            back: zod.object({
-              description: zod.string(),
-              graphicType: zod.enum(["graphic", "emblem", "pattern", "plain"]),
-            }),
-            leftRegion: zod.object({
-              description: zod.string(),
-              graphicType: zod.enum(["pattern", "stripe", "symbol", "plain"]),
-            }),
-            rightRegion: zod.object({
-              description: zod.string(),
-              graphicType: zod.enum(["pattern", "stripe", "symbol", "plain"]),
-            }),
-            details: zod
-              .array(zod.string())
-              .min(
-                generateOutfitVariantsResponseVariantsItemResultPlanDetailsMin,
-              ),
-          }),
-          assets: zod
-            .object({
-              frontImage: zod.string(),
-              backImage: zod.string(),
-              leftRegionImage: zod.string(),
-              rightRegionImage: zod.string(),
-            })
-            .optional(),
-          fallbackDraft: zod
-            .object({
-              enabled: zod.literal(true),
-              reason: zod.string(),
-              instructions: zod.array(zod.string()),
-              suggestedShapes: zod.array(
-                zod.enum(["stripe", "block", "chevron", "emblem", "panel"]),
-              ),
-            })
-            .optional(),
-        }),
-      }),
-    )
-    .min(generateOutfitVariantsResponseVariantsMin)
-    .max(generateOutfitVariantsResponseVariantsMax),
-});
-
-/**
- * @summary Remix an existing generated outfit while preserving concept
- */
-export const remixOutfitBodySourcePlanBaseColorRegExp = new RegExp(
-  "^#([0-9a-fA-F]{6})$",
-);
-export const remixOutfitBodySourcePlanColorPaletteItemRegExp = new RegExp(
-  "^#([0-9a-fA-F]{6})$",
-);
-export const remixOutfitBodySourcePlanColorPaletteMin = 3;
-export const remixOutfitBodySourcePlanColorPaletteMax = 6;
-
-export const remixOutfitBodySourcePlanDetailsMin = 2;
-
-export const RemixOutfitBody = zod.object({
-  instruction: zod.string(),
-  source: zod.object({
-    plan: zod.object({
-      target: zod.enum(["classic_shirt", "classic_pants"]),
-      title: zod.string(),
-      style: zod.string(),
-      baseColor: zod.string().regex(remixOutfitBodySourcePlanBaseColorRegExp),
-      colorPalette: zod
-        .array(
-          zod.string().regex(remixOutfitBodySourcePlanColorPaletteItemRegExp),
-        )
-        .min(remixOutfitBodySourcePlanColorPaletteMin)
-        .max(remixOutfitBodySourcePlanColorPaletteMax),
-      overallMood: zod.string(),
-      front: zod.object({
-        description: zod.string(),
-        graphicType: zod.enum(["graphic", "emblem", "pattern", "plain"]),
-      }),
-      back: zod.object({
-        description: zod.string(),
-        graphicType: zod.enum(["graphic", "emblem", "pattern", "plain"]),
-      }),
-      leftRegion: zod.object({
-        description: zod.string(),
-        graphicType: zod.enum(["pattern", "stripe", "symbol", "plain"]),
-      }),
-      rightRegion: zod.object({
-        description: zod.string(),
-        graphicType: zod.enum(["pattern", "stripe", "symbol", "plain"]),
-      }),
-      details: zod.array(zod.string()).min(remixOutfitBodySourcePlanDetailsMin),
-    }),
-    assets: zod
-      .object({
-        frontImage: zod.string(),
-        backImage: zod.string(),
-        leftRegionImage: zod.string(),
-        rightRegionImage: zod.string(),
-      })
-      .optional(),
-    fallbackDraft: zod
-      .object({
-        enabled: zod.literal(true),
-        reason: zod.string(),
-        instructions: zod.array(zod.string()),
-        suggestedShapes: zod.array(
-          zod.enum(["stripe", "block", "chevron", "emblem", "panel"]),
-        ),
-      })
-      .optional(),
-  }),
-});
-
-export const remixOutfitResponsePlanBaseColorRegExp = new RegExp(
-  "^#([0-9a-fA-F]{6})$",
-);
-export const remixOutfitResponsePlanColorPaletteItemRegExp = new RegExp(
-  "^#([0-9a-fA-F]{6})$",
-);
-export const remixOutfitResponsePlanColorPaletteMin = 3;
-export const remixOutfitResponsePlanColorPaletteMax = 6;
-
-export const remixOutfitResponsePlanDetailsMin = 2;
-
-export const RemixOutfitResponse = zod.object({
-  plan: zod.object({
-    target: zod.enum(["classic_shirt", "classic_pants"]),
-    title: zod.string(),
-    style: zod.string(),
-    baseColor: zod.string().regex(remixOutfitResponsePlanBaseColorRegExp),
-    colorPalette: zod
-      .array(zod.string().regex(remixOutfitResponsePlanColorPaletteItemRegExp))
-      .min(remixOutfitResponsePlanColorPaletteMin)
-      .max(remixOutfitResponsePlanColorPaletteMax),
-    overallMood: zod.string(),
-    front: zod.object({
-      description: zod.string(),
-      graphicType: zod.enum(["graphic", "emblem", "pattern", "plain"]),
-    }),
-    back: zod.object({
-      description: zod.string(),
-      graphicType: zod.enum(["graphic", "emblem", "pattern", "plain"]),
-    }),
-    leftRegion: zod.object({
-      description: zod.string(),
-      graphicType: zod.enum(["pattern", "stripe", "symbol", "plain"]),
-    }),
-    rightRegion: zod.object({
-      description: zod.string(),
-      graphicType: zod.enum(["pattern", "stripe", "symbol", "plain"]),
-    }),
-    details: zod.array(zod.string()).min(remixOutfitResponsePlanDetailsMin),
-  }),
-  assets: zod
-    .object({
-      frontImage: zod.string(),
-      backImage: zod.string(),
-      leftRegionImage: zod.string(),
-      rightRegionImage: zod.string(),
-    })
-    .optional(),
-  fallbackDraft: zod
-    .object({
-      enabled: zod.literal(true),
-      reason: zod.string(),
-      instructions: zod.array(zod.string()),
-      suggestedShapes: zod.array(
-        zod.enum(["stripe", "block", "chevron", "emblem", "panel"]),
-      ),
-    })
-    .optional(),
-});
-
-/**
- * @summary Generate listing metadata from a generated outfit
- */
-export const generateAiListingBodyResultPlanBaseColorRegExp = new RegExp(
-  "^#([0-9a-fA-F]{6})$",
-);
-export const generateAiListingBodyResultPlanColorPaletteItemRegExp = new RegExp(
-  "^#([0-9a-fA-F]{6})$",
-);
-export const generateAiListingBodyResultPlanColorPaletteMin = 3;
-export const generateAiListingBodyResultPlanColorPaletteMax = 6;
-
-export const generateAiListingBodyResultPlanDetailsMin = 2;
-
-export const GenerateAiListingBody = zod.object({
   result: zod.object({
-    plan: zod.object({
-      target: zod.enum(["classic_shirt", "classic_pants"]),
-      title: zod.string(),
-      style: zod.string(),
-      baseColor: zod
-        .string()
-        .regex(generateAiListingBodyResultPlanBaseColorRegExp),
-      colorPalette: zod
-        .array(
-          zod
-            .string()
-            .regex(generateAiListingBodyResultPlanColorPaletteItemRegExp),
-        )
-        .min(generateAiListingBodyResultPlanColorPaletteMin)
-        .max(generateAiListingBodyResultPlanColorPaletteMax),
-      overallMood: zod.string(),
-      front: zod.object({
-        description: zod.string(),
-        graphicType: zod.enum(["graphic", "emblem", "pattern", "plain"]),
-      }),
-      back: zod.object({
-        description: zod.string(),
-        graphicType: zod.enum(["graphic", "emblem", "pattern", "plain"]),
-      }),
-      leftRegion: zod.object({
-        description: zod.string(),
-        graphicType: zod.enum(["pattern", "stripe", "symbol", "plain"]),
-      }),
-      rightRegion: zod.object({
-        description: zod.string(),
-        graphicType: zod.enum(["pattern", "stripe", "symbol", "plain"]),
-      }),
-      details: zod
-        .array(zod.string())
-        .min(generateAiListingBodyResultPlanDetailsMin),
+    title: zod.string(),
+    itemType: zod.enum(["classic_shirt", "classic_pants"]),
+    style: zod.string(),
+    target: zod.enum(["roblox"]),
+    theme: zod.string(),
+    colorPalette: zod.array(
+      zod.string().regex(aiGenerateDesignResponseResultColorPaletteItemRegExp),
+    ),
+    designElements: zod.array(zod.string()),
+    placement: zod.object({
+      front: zod.string(),
+      back: zod.string(),
+      leftSleeve: zod.string(),
+      rightSleeve: zod.string(),
+      leftLeg: zod.string(),
+      rightLeg: zod.string(),
     }),
-    assets: zod
-      .object({
-        frontImage: zod.string(),
-        backImage: zod.string(),
-        leftRegionImage: zod.string(),
-        rightRegionImage: zod.string(),
-      })
-      .optional(),
-    fallbackDraft: zod
-      .object({
-        enabled: zod.literal(true),
-        reason: zod.string(),
-        instructions: zod.array(zod.string()),
-        suggestedShapes: zod.array(
-          zod.enum(["stripe", "block", "chevron", "emblem", "panel"]),
-        ),
-      })
-      .optional(),
+    modules: zod.array(
+      zod.object({
+        id: zod.string(),
+        type: zod.string(),
+        label: zod.string(),
+        color: zod
+          .string()
+          .regex(aiGenerateDesignResponseResultModulesItemColorRegExp),
+        position: zod.object({
+          x: zod.number(),
+          y: zod.number(),
+        }),
+        scale: zod.number(),
+        rotation: zod.number(),
+        opacity: zod.number(),
+        layer: zod.number(),
+      }),
+    ),
+    editorInstructions: zod.object({
+      baseTemplate: zod.string(),
+      recommendedPreset: zod.string(),
+      notes: zod.array(zod.string()),
+    }),
   }),
 });
 
-export const GenerateAiListingResponse = zod.object({
+/**
+ * @summary Generate AI concept summary
+ */
+export const AiGenerateIdeaBody = zod.object({
+  prompt: zod.string(),
+  itemType: zod.enum(["classic_shirt", "classic_pants"]),
+  style: zod.string().optional(),
+  theme: zod.string().optional(),
+});
+
+export const aiGenerateIdeaResponseColorPaletteItemRegExp = new RegExp(
+  "^#([0-9a-fA-F]{6})$",
+);
+
+export const AiGenerateIdeaResponse = zod.object({
   title: zod.string(),
-  description: zod.string(),
-  tags: zod.array(zod.string()),
+  itemType: zod.enum(["classic_shirt", "classic_pants"]),
+  style: zod.string(),
+  theme: zod.string(),
+  summary: zod.string(),
+  colorPalette: zod.array(
+    zod.string().regex(aiGenerateIdeaResponseColorPaletteItemRegExp),
+  ),
+  designElements: zod.array(zod.string()),
+});
+
+/**
+ * @summary Improve an existing AI design
+ */
+export const aiImproveDesignBodyDesignColorPaletteItemRegExp = new RegExp(
+  "^#([0-9a-fA-F]{6})$",
+);
+export const aiImproveDesignBodyDesignModulesItemColorRegExp = new RegExp(
+  "^#([0-9a-fA-F]{6})$",
+);
+
+export const AiImproveDesignBody = zod.object({
+  instruction: zod.string(),
+  design: zod.object({
+    title: zod.string(),
+    itemType: zod.enum(["classic_shirt", "classic_pants"]),
+    style: zod.string(),
+    target: zod.enum(["roblox"]),
+    theme: zod.string(),
+    colorPalette: zod.array(
+      zod.string().regex(aiImproveDesignBodyDesignColorPaletteItemRegExp),
+    ),
+    designElements: zod.array(zod.string()),
+    placement: zod.object({
+      front: zod.string(),
+      back: zod.string(),
+      leftSleeve: zod.string(),
+      rightSleeve: zod.string(),
+      leftLeg: zod.string(),
+      rightLeg: zod.string(),
+    }),
+    modules: zod.array(
+      zod.object({
+        id: zod.string(),
+        type: zod.string(),
+        label: zod.string(),
+        color: zod
+          .string()
+          .regex(aiImproveDesignBodyDesignModulesItemColorRegExp),
+        position: zod.object({
+          x: zod.number(),
+          y: zod.number(),
+        }),
+        scale: zod.number(),
+        rotation: zod.number(),
+        opacity: zod.number(),
+        layer: zod.number(),
+      }),
+    ),
+    editorInstructions: zod.object({
+      baseTemplate: zod.string(),
+      recommendedPreset: zod.string(),
+      notes: zod.array(zod.string()),
+    }),
+  }),
+});
+
+export const aiImproveDesignResponseResultColorPaletteItemRegExp = new RegExp(
+  "^#([0-9a-fA-F]{6})$",
+);
+export const aiImproveDesignResponseResultModulesItemColorRegExp = new RegExp(
+  "^#([0-9a-fA-F]{6})$",
+);
+
+export const AiImproveDesignResponse = zod.object({
+  meta: zod.object({
+    generationId: zod.string(),
+    status: zod.enum([
+      "queued",
+      "processing",
+      "completed",
+      "degraded",
+      "failed",
+    ]),
+    warnings: zod.array(zod.string()),
+    deprecated: zod.boolean().optional(),
+  }),
+  result: zod.object({
+    title: zod.string(),
+    itemType: zod.enum(["classic_shirt", "classic_pants"]),
+    style: zod.string(),
+    target: zod.enum(["roblox"]),
+    theme: zod.string(),
+    colorPalette: zod.array(
+      zod.string().regex(aiImproveDesignResponseResultColorPaletteItemRegExp),
+    ),
+    designElements: zod.array(zod.string()),
+    placement: zod.object({
+      front: zod.string(),
+      back: zod.string(),
+      leftSleeve: zod.string(),
+      rightSleeve: zod.string(),
+      leftLeg: zod.string(),
+      rightLeg: zod.string(),
+    }),
+    modules: zod.array(
+      zod.object({
+        id: zod.string(),
+        type: zod.string(),
+        label: zod.string(),
+        color: zod
+          .string()
+          .regex(aiImproveDesignResponseResultModulesItemColorRegExp),
+        position: zod.object({
+          x: zod.number(),
+          y: zod.number(),
+        }),
+        scale: zod.number(),
+        rotation: zod.number(),
+        opacity: zod.number(),
+        layer: zod.number(),
+      }),
+    ),
+    editorInstructions: zod.object({
+      baseTemplate: zod.string(),
+      recommendedPreset: zod.string(),
+      notes: zod.array(zod.string()),
+    }),
+  }),
+});
+
+/**
+ * @summary Remix an existing AI design
+ */
+export const aiRemixDesignBodyDesignColorPaletteItemRegExp = new RegExp(
+  "^#([0-9a-fA-F]{6})$",
+);
+export const aiRemixDesignBodyDesignModulesItemColorRegExp = new RegExp(
+  "^#([0-9a-fA-F]{6})$",
+);
+
+export const AiRemixDesignBody = zod.object({
+  instruction: zod.string(),
+  design: zod.object({
+    title: zod.string(),
+    itemType: zod.enum(["classic_shirt", "classic_pants"]),
+    style: zod.string(),
+    target: zod.enum(["roblox"]),
+    theme: zod.string(),
+    colorPalette: zod.array(
+      zod.string().regex(aiRemixDesignBodyDesignColorPaletteItemRegExp),
+    ),
+    designElements: zod.array(zod.string()),
+    placement: zod.object({
+      front: zod.string(),
+      back: zod.string(),
+      leftSleeve: zod.string(),
+      rightSleeve: zod.string(),
+      leftLeg: zod.string(),
+      rightLeg: zod.string(),
+    }),
+    modules: zod.array(
+      zod.object({
+        id: zod.string(),
+        type: zod.string(),
+        label: zod.string(),
+        color: zod
+          .string()
+          .regex(aiRemixDesignBodyDesignModulesItemColorRegExp),
+        position: zod.object({
+          x: zod.number(),
+          y: zod.number(),
+        }),
+        scale: zod.number(),
+        rotation: zod.number(),
+        opacity: zod.number(),
+        layer: zod.number(),
+      }),
+    ),
+    editorInstructions: zod.object({
+      baseTemplate: zod.string(),
+      recommendedPreset: zod.string(),
+      notes: zod.array(zod.string()),
+    }),
+  }),
+});
+
+export const aiRemixDesignResponseResultColorPaletteItemRegExp = new RegExp(
+  "^#([0-9a-fA-F]{6})$",
+);
+export const aiRemixDesignResponseResultModulesItemColorRegExp = new RegExp(
+  "^#([0-9a-fA-F]{6})$",
+);
+
+export const AiRemixDesignResponse = zod.object({
+  meta: zod.object({
+    generationId: zod.string(),
+    status: zod.enum([
+      "queued",
+      "processing",
+      "completed",
+      "degraded",
+      "failed",
+    ]),
+    warnings: zod.array(zod.string()),
+    deprecated: zod.boolean().optional(),
+  }),
+  result: zod.object({
+    title: zod.string(),
+    itemType: zod.enum(["classic_shirt", "classic_pants"]),
+    style: zod.string(),
+    target: zod.enum(["roblox"]),
+    theme: zod.string(),
+    colorPalette: zod.array(
+      zod.string().regex(aiRemixDesignResponseResultColorPaletteItemRegExp),
+    ),
+    designElements: zod.array(zod.string()),
+    placement: zod.object({
+      front: zod.string(),
+      back: zod.string(),
+      leftSleeve: zod.string(),
+      rightSleeve: zod.string(),
+      leftLeg: zod.string(),
+      rightLeg: zod.string(),
+    }),
+    modules: zod.array(
+      zod.object({
+        id: zod.string(),
+        type: zod.string(),
+        label: zod.string(),
+        color: zod
+          .string()
+          .regex(aiRemixDesignResponseResultModulesItemColorRegExp),
+        position: zod.object({
+          x: zod.number(),
+          y: zod.number(),
+        }),
+        scale: zod.number(),
+        rotation: zod.number(),
+        opacity: zod.number(),
+        layer: zod.number(),
+      }),
+    ),
+    editorInstructions: zod.object({
+      baseTemplate: zod.string(),
+      recommendedPreset: zod.string(),
+      notes: zod.array(zod.string()),
+    }),
+  }),
+});
+
+/**
+ * @summary Generate modules for an item type
+ */
+export const AiGenerateModulesBody = zod.object({
+  prompt: zod.string(),
+  itemType: zod.enum(["classic_shirt", "classic_pants"]),
+  style: zod.string().optional(),
+  theme: zod.string().optional(),
+});
+
+export const aiGenerateModulesResponseModulesItemColorRegExp = new RegExp(
+  "^#([0-9a-fA-F]{6})$",
+);
+
+export const AiGenerateModulesResponse = zod.object({
+  itemType: zod.enum(["classic_shirt", "classic_pants"]),
+  modules: zod.array(
+    zod.object({
+      id: zod.string(),
+      type: zod.string(),
+      label: zod.string(),
+      color: zod
+        .string()
+        .regex(aiGenerateModulesResponseModulesItemColorRegExp),
+      position: zod.object({
+        x: zod.number(),
+        y: zod.number(),
+      }),
+      scale: zod.number(),
+      rotation: zod.number(),
+      opacity: zod.number(),
+      layer: zod.number(),
+    }),
+  ),
+});
+
+/**
+ * @summary Generate color palette for an item type
+ */
+export const AiGeneratePaletteBody = zod.object({
+  prompt: zod.string(),
+  itemType: zod.enum(["classic_shirt", "classic_pants"]),
+  style: zod.string().optional(),
+  theme: zod.string().optional(),
+});
+
+export const aiGeneratePaletteResponseColorsItemRegExp = new RegExp(
+  "^#([0-9a-fA-F]{6})$",
+);
+
+export const AiGeneratePaletteResponse = zod.object({
+  itemType: zod.enum(["classic_shirt", "classic_pants"]),
+  paletteName: zod.string(),
+  colors: zod.array(
+    zod.string().regex(aiGeneratePaletteResponseColorsItemRegExp),
+  ),
+  usageNotes: zod.array(zod.string()),
+});
+
+/**
+ * @summary Generate placement/layout notes
+ */
+export const AiGenerateLayoutBody = zod.object({
+  prompt: zod.string(),
+  itemType: zod.enum(["classic_shirt", "classic_pants"]),
+  style: zod.string().optional(),
+  theme: zod.string().optional(),
+});
+
+export const AiGenerateLayoutResponse = zod.object({
+  itemType: zod.enum(["classic_shirt", "classic_pants"]),
+  placement: zod.object({
+    front: zod.string(),
+    back: zod.string(),
+    leftSleeve: zod.string(),
+    rightSleeve: zod.string(),
+    leftLeg: zod.string(),
+    rightLeg: zod.string(),
+  }),
+  notes: zod.array(zod.string()),
 });
 
 /**
  * @summary Get AI generation history
  */
-export const getAiHistoryResponseResultPlanBaseColorRegExp = new RegExp(
+export const getAiHistoryResponseResultColorPaletteItemRegExp = new RegExp(
   "^#([0-9a-fA-F]{6})$",
 );
-export const getAiHistoryResponseResultPlanColorPaletteItemRegExp = new RegExp(
+export const getAiHistoryResponseResultModulesItemColorRegExp = new RegExp(
   "^#([0-9a-fA-F]{6})$",
 );
-export const getAiHistoryResponseResultPlanColorPaletteMin = 3;
-export const getAiHistoryResponseResultPlanColorPaletteMax = 6;
-
-export const getAiHistoryResponseResultPlanDetailsMin = 2;
 
 export const GetAiHistoryResponseItem = zod.object({
   id: zod.string(),
@@ -681,61 +653,48 @@ export const GetAiHistoryResponseItem = zod.object({
   style: zod.string().nullish(),
   type: zod.string().nullish(),
   createdAt: zod.coerce.date(),
+  status: zod.enum(["queued", "processing", "completed", "degraded", "failed"]),
   result: zod.object({
-    plan: zod.object({
-      target: zod.enum(["classic_shirt", "classic_pants"]),
-      title: zod.string(),
-      style: zod.string(),
-      baseColor: zod
-        .string()
-        .regex(getAiHistoryResponseResultPlanBaseColorRegExp),
-      colorPalette: zod
-        .array(
-          zod
-            .string()
-            .regex(getAiHistoryResponseResultPlanColorPaletteItemRegExp),
-        )
-        .min(getAiHistoryResponseResultPlanColorPaletteMin)
-        .max(getAiHistoryResponseResultPlanColorPaletteMax),
-      overallMood: zod.string(),
-      front: zod.object({
-        description: zod.string(),
-        graphicType: zod.enum(["graphic", "emblem", "pattern", "plain"]),
-      }),
-      back: zod.object({
-        description: zod.string(),
-        graphicType: zod.enum(["graphic", "emblem", "pattern", "plain"]),
-      }),
-      leftRegion: zod.object({
-        description: zod.string(),
-        graphicType: zod.enum(["pattern", "stripe", "symbol", "plain"]),
-      }),
-      rightRegion: zod.object({
-        description: zod.string(),
-        graphicType: zod.enum(["pattern", "stripe", "symbol", "plain"]),
-      }),
-      details: zod
-        .array(zod.string())
-        .min(getAiHistoryResponseResultPlanDetailsMin),
+    title: zod.string(),
+    itemType: zod.enum(["classic_shirt", "classic_pants"]),
+    style: zod.string(),
+    target: zod.enum(["roblox"]),
+    theme: zod.string(),
+    colorPalette: zod.array(
+      zod.string().regex(getAiHistoryResponseResultColorPaletteItemRegExp),
+    ),
+    designElements: zod.array(zod.string()),
+    placement: zod.object({
+      front: zod.string(),
+      back: zod.string(),
+      leftSleeve: zod.string(),
+      rightSleeve: zod.string(),
+      leftLeg: zod.string(),
+      rightLeg: zod.string(),
     }),
-    assets: zod
-      .object({
-        frontImage: zod.string(),
-        backImage: zod.string(),
-        leftRegionImage: zod.string(),
-        rightRegionImage: zod.string(),
-      })
-      .optional(),
-    fallbackDraft: zod
-      .object({
-        enabled: zod.literal(true),
-        reason: zod.string(),
-        instructions: zod.array(zod.string()),
-        suggestedShapes: zod.array(
-          zod.enum(["stripe", "block", "chevron", "emblem", "panel"]),
-        ),
-      })
-      .optional(),
+    modules: zod.array(
+      zod.object({
+        id: zod.string(),
+        type: zod.string(),
+        label: zod.string(),
+        color: zod
+          .string()
+          .regex(getAiHistoryResponseResultModulesItemColorRegExp),
+        position: zod.object({
+          x: zod.number(),
+          y: zod.number(),
+        }),
+        scale: zod.number(),
+        rotation: zod.number(),
+        opacity: zod.number(),
+        layer: zod.number(),
+      }),
+    ),
+    editorInstructions: zod.object({
+      baseTemplate: zod.string(),
+      recommendedPreset: zod.string(),
+      notes: zod.array(zod.string()),
+    }),
   }),
 });
 export const GetAiHistoryResponse = zod.array(GetAiHistoryResponseItem);

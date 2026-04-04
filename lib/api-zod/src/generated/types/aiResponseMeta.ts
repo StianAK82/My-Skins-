@@ -5,15 +5,11 @@
  * My Skins API specification
  * OpenAPI spec version: 0.1.0
  */
-import type { AiDesign } from "./aiDesign";
 import type { AiLifecycleStatus } from "./aiLifecycleStatus";
 
-export interface AiHistoryEntry {
-  id: string;
-  prompt: string;
-  style?: string | null;
-  type?: string | null;
-  createdAt: Date;
+export interface AiResponseMeta {
+  generationId: string;
   status: AiLifecycleStatus;
-  result: AiDesign;
+  warnings: string[];
+  deprecated?: boolean;
 }

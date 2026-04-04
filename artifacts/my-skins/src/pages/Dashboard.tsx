@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { useGetDashboardSummary, useGetProjects } from "@workspace/api-client-react";
+import { aiGenerateDesign, useGetDashboardSummary, useGetProjects } from "@workspace/api-client-react";
 import { useLanguage } from "@/hooks/use-language";
 import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
@@ -11,7 +11,6 @@ import {
 } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
-import { z } from "zod";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger
 } from "@/components/ui/dropdown-menu";
@@ -89,39 +88,6 @@ async function createBlankProject(type: "shirt" | "pants", title: string) {
   return res.json();
 }
 
-const generatedOutfitSchema = z.object({
-  concept: z.object({
-    title: z.string(),
-    style: z.string(),
-    baseColor: z.string().regex(/^#([0-9a-fA-F]{6})$/),
-    colorPalette: z.array(z.string().regex(/^#([0-9a-fA-F]{6})$/)).min(3),
-    front: z.object({ description: z.string() }),
-    back: z.object({ description: z.string() }),
-    leftSleeve: z.object({ description: z.string() }),
-    rightSleeve: z.object({ description: z.string() }),
-  }).strict(),
-  assets: z.object({
-    frontImage: z.string().nullable(),
-    backImage: z.string().nullable(),
-    leftSleeveImage: z.string().nullable(),
-    rightSleeveImage: z.string().nullable(),
-  }).strict(),
-}).strict();
-
-async function generateOutfit(prompt: string, target: "classic_shirt" | "classic_pants", stylePreset?: string) {
-  const res = await fetch("/api/ai/generate-outfit", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    credentials: "include",
-    body: JSON.stringify({ prompt, target, stylePreset }),
-  });
-  const payload = await res.json();
-  if (!res.ok) {
-    throw new Error(payload?.error ?? "AI generation failed.");
-  }
-  return generatedOutfitSchema.parse(payload);
-}
-
 export default function Dashboard() {
   const { t, language } = useLanguage();
   const [, setLocation] = useLocation();
@@ -165,7 +131,10 @@ export default function Dashboard() {
       const aiTarget = currentItemType.roblox === "pants" ? "classic_pants" : "classic_shirt";
 
       setGeneratingStep("Creating concept...");
-      const generated = await generateOutfit(prompt.trim(), aiTarget, normalizedStyle);
+      const generated = await aiGenerateDesign({ prompt: prompt.trim(), itemType: aiTarget, style: normalizedStyle, theme: normalizedStyle });
+      if (generated.meta.status !== "completed") {
+        throw new Error(`AI generation returned status: ${generated.meta.status}`);
+      }
       console.info("dashboard.ai.step.concept.completed", { prompt: prompt.trim(), aiTarget, normalizedStyle });
 
       setGeneratingStep("Generating visuals...");

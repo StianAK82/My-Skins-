@@ -6,9 +6,9 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export type AiTarget = (typeof AiTarget)[keyof typeof AiTarget];
+export type AiItemType = (typeof AiItemType)[keyof typeof AiItemType];
 
-export const AiTarget = {
+export const AiItemType = {
   classic_shirt: "classic_shirt",
   classic_pants: "classic_pants",
 } as const;

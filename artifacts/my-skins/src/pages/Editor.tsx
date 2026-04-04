@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useParams, Link } from "wouter";
 import * as fabric from "fabric";
-import { type AiGeneratedOutfit, useGetProject, useSaveCanvas, useCreateExport } from "@workspace/api-client-react";
+import { useGetProject, useSaveCanvas, useCreateExport } from "@workspace/api-client-react";
 import { useLanguage } from "@/hooks/use-language";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,7 +15,8 @@ import {
   PenTool, Trash2, ZoomIn, ZoomOut, Layers, Sparkles, ChevronDown, X, Copy, Lock, Unlock, MoveUp, MoveDown, Grid3X3, Group, Ungroup
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import { z } from "zod";
+import { normalizeAiResponse, type NormalizedAiResponse } from "@/lib/ai/normalize-ai-response";
+import { buildEditorApplyPlan } from "@/lib/ai/editor-apply-plan";
 
 interface AiConcept {
   title?: string;
@@ -61,25 +62,6 @@ const MODULE_LIBRARY: ModuleDefinition[] = [
   { id: "mod-backpack", name: "Backpack Mark", category: "Accessories", shape: "rect", color: "#10b981" },
   { id: "mod-chain", name: "Chain Accent", category: "Accessories", shape: "stripe", color: "#cbd5e1" },
 ];
-
-const generatedOutfitSchema = z.object({
-  concept: z.object({
-    title: z.string(),
-    style: z.string(),
-    baseColor: z.string().regex(/^#([0-9a-fA-F]{6})$/),
-    colorPalette: z.array(z.string().regex(/^#([0-9a-fA-F]{6})$/)).min(3),
-    front: z.object({ description: z.string() }),
-    back: z.object({ description: z.string() }),
-    leftSleeve: z.object({ description: z.string() }),
-    rightSleeve: z.object({ description: z.string() }),
-  }).strict(),
-  assets: z.object({
-    frontImage: z.string().nullable(),
-    backImage: z.string().nullable(),
-    leftSleeveImage: z.string().nullable(),
-    rightSleeveImage: z.string().nullable(),
-  }).strict(),
-}).strict();
 
 const TEMPLATE_ZONES: Record<"shirt" | "pants", { front: TemplateZone; back: TemplateZone; leftRegion: TemplateZone; rightRegion: TemplateZone }> = {
   shirt: {
@@ -730,34 +712,6 @@ export default function Editor() {
     e.target.value = "";
   };
 
-  const normalizeAssetSrc = useCallback((source: string, layerName: string) => {
-    const trimmed = source.trim();
-    if (!trimmed) throw new Error(`Empty image payload for ${layerName}`);
-    if (trimmed.startsWith("data:image/")) return trimmed;
-    if (/^https?:\/\//i.test(trimmed) || trimmed.startsWith("blob:")) return trimmed;
-    return `data:image/png;base64,${trimmed}`;
-  }, []);
-
-  const addImageToZone = useCallback(async (source: string, zone: TemplateZone, layerName: string) => {
-    if (!fabricRef.current) return;
-    const normalizedSource = normalizeAssetSrc(source, layerName);
-    const image = await fabric.FabricImage.fromURL(normalizedSource, { crossOrigin: "anonymous" });
-    image.set({
-      left: zone.left + (zone.width / 2),
-      top: zone.top + (zone.height / 2),
-      originX: "center",
-      originY: "center",
-      selectable: true,
-      evented: true,
-      data: { role: "ai-generated", zone: zone.label, layerName },
-    });
-    image.scaleToWidth(zone.width);
-    if ((image.getScaledHeight() ?? 0) > zone.height) {
-      image.scaleToHeight(zone.height);
-    }
-    fabricRef.current.add(image);
-  }, [normalizeAssetSrc]);
-
   const addFallbackShapeToZone = useCallback((zone: TemplateZone, color: string, layerName: string) => {
     if (!fabricRef.current) return;
     const stripe = new fabric.Rect({
@@ -785,16 +739,14 @@ export default function Editor() {
     fabricRef.current.add(emblem);
   }, []);
 
-  const applyAiOutfitToCanvas = useCallback(async (result: AiGeneratedOutfit) => {
-    if (!fabricRef.current) return;
+  const applyAiOutfitToCanvas = useCallback(async (result: NormalizedAiResponse) => {
+    if (!fabricRef.current) return false;
     const canvas = fabricRef.current;
-    const type = (project?.type as "shirt" | "pants") ?? "shirt";
-    const zones = TEMPLATE_ZONES[type];
-    const assets = result.assets;
 
     setDrawingMode(false);
     try {
-      canvas.backgroundColor = result.concept.baseColor;
+      const plan = buildEditorApplyPlan(result);
+      canvas.backgroundColor = plan.backgroundColor;
 
       canvas.getObjects().forEach((obj) => {
         if ((obj.data as { role?: string } | undefined)?.role === "template-guide") {
@@ -802,66 +754,51 @@ export default function Editor() {
         }
       });
 
-      const attempts: Array<{ src?: string; zone: TemplateZone; name: string }> = [
-        { src: assets?.frontImage, zone: zones.front, name: "AI Front" },
-        { src: assets?.backImage, zone: zones.back, name: "AI Back" },
-        { src: assets?.leftSleeveImage, zone: zones.leftRegion, name: "AI Left Sleeve" },
-        { src: assets?.rightSleeveImage, zone: zones.rightRegion, name: "AI Right Sleeve" },
-      ];
-
-      let visibleLayers = 0;
-      for (const attempt of attempts) {
-        if (!attempt.src) {
-          console.error("canvas.apply.missing-asset", { layer: attempt.name });
-          addFallbackShapeToZone(attempt.zone, result.concept.colorPalette[1] ?? "#ffffff", attempt.name);
-          visibleLayers += 2;
-          continue;
-        }
-        try {
-          await addImageToZone(attempt.src, attempt.zone, attempt.name);
-          visibleLayers += 1;
-          console.info("canvas.apply.asset-success", { layer: attempt.name });
-        } catch (error) {
-          console.error("canvas.apply.asset-failure", { layer: attempt.name, error });
-          addFallbackShapeToZone(attempt.zone, result.concept.colorPalette[2] ?? "#111111", attempt.name);
-          visibleLayers += 2;
-        }
+      if (plan.modules.length === 0) {
+        throw new Error("AI returned zero modules; cannot apply degraded design as success.");
       }
 
-      if (visibleLayers === 0) {
-        throw new Error("Design generation failed. No visible assets were applied.");
+      for (const module of plan.modules) {
+        const radius = Math.max(8, 28 * module.scale);
+        const shape = module.type === "stripe"
+          ? new fabric.Rect({ width: 120 * module.scale, height: 18 * module.scale, fill: module.color, opacity: module.opacity })
+          : new fabric.Circle({ radius, fill: module.color, opacity: module.opacity });
+
+        shape.set({
+          left: 90 + (module.position.x * 460),
+          top: 80 + (module.position.y * 420),
+          angle: module.rotation,
+          selectable: true,
+          evented: true,
+          data: { role: "ai-generated", moduleId: module.id, layerName: module.label },
+        });
+        canvas.add(shape);
       }
 
       canvas.renderAll();
       setAiConcept({
-        title: result.concept.title,
-        style: result.concept.style,
-        backgroundColor: result.concept.baseColor,
-        colors: result.concept.colorPalette.map((hex, index) => ({ hex, name: `Color ${index + 1}` })),
-        description: `${result.concept.front.description} / ${result.concept.back.description}`,
+        title: result.result.title,
+        style: result.result.style,
+        backgroundColor: plan.backgroundColor,
+        colors: plan.palette.map((hex, index) => ({ hex, name: `Color ${index + 1}` })),
+        description: `${result.result.placement.front} / ${result.result.placement.back}`,
       });
       setShowConcept(true);
-      handleUseColors(result.concept.colorPalette);
+      handleUseColors(plan.palette);
       addTemplateGuideLayer();
-      toast({
-        title: language === "no" ? "AI design lagt til!" : "AI design applied to canvas!",
-        description: visibleLayers >= 4
-          ? undefined
-          : (language === "no" ? "Noen regioner brukte fallback-lag." : "Some regions used fallback layers."),
-      });
-      console.info("canvas.apply.completed", { visibleLayers, projectId: project?.id });
+      toast({ title: language === "no" ? "AI design lagt til!" : "AI design applied to canvas!" });
       return true;
     } catch (error) {
       console.error("canvas.apply.failure", error);
       toast({
         title: language === "no" ? "Kunne ikke bruke AI-design" : "Failed to apply AI design",
-        description: "Design generation failed. No visible assets were applied.",
+        description: "AI output was degraded and not applied.",
         variant: "destructive",
       });
       addTemplateGuideLayer();
       return false;
     }
-  }, [addFallbackShapeToZone, addImageToZone, addTemplateGuideLayer, handleUseColors, language, project?.id, project?.type, toast]);
+  }, [addTemplateGuideLayer, handleUseColors, language, toast]);
 
   useEffect(() => {
     if (!project?.id || !fabricRef.current) return;
@@ -870,9 +807,9 @@ export default function Editor() {
     if (!pending) return;
     sessionStorage.removeItem(key);
     try {
-      const parsed = generatedOutfitSchema.parse(JSON.parse(pending));
+      const parsed = normalizeAiResponse(JSON.parse(pending));
       console.info("editor.ai.pipeline.received", { projectId: project.id });
-      void applyAiOutfitToCanvas(parsed as AiGeneratedOutfit).then((applied) => {
+      void applyAiOutfitToCanvas(parsed).then((applied) => {
         if (!applied) {
           toast({
             title: "Design generation failed",
