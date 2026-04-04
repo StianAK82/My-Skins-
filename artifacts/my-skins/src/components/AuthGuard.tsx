@@ -5,7 +5,7 @@ import { useGetMe } from "@workspace/api-client-react";
 export function AuthGuard({ children }: { children: React.ReactNode }) {
   const [, setLocation] = useLocation();
   const { data: user, isLoading, isError } = useGetMe({
-    query: { retry: false }
+    query: { queryKey: ["/api/auth/me"], retry: false }
   });
 
   useEffect(() => {

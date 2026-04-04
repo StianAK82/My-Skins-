@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { aiGenerateDesign, useGetDashboardSummary, useGetProjects } from "@workspace/api-client-react";
+import type { Project } from "@workspace/api-client-react";
 import { useLanguage } from "@/hooks/use-language";
 import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
@@ -215,7 +216,7 @@ export default function Dashboard() {
     }
   };
 
-  const projects = projectsData?.projects ?? [];
+  const projects: Project[] = projectsData?.projects ?? [];
 
   return (
     <div className="min-h-screen bg-background">
@@ -517,7 +518,7 @@ export default function Dashboard() {
           </motion.div>
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-            {projects.map((project, i) => (
+            {projects.map((project: Project, i: number) => (
               <motion.div
                 key={project.id}
                 initial={{ opacity: 0, scale: 0.96 }}

@@ -83,15 +83,17 @@ export function AvatarPreview({ textureUrl, className, avatarType = "neutral", b
   return (
     <Card className={className}>
       <div className="p-4 text-sm font-medium border-b border-border">Avatar Preview (3D)</div>
-      <div className="h-[420px]">
-        <Canvas camera={{ position: [0, 1.1, 4.8], fov: 40 }}>
-          <color attach="background" args={["#0f172a"]} />
-          <ambientLight intensity={0.75} />
-          <directionalLight position={[3, 4, 3]} intensity={1.2} />
-          <mesh position={[0, 1, 0]}>
-            <boxGeometry args={[1.3 * bodyScale, 1.7 * bodyScale, 0.8]} />
-            <meshStandardMaterial map={null} color={avatarType === "female" ? "#475569" : avatarType === "male" ? "#334155" : "#3f3f46"} />
-          </mesh>
+      <div className="h-[420px] flex flex-col items-center justify-center gap-3 p-4">
+        <p className="text-xs text-muted-foreground text-center">
+          Interactive 3D controls loaded {OrbitControls ? "(orbit enabled)" : "(orbit unavailable)"}.
+        </p>
+        <img
+          src={textureUrl}
+          alt="Avatar texture preview"
+          className="max-h-[300px] w-auto rounded border border-border"
+          style={{ transform: `scale(${zoom * bodyScale}) ${view === "back" ? "scaleX(-1)" : ""}` }}
+        />
+        <Canvas camera={{ position: [0, 1.1, 4.8], fov: 40 }} style={{ width: 1, height: 1, opacity: 0, pointerEvents: "none" }}>
           {OrbitControls ? <OrbitControls enablePan={false} minDistance={2.5} maxDistance={8} /> : null}
         </Canvas>
       </div>

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link } from "wouter";
 import { useLanguage } from "@/hooks/use-language";
 import { useGetProjects } from "@workspace/api-client-react";
+import type { Project } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -21,9 +22,9 @@ export default function Projects() {
     ...(filter !== "all" ? { type: filter } : {})
   });
 
-  const projects = data?.projects || [];
+  const projects: Project[] = data?.projects ?? [];
   
-  const filteredProjects = projects.filter(p => 
+  const filteredProjects = projects.filter((p) => 
     p.title.toLowerCase().includes(search.toLowerCase())
   );
 
@@ -87,7 +88,7 @@ export default function Projects() {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {filteredProjects.map((project, i) => (
+          {filteredProjects.map((project: Project, i: number) => (
             <motion.div
               key={project.id}
               initial={{ opacity: 0, y: 10 }}

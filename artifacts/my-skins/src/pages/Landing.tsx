@@ -7,7 +7,7 @@ import { motion } from "framer-motion";
 
 export default function Landing() {
   const [, setLocation] = useLocation();
-  const { data: user, isLoading } = useGetMe({ query: { retry: false } });
+  const { data: user, isLoading } = useGetMe({ query: { queryKey: ["/api/auth/me"], retry: false } });
   const { t } = useLanguage();
 
   useEffect(() => {
