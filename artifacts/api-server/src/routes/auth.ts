@@ -2,6 +2,7 @@ import * as oidc from "openid-client";
 import { z } from "zod";
 import { Router, type IRouter, type Request, type Response } from "express";
 import { db, usersTable } from "@workspace/db";
+import { and, eq } from "drizzle-orm";
 import {
   clearSession,
   getOidcConfig,
@@ -44,6 +45,8 @@ const OIDC_COOKIE_TTL = 10 * 60 * 1000;
 
 const router: IRouter = Router();
 
+const DEFAULT_AUTH_PROVIDER = "replit";
+
 function getOrigin(req: Request): string {
   const proto = req.headers["x-forwarded-proto"] || "https";
   const host =
@@ -79,28 +82,92 @@ function getSafeReturnTo(value: unknown): string {
 }
 
 async function upsertUser(claims: Record<string, unknown>) {
-  const userData = {
-    id: claims.sub as string,
-    email: (claims.email as string) || null,
-    firstName: (claims.first_name as string) || null,
-    lastName: (claims.last_name as string) || null,
-    profileImageUrl: (claims.profile_image_url || claims.picture) as
-      | string
-      | null,
+  const normalizeOptionalString = (value: unknown): string | null => {
+    if (typeof value !== "string") return null;
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : null;
   };
 
-  const [user] = await db
-    .insert(usersTable)
-    .values(userData)
-    .onConflictDoUpdate({
-      target: usersTable.id,
-      set: {
-        ...userData,
-        updatedAt: new Date(),
-      },
-    })
-    .returning();
-  return user;
+  const externalUserId = normalizeOptionalString(claims.sub);
+  if (!externalUserId) {
+    throw new Error("OIDC claims.sub is missing or invalid");
+  }
+
+  const authProvider = normalizeOptionalString(claims.iss) ?? DEFAULT_AUTH_PROVIDER;
+  const email = normalizeOptionalString(claims.email)?.toLowerCase() ?? null;
+  const updatePayload = {
+    authProvider,
+    authProviderUserId: externalUserId,
+    email,
+    firstName: normalizeOptionalString(claims.first_name),
+    lastName: normalizeOptionalString(claims.last_name),
+    profileImageUrl: normalizeOptionalString(claims.profile_image_url ?? claims.picture),
+    updatedAt: new Date(),
+  };
+
+  const [userByProvider] = await db
+    .select()
+    .from(usersTable)
+    .where(
+      and(
+        eq(usersTable.authProvider, authProvider),
+        eq(usersTable.authProviderUserId, externalUserId),
+      ),
+    )
+    .limit(1);
+
+  if (userByProvider) {
+    const [updated] = await db
+      .update(usersTable)
+      .set(updatePayload)
+      .where(eq(usersTable.id, userByProvider.id))
+      .returning();
+    return updated;
+  }
+
+  if (email) {
+    const [userByEmail] = await db
+      .select()
+      .from(usersTable)
+      .where(eq(usersTable.email, email))
+      .limit(1);
+
+    if (userByEmail) {
+      const canLinkProvider =
+        userByEmail.authProvider === authProvider ||
+        userByEmail.authProvider === null ||
+        userByEmail.authProviderUserId === null;
+
+      if (!canLinkProvider) {
+        throw new Error("Email already linked to another auth provider identity");
+      }
+
+      const [updated] = await db
+        .update(usersTable)
+        .set(updatePayload)
+        .where(eq(usersTable.id, userByEmail.id))
+        .returning();
+      return updated;
+    }
+  }
+
+  try {
+    const [inserted] = await db.insert(usersTable).values(updatePayload).returning();
+    return inserted;
+  } catch {
+    const [existing] = await db
+      .select()
+      .from(usersTable)
+      .where(
+        and(
+          eq(usersTable.authProvider, authProvider),
+          eq(usersTable.authProviderUserId, externalUserId),
+        ),
+      )
+      .limit(1);
+    if (existing) return existing;
+    throw new Error("Unable to create or link user account");
+  }
 }
 
 router.get("/auth/user", (req: Request, res: Response) => {
