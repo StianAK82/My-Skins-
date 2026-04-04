@@ -1,6 +1,5 @@
 import { pgTable, text, timestamp, boolean } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
-import { z } from "zod";
 
 export const shareLinksTable = pgTable("share_links", {
   id: text("id").primaryKey(),
@@ -12,5 +11,5 @@ export const shareLinksTable = pgTable("share_links", {
 });
 
 export const insertShareLinkSchema = createInsertSchema(shareLinksTable).omit({ createdAt: true });
-export type InsertShareLink = z.infer<typeof insertShareLinkSchema>;
+export type InsertShareLink = typeof shareLinksTable.$inferInsert;
 export type ShareLink = typeof shareLinksTable.$inferSelect;

@@ -94,7 +94,7 @@ router.get("/share/:token", async (req, res): Promise<void> => {
     author: resolveCreatorIdentity({
       profileDisplayName: authorProfile?.displayName,
       userFirstName: author?.firstName,
-      userDisplayName: author?.displayName,
+      userDisplayName: [author?.firstName, author?.lastName].filter(Boolean).join(" ") || undefined,
       profileUsername: authorProfile?.username,
       userEmail: author?.email,
     }),

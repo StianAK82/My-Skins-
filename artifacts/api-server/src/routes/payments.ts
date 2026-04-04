@@ -16,8 +16,6 @@ import { normalizeCheckoutCompleted, normalizeInvoice, normalizeSubscriptionUpda
 
 const router: IRouter = Router();
 
-type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
-
 const stripeSecret = process.env.STRIPE_SECRET_KEY;
 const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
 const appUrl = process.env.APP_URL;
@@ -107,26 +105,28 @@ router.post("/payments/webhook", async (req, res): Promise<void> => {
     if (event.type === "checkout.session.completed") {
       const normalized = normalizeCheckoutCompleted(event.data.object as Stripe.Checkout.Session);
 
-      if (normalized.userId && normalized.providerSubscriptionId) {
-        await db.transaction(async (tx: DbTransaction) => {
+      if (typeof normalized.userId === "string" && typeof normalized.providerSubscriptionId === "string") {
+        const userId = normalized.userId;
+        const providerSubscriptionId = normalized.providerSubscriptionId;
+        await db.transaction(async (tx) => {
           const [existing] = await tx
             .select({ id: billingSubscriptionsTable.id })
             .from(billingSubscriptionsTable)
-            .where(eq(billingSubscriptionsTable.providerSubscriptionId, normalized.providerSubscriptionId))
+            .where(eq(billingSubscriptionsTable.providerSubscriptionId, providerSubscriptionId))
             .limit(1);
 
           if (existing) return;
 
           await tx.insert(billingSubscriptionsTable).values({
             id: randomUUID(),
-            userId: normalized.userId,
-            providerSubscriptionId: normalized.providerSubscriptionId,
+            userId,
+            providerSubscriptionId,
             status: "active",
           });
 
           await tx.insert(entitlementsTable).values({
             id: randomUUID(),
-            userId: normalized.userId,
+            userId,
             key: `plan:${normalized.plan}`,
             source: "stripe_subscription",
             status: "active",
@@ -149,7 +149,7 @@ router.post("/payments/webhook", async (req, res): Promise<void> => {
     if (event.type === "invoice.paid" || event.type === "invoice.payment_failed") {
       const normalized = normalizeInvoice(event.data.object as Stripe.Invoice);
 
-      await db.transaction(async (tx: DbTransaction) => {
+      await db.transaction(async (tx) => {
         const [existing] = await tx
           .select({ id: billingInvoicesTable.id })
           .from(billingInvoicesTable)

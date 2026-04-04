@@ -1,6 +1,5 @@
 import { pgTable, text, timestamp, integer } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
-import { z } from "zod";
 
 export const exportsTable = pgTable("exports", {
   id: text("id").primaryKey(),
@@ -15,5 +14,5 @@ export const exportsTable = pgTable("exports", {
 });
 
 export const insertExportSchema = createInsertSchema(exportsTable).omit({ createdAt: true });
-export type InsertExport = z.infer<typeof insertExportSchema>;
+export type InsertExport = typeof exportsTable.$inferInsert;
 export type Export = typeof exportsTable.$inferSelect;

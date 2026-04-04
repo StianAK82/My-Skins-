@@ -1,6 +1,5 @@
 import { pgTable, text, timestamp } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
-import { z } from "zod";
 
 export const aiGenerationsTable = pgTable("ai_generations", {
   id: text("id").primaryKey(),
@@ -14,5 +13,5 @@ export const aiGenerationsTable = pgTable("ai_generations", {
 });
 
 export const insertAiGenerationSchema = createInsertSchema(aiGenerationsTable).omit({ createdAt: true });
-export type InsertAiGeneration = z.infer<typeof insertAiGenerationSchema>;
+export type InsertAiGeneration = typeof aiGenerationsTable.$inferInsert;
 export type AiGeneration = typeof aiGenerationsTable.$inferSelect;

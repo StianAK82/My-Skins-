@@ -1,6 +1,5 @@
 import { pgTable, text, timestamp } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
-import { z } from "zod";
 
 export const robloxConnectionsTable = pgTable("roblox_connections", {
   id: text("id").primaryKey(),
@@ -13,5 +12,5 @@ export const robloxConnectionsTable = pgTable("roblox_connections", {
 });
 
 export const insertRobloxConnectionSchema = createInsertSchema(robloxConnectionsTable).omit({ connectedAt: true });
-export type InsertRobloxConnection = z.infer<typeof insertRobloxConnectionSchema>;
+export type InsertRobloxConnection = typeof robloxConnectionsTable.$inferInsert;
 export type RobloxConnection = typeof robloxConnectionsTable.$inferSelect;

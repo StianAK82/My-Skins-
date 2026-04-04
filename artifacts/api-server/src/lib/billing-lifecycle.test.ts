@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import type Stripe from "stripe";
-import { normalizeCheckoutCompleted, normalizeInvoice, normalizeSubscriptionUpdate } from "./billing-lifecycle";
+import { normalizeCheckoutCompleted, normalizeInvoice, normalizeSubscriptionUpdate } from "./billing-lifecycle.ts";
 
 test("normalizeCheckoutCompleted keeps plan and subscription id for idempotent lifecycle persistence", () => {
   const session = {
