@@ -2,7 +2,7 @@ import * as oidc from "openid-client";
 import { z } from "zod";
 import { Router, type IRouter, type Request, type Response } from "express";
 import { db, usersTable } from "@workspace/db";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import {
   clearSession,
   getOidcConfig,
@@ -42,6 +42,7 @@ const LogoutMobileSessionResponse = z.object({
 });
 
 const OIDC_COOKIE_TTL = 10 * 60 * 1000;
+let authSchemaValidated = false;
 
 const router: IRouter = Router();
 
@@ -170,6 +171,45 @@ async function upsertUser(claims: Record<string, unknown>) {
   }
 }
 
+async function ensureAuthSchemaReady() {
+  if (authSchemaValidated) return;
+
+  const columnsResult = await db.execute(sql<{
+    auth_provider: "YES" | "NO";
+    auth_provider_user_id: "YES" | "NO";
+  }>`
+    SELECT
+      MAX(CASE WHEN column_name = 'auth_provider' THEN 'YES' ELSE 'NO' END) AS auth_provider,
+      MAX(CASE WHEN column_name = 'auth_provider_user_id' THEN 'YES' ELSE 'NO' END) AS auth_provider_user_id
+    FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'users'
+  `);
+
+  const [columns] = columnsResult.rows;
+  if (!columns || columns.auth_provider !== "YES" || columns.auth_provider_user_id !== "YES") {
+    throw new Error(
+      "users table is missing external identity columns (auth_provider, auth_provider_user_id). Run the 0001_users_external_identity migration.",
+    );
+  }
+
+  const idDefaultResult = await db.execute(sql<{ column_default: string | null }>`
+    SELECT column_default
+    FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'users' AND column_name = 'id'
+    LIMIT 1
+  `);
+
+  const [idDefault] = idDefaultResult.rows;
+  const defaultExpr = idDefault?.column_default ?? "";
+  if (!/gen_random_uuid\(\)|uuid_generate_v4\(\)/.test(defaultExpr)) {
+    throw new Error(
+      "users.id must be database-generated (gen_random_uuid/uuid_generate_v4) to avoid assigning provider subject IDs.",
+    );
+  }
+
+  authSchemaValidated = true;
+}
+
 router.get("/auth/user", (req: Request, res: Response) => {
   res.json(
     GetCurrentAuthUserResponse.parse({
@@ -252,6 +292,7 @@ router.get("/callback", async (req: Request, res: Response) => {
     return;
   }
 
+  await ensureAuthSchemaReady();
   const dbUser = await upsertUser(
     claims as unknown as Record<string, unknown>,
   );
@@ -325,6 +366,7 @@ router.post(
         return;
       }
 
+      await ensureAuthSchemaReady();
       const dbUser = await upsertUser(
         claims as unknown as Record<string, unknown>,
       );
