@@ -1,3 +1,5 @@
+import { getBillingState as getBillingStateApi } from "@workspace/api-client-react";
+
 export async function createCheckoutSession(plan: "pro" | "team" | "enterprise" = "pro") {
   const response = await fetch("/api/payments/create-checkout-session", {
     method: "POST",
@@ -9,9 +11,5 @@ export async function createCheckoutSession(plan: "pro" | "team" | "enterprise" 
 }
 
 export async function getBillingState() {
-  const response = await fetch("/api/billing/state", {
-    method: "GET",
-    credentials: "include",
-  });
-  return response.json();
+  return getBillingStateApi();
 }

@@ -3,14 +3,20 @@ import { db, exportArtifactsTable, exportJobsTable, exportsTable, projectsTable 
 import { and, desc, eq } from "drizzle-orm";
 import { randomUUID } from "crypto";
 import { z } from "zod";
-import { resolveExportDimensions } from "../lib/lifecycle";
+import { resolveExportDimensions, toExportJobResponse, type ExportJobRecord } from "../lib/lifecycle";
 
 const router: IRouter = Router();
 
+type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
 const createExportSchema = z.object({
-  projectId: z.string().min(1),
+  projectId: z.string().uuid(),
   format: z.enum(["png"]).default("png"),
 });
+
+const exportJobParamsSchema = z.object({ jobId: z.string().uuid() });
+
+const exportJobRowSchema = z.custom<ExportJobRecord>();
 
 router.post("/exports", async (req, res): Promise<void> => {
   if (!req.isAuthenticated()) {
@@ -42,7 +48,7 @@ router.post("/exports", async (req, res): Promise<void> => {
   const { width, height } = resolveExportDimensions(project.type);
   const artifactUrl = project.thumbnailUrl ?? null;
 
-  await db.transaction(async (tx: any) => {
+  await db.transaction(async (tx: DbTransaction) => {
     await tx.insert(exportJobsTable).values({
       id: exportJobId,
       userId: req.user.id,
@@ -79,20 +85,26 @@ router.post("/exports", async (req, res): Promise<void> => {
     });
   });
 
-  res.status(201).json({
-    jobId: exportJobId,
-    projectId,
-    format,
-    status: artifactUrl ? "completed" : "failed",
-    artifact: artifactUrl
-      ? {
-          id: artifactId,
-          url: artifactUrl,
-          width,
-          height,
-        }
-      : null,
-  });
+  const [created] = await db
+    .select({
+      jobId: exportJobsTable.id,
+      projectId: exportJobsTable.projectId,
+      format: exportJobsTable.format,
+      status: exportJobsTable.status,
+      createdAt: exportJobsTable.createdAt,
+      completedAt: exportJobsTable.completedAt,
+      artifactId: exportArtifactsTable.id,
+      artifactUrl: exportArtifactsTable.url,
+      width: exportArtifactsTable.width,
+      height: exportArtifactsTable.height,
+      size: exportArtifactsTable.size,
+    })
+    .from(exportJobsTable)
+    .leftJoin(exportArtifactsTable, eq(exportArtifactsTable.exportJobId, exportJobsTable.id))
+    .where(and(eq(exportJobsTable.id, exportJobId), eq(exportJobsTable.userId, req.user.id)))
+    .limit(1);
+
+  res.status(201).json(toExportJobResponse(created));
 });
 
 router.get("/exports", async (req, res): Promise<void> => {
@@ -121,7 +133,7 @@ router.get("/exports", async (req, res): Promise<void> => {
     .orderBy(desc(exportJobsTable.createdAt))
     .limit(20);
 
-  res.json(jobs);
+  res.json(jobs.map((job: ExportJobRecord) => toExportJobResponse(exportJobRowSchema.parse(job))));
 });
 
 router.get("/exports/:jobId", async (req, res): Promise<void> => {
@@ -130,7 +142,13 @@ router.get("/exports/:jobId", async (req, res): Promise<void> => {
     return;
   }
 
-  const jobId = Array.isArray(req.params.jobId) ? req.params.jobId[0] : req.params.jobId;
+  const parsed = exportJobParamsSchema.safeParse(req.params);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Invalid export job id", details: parsed.error.flatten() });
+    return;
+  }
+
+  const { jobId } = parsed.data;
 
   const [job] = await db
     .select({
@@ -155,7 +173,7 @@ router.get("/exports/:jobId", async (req, res): Promise<void> => {
     return;
   }
 
-  res.json(job);
+  res.json(toExportJobResponse(exportJobRowSchema.parse(job)));
 });
 
 export default router;

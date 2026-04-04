@@ -1,9 +1,10 @@
 import { Router, type IRouter } from "express";
-import { and, eq } from "drizzle-orm";
+import { and, eq, lt } from "drizzle-orm";
 import {
   db,
   projectsTable,
   robloxConnectionsTable,
+  robloxOauthStatesTable,
   robloxUploadEventsTable,
   robloxUploadJobsTable,
   userProfilesTable,
@@ -11,24 +12,23 @@ import {
 } from "@workspace/db";
 import { createHash, randomBytes, randomUUID } from "crypto";
 import { z } from "zod";
-import { deriveRobloxUploadTerminalState } from "../lib/lifecycle";
+import { deriveRobloxUploadTerminalState, resolveRobloxUploadBlockedReason } from "../lib/lifecycle";
 
 const router: IRouter = Router();
 
-const loginState = new Map<string, { userId: string; verifier: string; createdAt: number }>();
 const LOGIN_STATE_TTL_MS = 10 * 60 * 1000;
+type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
-const uploadSchema = z.object({ projectId: z.string().min(1) });
+const uploadSchema = z.object({ projectId: z.string().uuid() });
+const callbackSchema = z.object({ state: z.string().min(1), code: z.string().min(1) });
+const uploadJobParamsSchema = z.object({ uploadJobId: z.string().uuid() });
 
 function base64url(input: Buffer): string {
   return input.toString("base64url");
 }
 
-function cleanupExpiredState() {
-  const now = Date.now();
-  for (const [state, entry] of loginState.entries()) {
-    if (now - entry.createdAt > LOGIN_STATE_TTL_MS) loginState.delete(state);
-  }
+async function cleanupExpiredState() {
+  await db.delete(robloxOauthStatesTable).where(lt(robloxOauthStatesTable.expiresAt, new Date()));
 }
 
 function robloxConfig() {
@@ -40,7 +40,6 @@ function robloxConfig() {
     tokenUrl: process.env.ROBLOX_OAUTH_TOKEN_URL ?? "https://apis.roblox.com/oauth/v1/token",
   };
 }
-
 
 router.get("/credits", async (req, res): Promise<void> => {
   if (!req.isAuthenticated()) {
@@ -93,12 +92,18 @@ router.get("/roblox/login", async (req, res): Promise<void> => {
     return;
   }
 
-  cleanupExpiredState();
+  await cleanupExpiredState();
 
   const state = base64url(randomBytes(24));
   const verifier = base64url(randomBytes(48));
   const challenge = base64url(createHash("sha256").update(verifier).digest());
-  loginState.set(state, { userId: req.user.id, verifier, createdAt: Date.now() });
+
+  await db.insert(robloxOauthStatesTable).values({
+    state,
+    userId: req.user.id,
+    verifier,
+    expiresAt: new Date(Date.now() + LOGIN_STATE_TTL_MS),
+  });
 
   const authUrl = new URL(cfg.authorizeUrl);
   authUrl.searchParams.set("client_id", cfg.clientId);
@@ -113,20 +118,27 @@ router.get("/roblox/login", async (req, res): Promise<void> => {
 });
 
 router.get("/roblox/callback", async (req, res): Promise<void> => {
-  const state = typeof req.query.state === "string" ? req.query.state : "";
-  const code = typeof req.query.code === "string" ? req.query.code : "";
-  if (!state || !code) {
+  const parsed = callbackSchema.safeParse({
+    state: typeof req.query.state === "string" ? req.query.state : "",
+    code: typeof req.query.code === "string" ? req.query.code : "",
+  });
+
+  if (!parsed.success) {
     res.status(400).json({ error: "Missing state/code" });
     return;
   }
 
-  cleanupExpiredState();
-  const entry = loginState.get(state);
+  const { state, code } = parsed.data;
+
+  await cleanupExpiredState();
+  const [entry] = await db.select().from(robloxOauthStatesTable).where(eq(robloxOauthStatesTable.state, state)).limit(1);
+
   if (!entry) {
     res.status(400).json({ error: "Invalid or expired OAuth state" });
     return;
   }
-  loginState.delete(state);
+
+  await db.delete(robloxOauthStatesTable).where(eq(robloxOauthStatesTable.state, state));
 
   const cfg = robloxConfig();
   if (!cfg.clientId || !cfg.clientSecret || !cfg.redirectUri) {
@@ -220,7 +232,7 @@ router.post("/roblox/upload", async (req, res): Promise<void> => {
   const uploadJobId = randomUUID();
   const cfg = robloxConfig();
 
-  await db.transaction(async (tx: any) => {
+  await db.transaction(async (tx: DbTransaction) => {
     await tx.insert(robloxUploadJobsTable).values({
       id: uploadJobId,
       userId: req.user.id,
@@ -235,31 +247,14 @@ router.post("/roblox/upload", async (req, res): Promise<void> => {
       message: "Upload request accepted.",
     });
 
-    if (!cfg.clientId || !cfg.clientSecret || !cfg.redirectUri) {
-      const terminal = deriveRobloxUploadTerminalState("not_configured");
-      await tx.update(robloxUploadJobsTable).set({ status: terminal.status, completedAt: new Date() }).where(eq(robloxUploadJobsTable.id, uploadJobId));
-      await tx.insert(robloxUploadEventsTable).values({
-        id: randomUUID(),
-        uploadJobId,
-        status: terminal.status,
-        message: terminal.message,
-      });
-      return;
-    }
+    const terminalReason = resolveRobloxUploadBlockedReason({
+      configured: Boolean(cfg.clientId && cfg.clientSecret && cfg.redirectUri),
+      hasConnectionToken: Boolean(connection?.accessToken),
+      activationReady: true,
+    });
 
-    if (!connection?.accessToken) {
-      const terminal = deriveRobloxUploadTerminalState("missing_connection");
-      await tx.update(robloxUploadJobsTable).set({ status: terminal.status, completedAt: new Date() }).where(eq(robloxUploadJobsTable.id, uploadJobId));
-      await tx.insert(robloxUploadEventsTable).values({
-        id: randomUUID(),
-        uploadJobId,
-        status: terminal.status,
-        message: terminal.message,
-      });
-      return;
-    }
-
-    const terminal = deriveRobloxUploadTerminalState("activation_pending");
+    if (!terminalReason) return;
+    const terminal = deriveRobloxUploadTerminalState(terminalReason);
     await tx.update(robloxUploadJobsTable).set({ status: terminal.status, completedAt: new Date() }).where(eq(robloxUploadJobsTable.id, uploadJobId));
     await tx.insert(robloxUploadEventsTable).values({
       id: randomUUID(),
@@ -286,7 +281,13 @@ router.get("/roblox/upload/:uploadJobId", async (req, res): Promise<void> => {
     return;
   }
 
-  const uploadJobId = Array.isArray(req.params.uploadJobId) ? req.params.uploadJobId[0] : req.params.uploadJobId;
+  const parsed = uploadJobParamsSchema.safeParse(req.params);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Invalid upload job id", details: parsed.error.flatten() });
+    return;
+  }
+
+  const { uploadJobId } = parsed.data;
 
   const [job] = await db
     .select()
@@ -299,7 +300,7 @@ router.get("/roblox/upload/:uploadJobId", async (req, res): Promise<void> => {
   }
 
   const events = await db.select().from(robloxUploadEventsTable).where(eq(robloxUploadEventsTable.uploadJobId, uploadJobId));
-  res.json({ ...job, events });
+  res.json({ ...job, uploadJobId: job.id, events });
 });
 
 router.delete("/roblox/disconnect", async (req, res): Promise<void> => {

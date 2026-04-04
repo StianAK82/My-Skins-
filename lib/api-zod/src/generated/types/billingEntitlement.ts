@@ -6,13 +6,11 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export interface ExportResult {
+export interface BillingEntitlement {
   id: string;
-  projectId: string;
-  url?: string;
-  format: string;
-  size?: number;
-  width?: number;
-  height?: number;
+  userId: string;
+  key: string;
+  source: string;
+  status: string;
   createdAt: Date;
 }

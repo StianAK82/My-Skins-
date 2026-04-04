@@ -6,9 +6,10 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export interface RobloxConnection {
-  connected: boolean;
-  robloxUserId?: string;
-  robloxUsername?: string;
-  connectedAt?: Date;
+export interface ExportArtifact {
+  id: string;
+  url: string;
+  width: number;
+  height: number;
+  size?: number;
 }

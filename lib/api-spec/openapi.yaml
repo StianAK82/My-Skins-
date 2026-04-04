@@ -422,7 +422,7 @@ paths:
     post:
       operationId: createExport
       tags: [exports]
-      summary: Export a project as PNG
+      summary: Create an export lifecycle job
       requestBody:
         required: true
         content:
@@ -430,38 +430,153 @@ paths:
             schema:
               $ref: "#/components/schemas/CreateExportRequest"
       responses:
-        "200":
-          description: Export result
+        "201":
+          description: Export job created
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ExportResult"
+                $ref: "#/components/schemas/ExportJob"
     get:
       operationId: getExports
       tags: [exports]
-      summary: Get export history
+      summary: List export lifecycle jobs
       responses:
         "200":
-          description: Export history
+          description: Export lifecycle jobs
           content:
             application/json:
               schema:
                 type: array
                 items:
-                  $ref: "#/components/schemas/ExportResult"
+                  $ref: "#/components/schemas/ExportJob"
 
-  /roblox/connect:
+  /exports/{jobId}:
     get:
-      operationId: getRobloxConnection
-      tags: [roblox]
-      summary: Get Roblox connection status
+      operationId: getExportJob
+      tags: [exports]
+      summary: Get a specific export lifecycle job
+      parameters:
+        - name: jobId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
       responses:
         "200":
-          description: Roblox connection status
+          description: Export lifecycle job
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/RobloxConnection"
+                $ref: "#/components/schemas/ExportJob"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /billing/state:
+    get:
+      operationId: getBillingState
+      tags: [dashboard]
+      summary: Get current billing lifecycle state
+      responses:
+        "200":
+          description: Billing lifecycle state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BillingState"
+
+  /roblox/status:
+    get:
+      operationId: getRobloxStatus
+      tags: [roblox]
+      summary: Get Roblox integration connection status
+      responses:
+        "200":
+          description: Roblox status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RobloxStatus"
+
+  /roblox/login:
+    get:
+      operationId: getRobloxLogin
+      tags: [roblox]
+      summary: Create Roblox OAuth login URL with PKCE
+      responses:
+        "200":
+          description: Roblox OAuth login URL
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RobloxLoginUrl"
+
+  /roblox/callback:
+    get:
+      operationId: robloxCallback
+      tags: [roblox]
+      summary: Complete Roblox OAuth callback
+      parameters:
+        - name: state
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: code
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Roblox connection established
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RobloxCallbackResponse"
+
+  /roblox/upload:
+    post:
+      operationId: createRobloxUpload
+      tags: [roblox]
+      summary: Create a Roblox upload lifecycle job
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateRobloxUploadRequest"
+      responses:
+        "202":
+          description: Roblox upload job accepted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RobloxUploadJob"
+
+  /roblox/upload/{uploadJobId}:
+    get:
+      operationId: getRobloxUpload
+      tags: [roblox]
+      summary: Get Roblox upload lifecycle job
+      parameters:
+        - name: uploadJobId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Roblox upload lifecycle job
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RobloxUploadJob"
 
   /roblox/disconnect:
     delete:
@@ -922,46 +1037,190 @@ components:
         - projectId
         - format
 
-    ExportResult:
+    ExportLifecycleStatus:
+      type: string
+      enum: [queued, processing, completed, failed]
+
+    ExportArtifact:
       type: object
       properties:
         id:
           type: string
-        projectId:
-          type: string
         url:
           type: string
-        format:
-          type: string
-        size:
-          type: number
         width:
           type: number
         height:
           type: number
+        size:
+          type: number
+      required: [id, url, width, height]
+
+    ExportJob:
+      type: object
+      properties:
+        jobId:
+          type: string
+          format: uuid
+        projectId:
+          type: string
+          format: uuid
+        format:
+          type: string
+          enum: [png]
+        status:
+          $ref: "#/components/schemas/ExportLifecycleStatus"
         createdAt:
           type: string
           format: date-time
-      required:
-        - id
-        - projectId
-        - format
-        - createdAt
-
-    RobloxConnection:
-      type: object
-      properties:
-        connected:
-          type: boolean
-        robloxUserId:
-          type: string
-        robloxUsername:
-          type: string
-        connectedAt:
+        completedAt:
           type: string
           format: date-time
-      required:
-        - connected
+          nullable: true
+        artifact:
+          oneOf:
+            - $ref: "#/components/schemas/ExportArtifact"
+            - type: "null"
+      required: [jobId, projectId, format, status, createdAt, completedAt, artifact]
+
+    BillingSubscription:
+      type: object
+      properties:
+        id: { type: string }
+        userId: { type: string }
+        providerSubscriptionId: { type: string }
+        status: { type: string }
+        currentPeriodEnd:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, userId, providerSubscriptionId, status, currentPeriodEnd, createdAt]
+
+    BillingEntitlement:
+      type: object
+      properties:
+        id: { type: string }
+        userId: { type: string }
+        key: { type: string }
+        source: { type: string }
+        status: { type: string }
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, userId, key, source, status, createdAt]
+
+    BillingInvoice:
+      type: object
+      properties:
+        id: { type: string }
+        subscriptionId:
+          type: string
+          nullable: true
+        providerInvoiceId: { type: string }
+        status: { type: string }
+        amountPaid: { type: number }
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, subscriptionId, providerInvoiceId, status, amountPaid, createdAt]
+
+    BillingState:
+      type: object
+      properties:
+        plans:
+          type: array
+          items:
+            type: string
+        subscription:
+          oneOf:
+            - $ref: "#/components/schemas/BillingSubscription"
+            - type: "null"
+        entitlements:
+          type: array
+          items:
+            $ref: "#/components/schemas/BillingEntitlement"
+        invoices:
+          type: array
+          items:
+            $ref: "#/components/schemas/BillingInvoice"
+      required: [plans, subscription, entitlements, invoices]
+
+    RobloxStatus:
+      type: object
+      properties:
+        configured:
+          type: boolean
+        connected:
+          type: boolean
+        connection:
+          type: object
+          nullable: true
+          properties:
+            robloxUserId: { type: string }
+            robloxUsername: { type: string }
+            connectedAt:
+              type: string
+              format: date-time
+          required: [robloxUserId, robloxUsername, connectedAt]
+      required: [configured, connected, connection]
+
+    RobloxLoginUrl:
+      type: object
+      properties:
+        authorizeUrl:
+          type: string
+      required: [authorizeUrl]
+
+    RobloxCallbackResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        connected:
+          type: boolean
+      required: [success, connected]
+
+    RobloxUploadStatus:
+      type: string
+      enum: [queued, processing, completed, failed, blocked]
+
+    RobloxUploadEvent:
+      type: object
+      properties:
+        id: { type: string }
+        uploadJobId: { type: string }
+        status:
+          $ref: "#/components/schemas/RobloxUploadStatus"
+        message: { type: string }
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, uploadJobId, status, message, createdAt]
+
+    CreateRobloxUploadRequest:
+      type: object
+      properties:
+        projectId:
+          type: string
+      required: [projectId]
+
+    RobloxUploadJob:
+      type: object
+      properties:
+        uploadJobId:
+          type: string
+        projectId:
+          type: string
+        status:
+          $ref: "#/components/schemas/RobloxUploadStatus"
+        events:
+          type: array
+          items:
+            $ref: "#/components/schemas/RobloxUploadEvent"
+      required: [uploadJobId, projectId, status, events]
 
     CreateShareRequest:
       type: object

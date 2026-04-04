@@ -12,8 +12,11 @@ import {
 } from "@workspace/db";
 import { randomUUID } from "crypto";
 import { z } from "zod";
+import { normalizeCheckoutCompleted, normalizeInvoice, normalizeSubscriptionUpdate } from "../lib/billing-lifecycle";
 
 const router: IRouter = Router();
+
+type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
 const stripeSecret = process.env.STRIPE_SECRET_KEY;
 const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
@@ -88,7 +91,11 @@ router.post("/payments/webhook", async (req, res): Promise<void> => {
 
   let event: Stripe.Event;
   try {
-    const payload = Buffer.isBuffer(req.body) ? req.body : Buffer.from(req.body);
+    const payload = Buffer.isBuffer(req.body)
+      ? req.body
+      : typeof req.body === "string"
+        ? Buffer.from(req.body)
+        : Buffer.from(JSON.stringify(req.body ?? {}));
     event = stripe.webhooks.constructEvent(payload, signature, webhookSecret);
   } catch (error) {
     req.log.warn({ err: error }, "invalid stripe webhook signature");
@@ -98,32 +105,29 @@ router.post("/payments/webhook", async (req, res): Promise<void> => {
 
   try {
     if (event.type === "checkout.session.completed") {
-      const session = event.data.object as Stripe.Checkout.Session;
-      const userId = session.metadata?.userId ?? session.client_reference_id;
-      const plan = session.metadata?.plan ?? "pro";
-      const providerSubscriptionId = typeof session.subscription === "string" ? session.subscription : null;
+      const normalized = normalizeCheckoutCompleted(event.data.object as Stripe.Checkout.Session);
 
-      if (userId && providerSubscriptionId) {
-        await db.transaction(async (tx: any) => {
+      if (normalized.userId && normalized.providerSubscriptionId) {
+        await db.transaction(async (tx: DbTransaction) => {
           const [existing] = await tx
             .select({ id: billingSubscriptionsTable.id })
             .from(billingSubscriptionsTable)
-            .where(eq(billingSubscriptionsTable.providerSubscriptionId, providerSubscriptionId))
+            .where(eq(billingSubscriptionsTable.providerSubscriptionId, normalized.providerSubscriptionId))
             .limit(1);
 
           if (existing) return;
 
           await tx.insert(billingSubscriptionsTable).values({
             id: randomUUID(),
-            userId,
-            providerSubscriptionId,
+            userId: normalized.userId,
+            providerSubscriptionId: normalized.providerSubscriptionId,
             status: "active",
           });
 
           await tx.insert(entitlementsTable).values({
             id: randomUUID(),
-            userId,
-            key: `plan:${plan}`,
+            userId: normalized.userId,
+            key: `plan:${normalized.plan}`,
             source: "stripe_subscription",
             status: "active",
           });
@@ -132,58 +136,56 @@ router.post("/payments/webhook", async (req, res): Promise<void> => {
     }
 
     if (event.type === "customer.subscription.updated" || event.type === "customer.subscription.deleted") {
-      const sub = event.data.object as Stripe.Subscription;
+      const normalized = normalizeSubscriptionUpdate(event.data.object as Stripe.Subscription);
       await db
         .update(billingSubscriptionsTable)
         .set({
-          status: sub.status,
-          currentPeriodEnd: (sub as any).current_period_end ? new Date((sub as any).current_period_end * 1000) : null,
+          status: normalized.status,
+          currentPeriodEnd: normalized.currentPeriodEnd,
         })
-        .where(eq(billingSubscriptionsTable.providerSubscriptionId, sub.id));
+        .where(eq(billingSubscriptionsTable.providerSubscriptionId, normalized.id));
     }
 
     if (event.type === "invoice.paid" || event.type === "invoice.payment_failed") {
-      const invoice = event.data.object as Stripe.Invoice;
-      const providerInvoiceId = invoice.id;
-      const providerSubscriptionId = typeof (invoice as any).subscription === "string" ? (invoice as any).subscription : null;
+      const normalized = normalizeInvoice(event.data.object as Stripe.Invoice);
 
-      await db.transaction(async (tx: any) => {
+      await db.transaction(async (tx: DbTransaction) => {
         const [existing] = await tx
           .select({ id: billingInvoicesTable.id })
           .from(billingInvoicesTable)
-          .where(eq(billingInvoicesTable.providerInvoiceId, providerInvoiceId))
+          .where(eq(billingInvoicesTable.providerInvoiceId, normalized.id))
           .limit(1);
 
         if (!existing) {
-          const [sub] = providerSubscriptionId
+          const [sub] = normalized.providerSubscriptionId
             ? await tx
                 .select({ id: billingSubscriptionsTable.id })
                 .from(billingSubscriptionsTable)
-                .where(eq(billingSubscriptionsTable.providerSubscriptionId, providerSubscriptionId))
+                .where(eq(billingSubscriptionsTable.providerSubscriptionId, normalized.providerSubscriptionId))
                 .limit(1)
             : [];
 
           await tx.insert(billingInvoicesTable).values({
             id: randomUUID(),
             subscriptionId: sub?.id ?? null,
-            providerInvoiceId,
-            status: invoice.status ?? "open",
-            amountPaid: invoice.amount_paid ?? 0,
+            providerInvoiceId: normalized.id,
+            status: normalized.status,
+            amountPaid: normalized.amountPaid,
           });
         }
 
-        if (event.type === "invoice.paid" && providerSubscriptionId) {
+        if (event.type === "invoice.paid" && normalized.providerSubscriptionId) {
           const [sub] = await tx
             .select()
             .from(billingSubscriptionsTable)
-            .where(eq(billingSubscriptionsTable.providerSubscriptionId, providerSubscriptionId))
+            .where(eq(billingSubscriptionsTable.providerSubscriptionId, normalized.providerSubscriptionId))
             .limit(1);
 
           if (sub) {
             const [existingCreditTxn] = await tx
               .select({ id: creditTransactionsTable.id })
               .from(creditTransactionsTable)
-              .where(and(eq(creditTransactionsTable.userId, sub.userId), eq(creditTransactionsTable.stripeSessionId, providerInvoiceId)))
+              .where(and(eq(creditTransactionsTable.userId, sub.userId), eq(creditTransactionsTable.stripeSessionId, normalized.id)))
               .limit(1);
 
             if (!existingCreditTxn) {
@@ -191,8 +193,8 @@ router.post("/payments/webhook", async (req, res): Promise<void> => {
                 userId: sub.userId,
                 type: "purchase",
                 credits: 10,
-                amountNok: Math.round((invoice.amount_paid ?? 0) / 100),
-                stripeSessionId: providerInvoiceId,
+                amountNok: Math.round(normalized.amountPaid / 100),
+                stripeSessionId: normalized.id,
                 uploadId: null,
               });
             }
