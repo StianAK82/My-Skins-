@@ -10,6 +10,7 @@ import exportsRouter from "./exports";
 import robloxRouter from "./roblox";
 import shareRouter from "./share";
 import paymentsRouter from "./payments";
+import billingRouter from "./billing";
 
 const router: IRouter = Router();
 
@@ -24,5 +25,6 @@ router.use(exportsRouter);
 router.use(robloxRouter);
 router.use(shareRouter);
 router.use(paymentsRouter);
+router.use(billingRouter);
 
 export default router;

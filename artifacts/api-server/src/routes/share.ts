@@ -1,9 +1,16 @@
 import { Router, type IRouter } from "express";
-import { db, shareLinksTable, projectsTable, usersTable } from "@workspace/db";
+import { db, shareLinksTable, projectsTable, userProfilesTable, usersTable } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
 import { randomUUID } from "crypto";
+import { z } from "zod";
+import { resolveCreatorIdentity } from "../lib/lifecycle";
 
 const router: IRouter = Router();
+
+const createShareSchema = z.object({
+  projectId: z.string().min(1),
+  isPublic: z.boolean().optional(),
+});
 
 router.post("/share", async (req, res): Promise<void> => {
   if (!req.isAuthenticated()) {
@@ -11,11 +18,13 @@ router.post("/share", async (req, res): Promise<void> => {
     return;
   }
 
-  const { projectId, isPublic } = req.body;
-  if (!projectId) {
-    res.status(400).json({ error: "projectId is required" });
+  const parsed = createShareSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Invalid share request", details: parsed.error.flatten() });
     return;
   }
+
+  const { projectId, isPublic } = parsed.data;
 
   const [project] = await db
     .select()
@@ -60,15 +69,14 @@ router.get("/share/:token", async (req, res): Promise<void> => {
     return;
   }
 
-  if (!shareLink.isPublic) {
-    if (!req.isAuthenticated() || req.user.id !== shareLink.userId) {
-      res.status(404).json({ error: "Share link not found" });
-      return;
-    }
+  if (!shareLink.isPublic && (!req.isAuthenticated() || req.user.id !== shareLink.userId)) {
+    res.status(404).json({ error: "Share link not found" });
+    return;
   }
 
   const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, shareLink.projectId));
   const [author] = await db.select().from(usersTable).where(eq(usersTable.id, shareLink.userId));
+  const [authorProfile] = await db.select().from(userProfilesTable).where(eq(userProfilesTable.userId, shareLink.userId));
 
   if (!project) {
     res.status(404).json({ error: "Project not found" });
@@ -77,10 +85,13 @@ router.get("/share/:token", async (req, res): Promise<void> => {
 
   res.json({
     project,
-    author: {
-      displayName: author?.displayName ?? "Creator",
-      username: author?.username ?? null,
-    },
+    author: resolveCreatorIdentity({
+      profileDisplayName: authorProfile?.displayName,
+      userFirstName: author?.firstName,
+      userDisplayName: author?.displayName,
+      profileUsername: authorProfile?.username,
+      userEmail: author?.email,
+    }),
   });
 });
 
