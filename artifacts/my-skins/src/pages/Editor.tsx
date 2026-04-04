@@ -12,7 +12,7 @@ import { AiPanel } from "@/components/editor/AiPanel";
 import { AvatarPreview } from "@/components/editor/AvatarPreview";
 import {
   Save, Download, ArrowLeft, Image as ImageIcon, Type, Square, Circle,
-  PenTool, Trash2, ZoomIn, ZoomOut, Layers, Sparkles, ChevronDown, X, Copy, Lock, Unlock, MoveUp, MoveDown, Grid3X3, Group, Ungroup
+  PenTool, Trash2, ZoomIn, ZoomOut, Layers, Sparkles, ChevronDown, X, Copy, Lock, Unlock, MoveUp, MoveDown, Grid3X3, Group, Ungroup, User, Shirt, LayoutTemplate, Wand2
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { normalizeAiResponse, type NormalizedAiResponse } from "@/lib/ai/normalize-ai-response";
@@ -247,7 +247,7 @@ export default function Editor() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fabricRef = useRef<fabric.Canvas | null>(null);
 
-  const [activeTab, setActiveTab] = useState("tools");
+  const [creatorMode, setCreatorMode] = useState<"ai" | "manual" | "template" | "remix">("ai");
   const [selectedObject, setSelectedObject] = useState<fabric.Object | null>(null);
   const [drawingMode, setDrawingMode] = useState(false);
   const [fillColor, setFillColor] = useState("#3b82f6");
@@ -267,6 +267,7 @@ export default function Editor() {
   const [selectedStylePreset, setSelectedStylePreset] = useState<StylePreset>("streetwear");
   const [snapEnabled, setSnapEnabled] = useState(true);
   const [draggingModuleId, setDraggingModuleId] = useState<string | null>(null);
+  const [previewFacing, setPreviewFacing] = useState<"front" | "back">("front");
 
   const { data: project, isLoading } = useGetProject(id);
   const { data: me, refetch: refetchMe } = useGetMe();
@@ -854,7 +855,12 @@ export default function Editor() {
           bodyType: parsed.avatar.bodyType ?? "regular",
         });
       }
-      if (parsed.creationMode) setCreationMode(parsed.creationMode);
+      if (parsed.creationMode) {
+        setCreationMode(parsed.creationMode);
+        if (["ai", "manual", "template", "remix"].includes(parsed.creationMode)) {
+          setCreatorMode(parsed.creationMode as "ai" | "manual" | "template" | "remix");
+        }
+      }
       if (isStylePreset(parsed.stylePreset)) {
         setSelectedStylePreset(parsed.stylePreset);
       }
@@ -952,214 +958,166 @@ export default function Editor() {
       </AnimatePresence>
 
       {/* Main workspace */}
-      <div className="flex flex-1 overflow-hidden">
-        {/* Left Sidebar */}
-        <aside className="w-64 border-r border-border bg-card flex flex-col overflow-hidden">
-          <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-col h-full">
-            <TabsList className="w-full justify-start rounded-none border-b border-border h-10 bg-transparent p-0 shrink-0">
-              <TabsTrigger value="tools" className="flex-1 rounded-none text-xs data-[state=active]:border-b-2 data-[state=active]:border-primary h-full">
-                {t("editor.tools")}
-              </TabsTrigger>
-              <TabsTrigger value="modules" className="flex-1 rounded-none text-xs data-[state=active]:border-b-2 data-[state=active]:border-primary h-full">
-                Builder
-              </TabsTrigger>
-              <TabsTrigger value="ai" className="flex-1 rounded-none text-xs data-[state=active]:border-b-2 data-[state=active]:border-primary h-full">
-                ✨ AI
-              </TabsTrigger>
+      <div className="grid flex-1 overflow-hidden xl:grid-cols-[280px_minmax(0,1fr)_340px] lg:grid-cols-[250px_minmax(0,1fr)]">
+        <aside className="border-r border-border bg-card overflow-y-auto p-4 space-y-4">
+          <div>
+            <h3 className="font-semibold text-sm flex items-center gap-2"><User className="w-4 h-4" /> Build Controls</h3>
+            <p className="text-xs text-muted-foreground mt-1">Pick who you are designing for and what garment you are building.</p>
+          </div>
+          <div className="space-y-2">
+            <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Avatar selection</p>
+            <div className="grid grid-cols-2 gap-2">
+              {["neutral", "feminine", "masculine", "stylized"].map((type) => (
+                <Button key={type} size="sm" variant={avatarProfile.avatarType === type ? "default" : "outline"} className="text-[11px]" onClick={() => setAvatarProfile((p) => ({ ...p, avatarType: type }))}>
+                  {type}
+                </Button>
+              ))}
+            </div>
+          </div>
+          <div className="space-y-2">
+            <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Body type</p>
+            <div className="grid grid-cols-3 gap-2">
+              {["regular", "slim", "athletic"].map((type) => (
+                <Button key={type} size="sm" variant={avatarProfile.bodyType === type ? "default" : "outline"} className="text-[11px]" onClick={() => setAvatarProfile((p) => ({ ...p, bodyType: type }))}>
+                  {type}
+                </Button>
+              ))}
+            </div>
+          </div>
+          <div className="space-y-2">
+            <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Item type</p>
+            <div className="flex gap-2">
+              <Button size="sm" variant="outline" className="text-xs">{project?.type ?? "shirt"}</Button>
+            </div>
+          </div>
+          <div className="space-y-2">
+            <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Style presets</p>
+            <div className="grid grid-cols-2 gap-2">
+              {STYLE_PRESET_VALUES.map((preset) => (
+                <Button key={preset} size="sm" variant={selectedStylePreset === preset ? "default" : "outline"} className="h-8 text-[11px] capitalize" onClick={() => setSelectedStylePreset(preset)}>
+                  {preset}
+                </Button>
+              ))}
+            </div>
+          </div>
+          <div className="space-y-2">
+            <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Module categories</p>
+            <div className="flex flex-wrap gap-1">
+              {Array.from(new Set(MODULE_LIBRARY.map((m) => m.category))).map((category) => (
+                <button key={category} onClick={() => setActiveModuleCategory(category)} className={`px-2 py-1 text-[10px] rounded border ${activeModuleCategory === category ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground"}`}>
+                  {category}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="space-y-2">
+            <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Template zones</p>
+            <div className="rounded-md border border-border bg-muted/20 p-2 text-xs text-muted-foreground space-y-1">
+              {Object.values(TEMPLATE_ZONES[(project?.type as "shirt" | "pants") ?? "shirt"]).map((zone) => (
+                <div key={zone.label} className="flex items-center justify-between"><span>{zone.label}</span><span>{zone.width}×{zone.height}</span></div>
+              ))}
+            </div>
+          </div>
+        </aside>
+
+        <main className="bg-[#0f172a] relative overflow-auto p-4 lg:p-6">
+          <div className="max-w-5xl mx-auto space-y-4">
+            <div className="rounded-xl border border-white/10 bg-black/20 p-3 text-xs text-slate-200 flex items-center justify-between">
+              <span>Live Avatar Preview · your clothing updates render here instantly.</span>
+              <div className="flex items-center gap-2">
+                <Button size="sm" variant={previewFacing === "front" ? "secondary" : "outline"} onClick={() => setPreviewFacing("front")}>Front</Button>
+                <Button size="sm" variant={previewFacing === "back" ? "secondary" : "outline"} onClick={() => setPreviewFacing("back")}>Back</Button>
+              </div>
+            </div>
+            {avatarTextureUrl ? (
+              <AvatarPreview
+                textureUrl={avatarTextureUrl}
+                avatarType={avatarProfile.avatarType}
+                bodyType={avatarProfile.bodyType}
+                view={previewFacing}
+                onViewChange={setPreviewFacing}
+                className="border-primary/20 shadow-2xl"
+              />
+            ) : (
+              <div className="h-[520px] rounded-xl border border-dashed border-white/20 bg-black/30 flex items-center justify-center text-center text-slate-300 px-6">
+                Start designing to see your clothing previewed on the avatar in real time.
+              </div>
+            )}
+            <div className="rounded-xl border border-white/10 bg-card p-4">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-semibold flex items-center gap-2"><Shirt className="w-4 h-4" /> Design Surface</h3>
+                <div className="flex gap-1.5">
+                  <Button variant="ghost" size="icon" onClick={zoomOut}><ZoomOut className="w-4 h-4" /></Button>
+                  <Button variant="ghost" size="icon" onClick={zoomIn}><ZoomIn className="w-4 h-4" /></Button>
+                </div>
+              </div>
+              <div className="flex items-center justify-center overflow-auto">
+                <canvas
+                  ref={canvasRef}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    if (!draggingModuleId || !fabricRef.current) return;
+                    const module = MODULE_LIBRARY.find((m) => m.id === draggingModuleId);
+                    if (!module) return;
+                    const rect = (e.target as HTMLCanvasElement).getBoundingClientRect();
+                    addModuleAt(module, e.clientX - rect.left, e.clientY - rect.top);
+                    setDraggingModuleId(null);
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+        </main>
+
+        <aside className="border-t xl:border-t-0 xl:border-l border-border bg-card p-3 overflow-y-auto shrink-0 lg:col-span-2 xl:col-span-1">
+          <Tabs value={creatorMode} onValueChange={(value) => { const mode = value as "ai" | "manual" | "template" | "remix"; setCreatorMode(mode); setCreationMode(mode); }} className="space-y-3">
+            <TabsList className="grid grid-cols-2 h-auto gap-1 bg-muted/40 p-1">
+              <TabsTrigger value="ai" className="text-xs"><Sparkles className="w-3 h-3 mr-1" /> AI Design</TabsTrigger>
+              <TabsTrigger value="manual" className="text-xs"><PenTool className="w-3 h-3 mr-1" /> Build Manually</TabsTrigger>
+              <TabsTrigger value="template" className="text-xs"><LayoutTemplate className="w-3 h-3 mr-1" /> Start Template</TabsTrigger>
+              <TabsTrigger value="remix" className="text-xs"><Wand2 className="w-3 h-3 mr-1" /> Remix</TabsTrigger>
             </TabsList>
-
-            <div className="flex-1 overflow-y-auto">
-              {/* Tools Tab */}
-              <TabsContent value="tools" className="m-0 p-3 space-y-4">
-                <div>
-                  <p className="text-[10px] text-muted-foreground mb-2 uppercase tracking-wide">
-                    {language === "no" ? "Legg til" : "Add Elements"}
-                  </p>
-                  <div className="grid grid-cols-2 gap-1.5">
-                    <Button variant="outline" className="flex-col h-16 gap-1.5 text-xs" onClick={addText}>
-                      <Type className="w-5 h-5" /> {language === "no" ? "Tekst" : "Text"}
-                    </Button>
-                    <Button variant="outline" className="flex-col h-16 gap-1.5 text-xs" onClick={addRect}>
-                      <Square className="w-5 h-5" /> {language === "no" ? "Firkant" : "Rectangle"}
-                    </Button>
-                    <Button variant="outline" className="flex-col h-16 gap-1.5 text-xs" onClick={addCircle}>
-                      <Circle className="w-5 h-5" /> {language === "no" ? "Sirkel" : "Circle"}
-                    </Button>
-                    <Button
-                      variant={drawingMode ? "default" : "outline"}
-                      className="flex-col h-16 gap-1.5 text-xs"
-                      onClick={() => setDrawingMode(p => !p)}
-                    >
-                      <PenTool className="w-5 h-5" />
-                      {drawingMode ? (language === "no" ? "Stopp" : "Stop") : (language === "no" ? "Tegn" : "Draw")}
-                    </Button>
-                  </div>
-                  <label className="mt-1.5 flex flex-col items-center gap-1.5 h-14 border border-dashed border-border rounded-md cursor-pointer hover:border-primary/50 hover:bg-muted/30 transition-colors text-xs text-muted-foreground justify-center">
-                    <ImageIcon className="w-4 h-4" />
-                    {language === "no" ? "Last opp bilde" : "Upload Image"}
-                    <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
-                  </label>
-                </div>
-
-                {/* Colors */}
-                <div>
-                  <p className="text-[10px] text-muted-foreground mb-2 uppercase tracking-wide">
-                    {language === "no" ? "Farger" : "Colors"}
-                  </p>
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2">
-                      <label className="text-xs text-muted-foreground w-12">
-                        {language === "no" ? "Fyll" : "Fill"}
-                      </label>
-                      <input
-                        type="color" value={fillColor}
-                        onChange={e => {
-                          setFillColor(e.target.value);
-                          if (selectedObject) { selectedObject.set("fill", e.target.value); fabricRef.current?.renderAll(); }
-                        }}
-                        className="w-8 h-8 rounded cursor-pointer border border-border bg-transparent"
-                      />
-                      <span className="text-xs font-mono text-muted-foreground">{fillColor}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <label className="text-xs text-muted-foreground w-12">
-                        {language === "no" ? "Kant" : "Stroke"}
-                      </label>
-                      <input
-                        type="color" value={strokeColor}
-                        onChange={e => {
-                          setStrokeColor(e.target.value);
-                          if (selectedObject) { selectedObject.set("stroke", e.target.value); fabricRef.current?.renderAll(); }
-                          if (drawingMode && fabricRef.current?.freeDrawingBrush) fabricRef.current.freeDrawingBrush.color = e.target.value;
-                        }}
-                        className="w-8 h-8 rounded cursor-pointer border border-border bg-transparent"
-                      />
-                      <span className="text-xs font-mono text-muted-foreground">{strokeColor}</span>
-                    </div>
-                    {drawingMode && (
-                      <div className="flex items-center gap-2">
-                        <label className="text-xs text-muted-foreground w-12">
-                          {language === "no" ? "Pensel" : "Brush"}
-                        </label>
-                        <input
-                          type="range" min={1} max={50} value={brushSize}
-                          onChange={e => {
-                            const s = parseInt(e.target.value);
-                            setBrushSize(s);
-                            if (fabricRef.current?.freeDrawingBrush) fabricRef.current.freeDrawingBrush.width = s;
-                          }}
-                          className="flex-1"
-                        />
-                        <span className="text-xs text-muted-foreground w-10">{brushSize}px</span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Canvas background */}
-                <div>
-                  <p className="text-[10px] text-muted-foreground mb-2 uppercase tracking-wide">
-                    {language === "no" ? "Bakgrunn" : "Background"}
-                  </p>
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="color"
-                      defaultValue="#ffffff"
-                      onChange={e => {
-                        if (fabricRef.current) {
-                          fabricRef.current.backgroundColor = e.target.value;
-                          fabricRef.current.renderAll();
-                        }
-                      }}
-                      className="w-8 h-8 rounded cursor-pointer border border-border bg-transparent"
-                    />
-                    <span className="text-xs text-muted-foreground">
-                      {language === "no" ? "Lerretfarge" : "Canvas color"}
-                    </span>
-                  </div>
-                </div>
-              </TabsContent>
-
-              <TabsContent value="modules" className="m-0 p-3 space-y-3">
-                <div>
-                  <p className="text-[10px] text-muted-foreground mb-2 uppercase tracking-wide">Categories</p>
-                  <div className="flex flex-wrap gap-1">
-                    {Array.from(new Set(MODULE_LIBRARY.map((m) => m.category))).map((category) => (
-                      <button
-                        key={category}
-                        onClick={() => setActiveModuleCategory(category)}
-                        className={`px-2 py-1 text-[10px] rounded border ${activeModuleCategory === category ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground"}`}
-                      >
-                        {category}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <div>
-                  <p className="text-[10px] text-muted-foreground mb-2 uppercase tracking-wide">Style</p>
-                  <div className="grid grid-cols-2 gap-1">
-                    {(["streetwear", "anime", "sport", "cyberpunk", "minimal"] as const).map((preset) => (
-                      <Button
-                        key={preset}
-                        size="sm"
-                        variant={selectedStylePreset === preset ? "default" : "outline"}
-                        className="h-7 text-[10px] capitalize"
-                        onClick={() => setSelectedStylePreset(preset)}
-                      >
-                        {preset}
-                      </Button>
-                    ))}
-                  </div>
-                </div>
+            <TabsContent value="ai" className="m-0">
+              <AiPanel projectType={(project?.type as "shirt" | "pants") ?? "shirt"} onUseColors={handleUseColors} onApplyAssets={applyAiOutfitToCanvas} />
+            </TabsContent>
+            <TabsContent value="manual" className="m-0 space-y-3">
+              <h3 className="font-semibold text-sm flex items-center gap-2"><Layers className="w-4 h-4" /> Manual Builder</h3>
+              <div className="grid grid-cols-2 gap-1.5">
+                <Button variant="outline" className="flex-col h-14 gap-1 text-xs" onClick={addText}><Type className="w-4 h-4" />Text</Button>
+                <Button variant="outline" className="flex-col h-14 gap-1 text-xs" onClick={addRect}><Square className="w-4 h-4" />Rect</Button>
+                <Button variant="outline" className="flex-col h-14 gap-1 text-xs" onClick={addCircle}><Circle className="w-4 h-4" />Circle</Button>
+                <Button variant={drawingMode ? "default" : "outline"} className="flex-col h-14 gap-1 text-xs" onClick={() => setDrawingMode((p) => !p)}><PenTool className="w-4 h-4" />Draw</Button>
+              </div>
+              <label className="flex flex-col items-center gap-1.5 h-14 border border-dashed border-border rounded-md cursor-pointer hover:border-primary/50 text-xs text-muted-foreground justify-center">
+                <ImageIcon className="w-4 h-4" /> Upload Image
+                <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
+              </label>
+              <div className="space-y-2">
+                <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Module library</p>
                 <div className="grid grid-cols-2 gap-2">
                   {MODULE_LIBRARY.filter((module) => module.category === activeModuleCategory).map((module) => (
-                    <button
-                      key={module.id}
-                      onClick={() => addModule(module)}
-                      draggable
-                      onDragStart={() => setDraggingModuleId(module.id)}
-                      className="border rounded-md p-2 text-left hover:border-primary/60 transition-colors"
-                    >
+                    <button key={module.id} onClick={() => addModule(module)} draggable onDragStart={() => setDraggingModuleId(module.id)} className="border rounded-md p-2 text-left hover:border-primary/60 transition-colors">
                       <div className="w-full h-8 rounded mb-1" style={{ backgroundColor: module.color, opacity: 0.85 }} />
                       <p className="text-xs font-medium leading-tight">{module.name}</p>
                     </button>
                   ))}
                 </div>
-              </TabsContent>
-
-              {/* AI Tab */}
-              <TabsContent value="ai" className="m-0">
-                <AiPanel
-                  projectType={(project?.type as "shirt" | "pants") ?? "shirt"}
-                  onUseColors={handleUseColors}
-                  onApplyAssets={applyAiOutfitToCanvas}
-                />
-              </TabsContent>
-            </div>
+              </div>
+            </TabsContent>
+            <TabsContent value="template" className="m-0 space-y-3">
+              <h3 className="font-semibold text-sm flex items-center gap-2"><LayoutTemplate className="w-4 h-4" /> Template Loader</h3>
+              <p className="text-xs text-muted-foreground">Load zone guides and starter layout for fast composition.</p>
+              <Button className="w-full" onClick={() => addTemplateGuideLayer()}>Reload Template Zones</Button>
+              <Button variant="outline" className="w-full" onClick={() => ensureVisibleStarterDesign(selectedStylePreset)}>Apply Starter Design</Button>
+            </TabsContent>
+            <TabsContent value="remix" className="m-0 space-y-3">
+              <h3 className="font-semibold text-sm flex items-center gap-2"><Wand2 className="w-4 h-4" /> Remix Existing</h3>
+              <p className="text-xs text-muted-foreground">Select a source from current canvas + AI concept and iterate quickly.</p>
+              <Button className="w-full" variant="outline" onClick={() => setCreatorMode("ai")}>Open AI Remix Tools</Button>
+            </TabsContent>
           </Tabs>
-        </aside>
 
-        {/* Canvas */}
-        <main className="flex-1 bg-[#1a1a2e] relative flex items-center justify-center overflow-auto p-8">
-          <div className="shadow-2xl relative">
-            <canvas
-              ref={canvasRef}
-              onDragOver={(e) => e.preventDefault()}
-              onDrop={(e) => {
-                e.preventDefault();
-                if (!draggingModuleId || !fabricRef.current) return;
-                const module = MODULE_LIBRARY.find((m) => m.id === draggingModuleId);
-                if (!module) return;
-                const rect = (e.target as HTMLCanvasElement).getBoundingClientRect();
-                addModuleAt(module, e.clientX - rect.left, e.clientY - rect.top);
-                setDraggingModuleId(null);
-              }}
-            />
-          </div>
-        </main>
-
-        {/* Right Properties */}
-        <aside className="w-52 border-l border-border bg-card p-3 overflow-y-auto shrink-0">
           <h3 className="font-semibold text-sm mb-3 flex items-center gap-2">
             <Layers className="w-4 h-4" />
             {t("editor.properties")}
