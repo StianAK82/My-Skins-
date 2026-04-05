@@ -293,7 +293,6 @@ export default function Editor() {
   const [isUploading, setIsUploading] = useState(false);
   const [creationMode, setCreationMode] = useState("ai");
   const [dimension, setDimension] = useState<ClothingDimension>("2d");
-  const [classicItemType, setClassicItemType] = useState<"shirt" | "pants">("shirt");
   const [garmentType3d, setGarmentType3d] = useState<"hoodie">("hoodie");
   const [garmentColor, setGarmentColor] = useState("#2563eb");
   const [garmentMaterial, setGarmentMaterial] = useState<GarmentMaterial>("cotton");
@@ -310,14 +309,7 @@ export default function Editor() {
   const { data: me, refetch: refetchMe } = useGetMe();
   const saveCanvas = useSaveCanvas();
   const createExport = useCreateExport();
-  const activeClassicType = classicItemType ?? ((project?.type as "shirt" | "pants") ?? "shirt");
-
-  useEffect(() => {
-    if (!project?.type) return;
-    if (project.type === "shirt" || project.type === "pants") {
-      setClassicItemType(project.type);
-    }
-  }, [project?.type]);
+  const activeClassicType = (project?.type === "pants" ? "pants" : "shirt") as "shirt" | "pants";
 
   useEffect(() => {
     const next = getEnabledZones(activeClassicType)[0];
@@ -623,6 +615,14 @@ export default function Editor() {
 
   const handleExport = async () => {
     if (!fabricRef.current) return;
+    if (dimension === "3d") {
+      toast({
+        title: "3D export is not yet supported",
+        description: "Switch back to Classic 2D mode to export your Roblox template texture.",
+        variant: "destructive",
+      });
+      return;
+    }
     try {
       const canvasJSON = fabricRef.current.toJSON();
       if (aiConcept) (canvasJSON as Record<string, unknown>).__aiConcept = aiConcept;
@@ -666,6 +666,14 @@ export default function Editor() {
 
   const handleUploadToRoblox = async () => {
     if (!id) return;
+    if (dimension === "3d") {
+      toast({
+        title: "3D upload is not supported",
+        description: "Switch back to Classic 2D mode before uploading to Roblox.",
+        variant: "destructive",
+      });
+      return;
+    }
     if (credits < 1) {
       setPaymentOpen(true);
       return;
@@ -967,6 +975,17 @@ export default function Editor() {
   const applyAiOutfitToCanvas = useCallback(async (result: NormalizedAiResponse) => {
     if (!fabricRef.current) return false;
     const canvas = fabricRef.current;
+    const expectedItemType = activeClassicType === "shirt" ? "classic_shirt" : "classic_pants";
+    if (result.result.itemType !== expectedItemType) {
+      toast({
+        title: language === "no" ? "Feil klesmål fra AI" : "AI target mismatch",
+        description: language === "no"
+          ? "AI-resultatet matcher ikke prosjekttypen. Generer på nytt for riktig klassisk type."
+          : "AI output does not match this project type. Regenerate for the matching classic type.",
+        variant: "destructive",
+      });
+      return false;
+    }
 
     setDrawingMode(false);
     try {
@@ -995,7 +1014,7 @@ export default function Editor() {
           angle: module.rotation,
           selectable: true,
           evented: true,
-          data: { role: "ai-generated", moduleId: module.id, layerName: module.label },
+          data: { role: "ai-generated", moduleId: module.id, layerName: module.label, zone: activeZone },
         });
         canvas.add(shape);
       }
@@ -1023,7 +1042,17 @@ export default function Editor() {
       addTemplateGuideLayer();
       return false;
     }
-  }, [addTemplateGuideLayer, handleUseColors, language, toast]);
+  }, [activeClassicType, activeZone, addTemplateGuideLayer, handleUseColors, language, toast]);
+
+  const handleDimensionChange = useCallback((next: ClothingDimension) => {
+    setDimension(next);
+    if (next === "3d") {
+      toast({
+        title: "3D mode is preview-only",
+        description: "AI generation, Roblox upload, and export stay in Classic 2D for now.",
+      });
+    }
+  }, [toast]);
 
   useEffect(() => {
     if (!project?.id || !fabricRef.current) return;
@@ -1132,13 +1161,13 @@ export default function Editor() {
         {/* Center: 2D / 3D mode toggle */}
         <div className="flex items-center bg-white/5 rounded-lg p-0.5 border border-white/10 shrink-0">
           <button
-            onClick={() => setDimension("2d")}
+            onClick={() => handleDimensionChange("2d")}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${dimension === "2d" ? "bg-indigo-600 text-white shadow" : "text-white/50 hover:text-white"}`}
           >
             <Shirt className="w-3.5 h-3.5" /> Classic 2D
           </button>
           <button
-            onClick={() => setDimension("3d")}
+            onClick={() => handleDimensionChange("3d")}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${dimension === "3d" ? "bg-indigo-600 text-white shadow" : "text-white/50 hover:text-white"}`}
           >
             <Boxes className="w-3.5 h-3.5" /> 3D Clothing
@@ -1147,7 +1176,16 @@ export default function Editor() {
 
         <div className="flex items-center gap-1.5 shrink-0">
           <button
-            onClick={() => setTextureEditorOpen(true)}
+            onClick={() => {
+              if (dimension === "3d") {
+                toast({
+                  title: "Texture editor is Classic 2D only",
+                  description: "Switch to Classic 2D to edit atlas zones.",
+                });
+                return;
+              }
+              setTextureEditorOpen(true);
+            }}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-white/10 hover:bg-white/15 border border-white/10 transition-colors"
           >
             <PenTool className="w-3.5 h-3.5" /> Edit Texture
@@ -1222,8 +1260,8 @@ export default function Editor() {
                   ].map((item) => (
                     <button
                       key={item.id}
-                      onClick={() => setClassicItemType(item.id as "shirt" | "pants")}
-                      className={`text-[11px] py-2 rounded-md border transition-all ${activeClassicType === item.id ? "bg-indigo-600/80 border-indigo-500 text-white" : "border-white/10 text-white/50 hover:text-white hover:border-white/20"}`}
+                      disabled
+                      className={`text-[11px] py-2 rounded-md border transition-all ${activeClassicType === item.id ? "bg-indigo-600/80 border-indigo-500 text-white" : "border-white/10 text-white/35"}`}
                     >
                       {item.label}
                     </button>
@@ -1336,7 +1374,7 @@ export default function Editor() {
             <AiPanel
               projectType={activeClassicType}
               dimension={dimension}
-              onDimensionChange={setDimension}
+              onDimensionChange={handleDimensionChange}
               onUseColors={handleUseColors}
               onApplyAssets={applyAiOutfitToCanvas}
             />

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Sparkles, Loader2, Wand2, RefreshCcw, Check, AlertTriangle, Boxes, Shirt } from "lucide-react";
 import { aiGenerateDesign, aiImproveDesign, aiRemixDesign, type AiDesign } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
@@ -26,13 +26,20 @@ export function AiPanel({ projectType, dimension, onDimensionChange, onUseColors
   const [prompt, setPrompt] = useState("");
   const [remixInstruction, setRemixInstruction] = useState("");
   const [selectedStyle, setSelectedStyle] = useState<(typeof STYLE_PRESETS)[number] | "">("");
-  const [selectedTarget, setSelectedTarget] = useState<EditorTarget>(projectType);
   const [current, setCurrent] = useState<NormalizedAiResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const palette = useMemo(() => current?.result.colorPalette ?? [], [current]);
-  const itemType = selectedTarget === "shirt" ? "classic_shirt" : "classic_pants";
+  const itemType = projectType === "shirt" ? "classic_shirt" : "classic_pants";
+
+  useEffect(() => {
+    setCurrent((prev) => {
+      if (!prev) return prev;
+      const nextItemType = projectType === "shirt" ? "classic_shirt" : "classic_pants";
+      return prev.result.itemType === nextItemType ? prev : null;
+    });
+  }, [projectType]);
 
   const runAction = async (mode: "generate" | "improve" | "remix") => {
     if (loading) return;
@@ -85,12 +92,8 @@ export function AiPanel({ projectType, dimension, onDimensionChange, onUseColors
       </div>
 
       {dimension === "2d" ? (
-        <div className="grid grid-cols-2 gap-1">
-          {(["shirt", "pants"] as const).map((t) => (
-            <Button key={t} size="sm" variant={selectedTarget === t ? "default" : "outline"} onClick={() => setSelectedTarget(t)}>
-              {t === "shirt" ? "Classic Shirt" : "Classic Pants"}
-            </Button>
-          ))}
+        <div className="rounded-md border border-white/10 bg-white/5 px-3 py-2 text-xs text-white/80">
+          AI target is synced to this project: <span className="font-semibold">{projectType === "shirt" ? "Classic Shirt" : "Classic Pants"}</span>
         </div>
       ) : (
         <div className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">
