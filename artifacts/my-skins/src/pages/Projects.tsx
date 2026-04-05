@@ -38,7 +38,7 @@ export default function Projects() {
         <Link href="/dashboard">
           <Button className="gap-2">
             <Plus className="w-4 h-4" />
-            New Project
+            New Project Setup
           </Button>
         </Link>
       </div>

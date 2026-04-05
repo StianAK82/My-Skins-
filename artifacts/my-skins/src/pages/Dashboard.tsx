@@ -234,20 +234,32 @@ export default function Dashboard() {
             <div className="flex items-center gap-2 text-primary mb-3">
               <Sparkles className="w-5 h-5" />
               <span className="text-sm font-semibold uppercase tracking-widest">
-                {language === "no" ? "AI Skapingsverktøy" : "AI Creation Studio"}
+                {language === "no" ? "Steg 1 · Oppsett" : "Step 1 · Pre-create setup"}
               </span>
             </div>
 
             <h1 className="text-3xl md:text-4xl font-bold mb-2 leading-tight">
               {language === "no"
-                ? "Hva vil du lage i dag?"
-                : "What do you want to create today?"}
+                ? "Start designet ditt her"
+                : "Start your design here"}
             </h1>
             <p className="text-muted-foreground mb-8">
               {language === "no"
-                ? "Beskriv plagg eller gjenstander — AI lager designet for deg på sekunder."
-                : "Describe any clothing or item — AI builds the design for you in seconds."}
+                ? "Dette er klargjøringsskjermen. Live 3D-avatar vises i editoren etter at du oppretter eller åpner et design."
+                : "This is the pre-create screen. The live 3D avatar appears in the editor after you create or open a design."}
             </p>
+
+            <div className="mb-5 rounded-xl border border-primary/25 bg-primary/5 px-4 py-3">
+              <div className="flex flex-wrap items-center gap-2 text-xs">
+                <span className="rounded-full bg-primary/15 text-primary px-2 py-1 font-semibold">
+                  {language === "no" ? "1. Dashboard-oppsett" : "1. Dashboard setup"}
+                </span>
+                <ArrowRight className="w-3.5 h-3.5 text-muted-foreground" />
+                <span className="rounded-full bg-background border border-border px-2 py-1 text-foreground font-medium">
+                  {language === "no" ? "2. Editor workspace (live 3D-preview)" : "2. Editor workspace (live 3D preview)"}
+                </span>
+              </div>
+            </div>
 
             {/* Creation mode selector */}
             <div className="mb-4">
@@ -302,6 +314,11 @@ export default function Dashboard() {
                   ))}
                 </div>
               </div>
+            </div>
+            <div className="mb-4 rounded-lg border border-border bg-card/70 px-3 py-2 text-xs text-muted-foreground">
+              {language === "no"
+                ? "Tips: Avatar-valgene over brukes når editoren åpnes. Selve 3D-avatarforhåndsvisningen er i editor workspace."
+                : "Tip: Avatar choices above are applied when the editor opens. The actual live 3D avatar preview is in the editor workspace."}
             </div>
 
             {/* Item type selector */}
@@ -384,7 +401,7 @@ export default function Dashboard() {
                     {isGenerating ? (
                       <><Loader2 className="w-4 h-4 animate-spin" />{language === "no" ? "Lager..." : "Creating..."}</>
                     ) : (
-                      <><Sparkles className="w-4 h-4" />{creationMode === "ai" ? (language === "no" ? "Lag med AI" : "Create with AI") : "Continue to editor"}</>
+                      <><Sparkles className="w-4 h-4" />{creationMode === "ai" ? (language === "no" ? "Opprett og åpne editor" : "Create & open editor") : (language === "no" ? "Fortsett til editor workspace" : "Continue to editor workspace")}</>
                     )}
                   </Button>
                 </div>
@@ -443,7 +460,7 @@ export default function Dashboard() {
                 onClick={() => handleBlankCreate("shirt")}
               >
                 <Plus className="w-3.5 h-3.5" />
-                {language === "no" ? "Tom Skjorte" : "Blank Shirt"}
+                {language === "no" ? "Tom Skjorte → Editor" : "Blank Shirt → Editor"}
               </Button>
               <Button
                 variant="outline"
@@ -452,7 +469,7 @@ export default function Dashboard() {
                 onClick={() => handleBlankCreate("pants")}
               >
                 <Plus className="w-3.5 h-3.5" />
-                {language === "no" ? "Tom Bukse" : "Blank Pants"}
+                {language === "no" ? "Tom Bukse → Editor" : "Blank Pants → Editor"}
               </Button>
             </div>
           </motion.div>
@@ -486,7 +503,7 @@ export default function Dashboard() {
       <div className="container mx-auto px-4 py-8 max-w-4xl">
         <div className="flex items-center justify-between mb-5">
           <h2 className="text-lg font-semibold">
-            {language === "no" ? "Dine prosjekter" : "Your projects"}
+            {language === "no" ? "Dine prosjekter (åpner editor)" : "Your projects (opens editor)"}
           </h2>
           <Link href="/projects" className="text-sm text-primary hover:underline flex items-center gap-1">
             {language === "no" ? "Se alle" : "See all"}
@@ -591,7 +608,7 @@ export default function Dashboard() {
                       <DropdownMenuItem asChild>
                         <Link href={`/editor/${project.id}`}>
                           <Wand2 className="w-3.5 h-3.5 mr-2" />
-                          {language === "no" ? "Åpne" : "Open"}
+                          {language === "no" ? "Åpne i editor" : "Open in editor"}
                         </Link>
                       </DropdownMenuItem>
                       <DropdownMenuItem
