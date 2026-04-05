@@ -468,7 +468,6 @@ export default function Editor() {
     canvas.on("object:removed", updatePreview);
     canvas.on("object:modified", updatePreview);
     canvas.on("path:created", updatePreview);
-    canvas.on("after:render", updatePreview);
 
     return () => {
       if (timeout) clearTimeout(timeout);
@@ -476,7 +475,6 @@ export default function Editor() {
       canvas.off("object:removed", updatePreview);
       canvas.off("object:modified", updatePreview);
       canvas.off("path:created", updatePreview);
-      canvas.off("after:render", updatePreview);
     };
   }, [project?.id]);
 
@@ -910,7 +908,7 @@ export default function Editor() {
   }
 
   return (
-    <div className="fixed inset-0 flex flex-col overflow-hidden bg-[#080e1a] text-white" style={{ zIndex: 0 }}>
+    <div className="flex flex-col h-screen overflow-hidden bg-[#080e1a] text-white">
 
       {/* ── HEADER ──────────────────────────────────────────────────── */}
       <header className="h-12 border-b border-white/10 bg-[#0d1117] flex items-center justify-between px-4 shrink-0 gap-3 z-10">
