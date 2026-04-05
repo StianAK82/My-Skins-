@@ -18,13 +18,15 @@ function getUserId(req: any): string {
   return (req.user as { id: string }).id;
 }
 
-function schema422(res: any, err: z.ZodError | SyntaxError) {
+function schema422(req: any, res: any, err: z.ZodError | SyntaxError) {
   const issues = err instanceof z.ZodError ? err.issues : [];
   const invalidFields = issues.map((issue) => issue.path.join("."));
+  const details = err instanceof z.ZodError ? err.issues.map((i) => `${i.path.join(".")}: ${i.message}`) : ["AI returned non-JSON content"];
+  req.log.error({ invalidFields, details }, "ai.v2.response_schema_invalid");
   res.status(422).json({
     error: "Invalid AI response schema",
     invalidFields,
-    details: err instanceof z.ZodError ? err.issues.map((i) => `${i.path.join(".")}: ${i.message}`) : ["AI returned non-JSON content"],
+    details,
   });
 }
 
@@ -42,7 +44,7 @@ router.post("/ai/generate", async (req, res): Promise<void> => {
     if (err instanceof z.ZodError) {
       req.log.error({ issues: err.issues }, "ai.v2.generate.schema_invalid");
     }
-    if (err instanceof z.ZodError || err instanceof SyntaxError) return schema422(res, err);
+    if (err instanceof z.ZodError || err instanceof SyntaxError) return schema422(req, res, err);
     req.log.error({ err }, "ai.v2.generate.failed");
     res.status(500).json({ error: "AI generation failed" });
   }
@@ -59,7 +61,7 @@ router.post("/ai/improve", async (req, res): Promise<void> => {
   try {
     res.json(await aiGenerationService.improveDesign(getUserId(req), parsed.data.instruction, parsed.data.design, "improve"));
   } catch (err) {
-    if (err instanceof z.ZodError || err instanceof SyntaxError) return schema422(res, err);
+    if (err instanceof z.ZodError || err instanceof SyntaxError) return schema422(req, res, err);
     req.log.error({ err }, "ai.v2.improve.failed");
     res.status(500).json({ error: "AI improve failed" });
   }
@@ -76,7 +78,7 @@ router.post("/ai/remix", async (req, res): Promise<void> => {
   try {
     res.json(await aiGenerationService.improveDesign(getUserId(req), parsed.data.instruction, parsed.data.design, "remix"));
   } catch (err) {
-    if (err instanceof z.ZodError || err instanceof SyntaxError) return schema422(res, err);
+    if (err instanceof z.ZodError || err instanceof SyntaxError) return schema422(req, res, err);
     req.log.error({ err }, "ai.v2.remix.failed");
     res.status(500).json({ error: "AI remix failed" });
   }
@@ -93,7 +95,7 @@ router.post("/ai/generate-idea", async (req, res): Promise<void> => {
   try {
     res.json(await aiGenerationService.generateIdea(parsed.data));
   } catch (err) {
-    if (err instanceof z.ZodError || err instanceof SyntaxError) return schema422(res, err);
+    if (err instanceof z.ZodError || err instanceof SyntaxError) return schema422(req, res, err);
     req.log.error({ err }, "ai.v2.generate-idea.failed");
     res.status(500).json({ error: "AI idea generation failed" });
   }
@@ -110,7 +112,7 @@ router.post("/ai/generate-modules", async (req, res): Promise<void> => {
   try {
     res.json(await aiGenerationService.generateModules(parsed.data));
   } catch (err) {
-    if (err instanceof z.ZodError || err instanceof SyntaxError) return schema422(res, err);
+    if (err instanceof z.ZodError || err instanceof SyntaxError) return schema422(req, res, err);
     req.log.error({ err }, "ai.v2.generate-modules.failed");
     res.status(500).json({ error: "AI modules generation failed" });
   }
@@ -127,7 +129,7 @@ router.post("/ai/generate-palette", async (req, res): Promise<void> => {
   try {
     res.json(await aiGenerationService.generatePalette(parsed.data));
   } catch (err) {
-    if (err instanceof z.ZodError || err instanceof SyntaxError) return schema422(res, err);
+    if (err instanceof z.ZodError || err instanceof SyntaxError) return schema422(req, res, err);
     req.log.error({ err }, "ai.v2.generate-palette.failed");
     res.status(500).json({ error: "AI palette generation failed" });
   }
@@ -144,7 +146,7 @@ router.post("/ai/generate-layout", async (req, res): Promise<void> => {
   try {
     res.json(await aiGenerationService.generateLayout(parsed.data));
   } catch (err) {
-    if (err instanceof z.ZodError || err instanceof SyntaxError) return schema422(res, err);
+    if (err instanceof z.ZodError || err instanceof SyntaxError) return schema422(req, res, err);
     req.log.error({ err }, "ai.v2.generate-layout.failed");
     res.status(500).json({ error: "AI layout generation failed" });
   }

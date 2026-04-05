@@ -492,6 +492,9 @@ export default function Editor() {
         canvas.requestRenderAll();
         return;
       }
+      if (obj && getObjectMeta(obj).zone) {
+        setActiveZone(getObjectMeta(obj).zone as ZoneKey);
+      }
       setSelectedObject(obj);
     });
     canvas.on("selection:updated", (e) => {
@@ -501,6 +504,9 @@ export default function Editor() {
         canvas.discardActiveObject();
         canvas.requestRenderAll();
         return;
+      }
+      if (obj && getObjectMeta(obj).zone) {
+        setActiveZone(getObjectMeta(obj).zone as ZoneKey);
       }
       setSelectedObject(obj);
     });
@@ -593,6 +599,12 @@ export default function Editor() {
     setCredits(me?.aiCredits ?? 0);
   }, [me?.aiCredits]);
 
+  const syncAvatarTextureFromCanvas = useCallback(() => {
+    if (!fabricRef.current) return;
+    const dataUrl = fabricRef.current.toDataURL({ format: "png", multiplier: 1, quality: 0.92 });
+    setAvatarTextureUrl(dataUrl);
+  }, []);
+
   const handleSave = async () => {
     if (!fabricRef.current) return;
     const canvasJSON = fabricRef.current.toJSON();
@@ -609,14 +621,28 @@ export default function Editor() {
     );
   };
 
-  const handleExport = () => {
+  const handleExport = async () => {
     if (!fabricRef.current) return;
-    const dataUrl = fabricRef.current.toDataURL({ format: "png", multiplier: 1 });
-    const a = document.createElement("a");
-    a.href = dataUrl;
-    a.download = `${project?.title ?? "design"}.png`;
-    a.click();
-    createExport.mutate({ data: { projectId: id, format: "png" } });
+    try {
+      const canvasJSON = fabricRef.current.toJSON();
+      if (aiConcept) (canvasJSON as Record<string, unknown>).__aiConcept = aiConcept;
+      const json = JSON.stringify(canvasJSON);
+      const thumbnailUrl = fabricRef.current.toDataURL({ format: "png", quality: 0.5, multiplier: 0.5 });
+      await saveCanvas.mutateAsync({ id, data: { canvasData: json, thumbnailUrl } });
+
+      const dataUrl = fabricRef.current.toDataURL({ format: "png", multiplier: 1 });
+      const a = document.createElement("a");
+      a.href = dataUrl;
+      a.download = `${project?.title ?? "design"}.png`;
+      a.click();
+      createExport.mutate({ data: { projectId: id, format: "png" } });
+    } catch {
+      toast({
+        title: language === "no" ? "Feil" : "Error",
+        description: language === "no" ? "Klarte ikke å eksportere." : "Failed to export latest edits.",
+        variant: "destructive",
+      });
+    }
   };
 
   const handleBuyCredit = async () => {
@@ -691,6 +717,7 @@ export default function Editor() {
     fabricRef.current.add(text);
     fabricRef.current.setActiveObject(text);
     fabricRef.current.renderAll();
+    syncAvatarTextureFromCanvas();
   };
 
   const addRect = () => {
@@ -708,6 +735,7 @@ export default function Editor() {
     fabricRef.current.add(rect);
     fabricRef.current.setActiveObject(rect);
     fabricRef.current.renderAll();
+    syncAvatarTextureFromCanvas();
   };
 
   const addCircle = () => {
@@ -724,6 +752,7 @@ export default function Editor() {
     fabricRef.current.add(circle);
     fabricRef.current.setActiveObject(circle);
     fabricRef.current.renderAll();
+    syncAvatarTextureFromCanvas();
   };
 
   const addModule = (module: ModuleDefinition) => {
@@ -767,6 +796,7 @@ export default function Editor() {
     fabricRef.current.add(object);
     fabricRef.current.setActiveObject(object);
     fabricRef.current.renderAll();
+    syncAvatarTextureFromCanvas();
   };
 
   const addModuleAt = (module: ModuleDefinition, left: number, top: number) => {
@@ -777,6 +807,7 @@ export default function Editor() {
     const zone = getObjectMeta(obj).zone;
     if (zone) constrainObjectToZone(obj, zone);
     fabricRef.current.renderAll();
+    syncAvatarTextureFromCanvas();
   };
 
   const duplicateSelected = () => {
@@ -789,6 +820,7 @@ export default function Editor() {
       fabricRef.current?.add(cloned);
       fabricRef.current?.setActiveObject(cloned);
       fabricRef.current?.renderAll();
+      syncAvatarTextureFromCanvas();
     });
   };
 
@@ -797,6 +829,7 @@ export default function Editor() {
     if (direction === "up") fabricRef.current.bringObjectForward(selectedObject);
     else fabricRef.current.sendObjectBackwards(selectedObject);
     fabricRef.current.renderAll();
+    syncAvatarTextureFromCanvas();
   };
 
   const toggleObjectLock = () => {
@@ -813,6 +846,7 @@ export default function Editor() {
     });
     fabricRef.current.renderAll();
     setSelectedObject({ ...selectedObject } as fabric.Object);
+    syncAvatarTextureFromCanvas();
   };
 
   const deleteSelected = () => {
@@ -821,6 +855,7 @@ export default function Editor() {
     fabricRef.current.discardActiveObject();
     fabricRef.current.renderAll();
     setSelectedObject(null);
+    syncAvatarTextureFromCanvas();
   };
 
   const fillActiveZone = () => {
@@ -840,6 +875,7 @@ export default function Editor() {
     fabricRef.current.add(fillRect);
     fabricRef.current.setActiveObject(fillRect);
     fabricRef.current.renderAll();
+    syncAvatarTextureFromCanvas();
   };
 
   const groupSelection = () => {
@@ -852,6 +888,7 @@ export default function Editor() {
       fabricRef.current.add(grouped);
       fabricRef.current.setActiveObject(grouped);
       fabricRef.current.renderAll();
+      syncAvatarTextureFromCanvas();
     }
   };
 
@@ -866,6 +903,7 @@ export default function Editor() {
       fabricRef.current.setActiveObject(selection);
       fabricRef.current.requestRenderAll();
       fabricRef.current.renderAll();
+      syncAvatarTextureFromCanvas();
     }
   };
 
@@ -876,10 +914,23 @@ export default function Editor() {
     reader.onload = (ev) => {
       const src = ev.target?.result as string;
       fabric.FabricImage.fromURL(src).then((img) => {
+        const zone = getZoneByKey(activeZone);
         img.scaleToWidth(200);
+        img.set({
+          left: zone ? zone.left + 8 : 120,
+          top: zone ? zone.top + 8 : 120,
+          data: { ...(getObjectMeta(img)), role: "manual-image", zone: zone?.key, layerName: `${zone?.label ?? "Zone"} Image` },
+        });
+        if (zone) {
+          img.set({
+            clipPath: new fabric.Rect({ left: zone.left, top: zone.top, width: zone.width, height: zone.height, absolutePositioned: true }),
+          });
+          constrainObjectToZone(img, zone.key);
+        }
         fabricRef.current?.add(img);
         fabricRef.current?.setActiveObject(img);
         fabricRef.current?.renderAll();
+        syncAvatarTextureFromCanvas();
       });
     };
     reader.readAsDataURL(file);
@@ -897,7 +948,7 @@ export default function Editor() {
       opacity: 0.85,
       selectable: true,
       evented: true,
-      data: { role: "ai-generated", zone: zone.label, layerName: `${layerName} Stripe` },
+      data: { role: "ai-generated", zone: zone.key, layerName: `${layerName} Stripe` },
     });
     const emblem = new fabric.Circle({
       left: zone.left + (zone.width * 0.5) - 20,
@@ -907,7 +958,7 @@ export default function Editor() {
       opacity: 0.75,
       selectable: true,
       evented: true,
-      data: { role: "ai-generated", zone: zone.label, layerName: `${layerName} Emblem` },
+      data: { role: "ai-generated", zone: zone.key, layerName: `${layerName} Emblem` },
     });
     fabricRef.current.add(stripe);
     fabricRef.current.add(emblem);
@@ -1433,7 +1484,7 @@ export default function Editor() {
                 </div>
                 <div className="flex items-center gap-2">
                   <input type="color" value={typeof selectedObject.fill === "string" ? selectedObject.fill : "#000000"}
-                    onChange={e => { selectedObject.set("fill", e.target.value); setFillColor(e.target.value); fabricRef.current?.renderAll(); }}
+                    onChange={e => { selectedObject.set("fill", e.target.value); setFillColor(e.target.value); fabricRef.current?.renderAll(); syncAvatarTextureFromCanvas(); }}
                     className="w-7 h-7 rounded border border-white/20 cursor-pointer bg-transparent"
                   />
                   <span className="text-[10px] font-mono text-white/40">{typeof selectedObject.fill === "string" ? selectedObject.fill : "–"}</span>
@@ -1441,7 +1492,7 @@ export default function Editor() {
                 <div className="space-y-0.5">
                   <label className="text-[9px] text-white/30 block">Opacity {Math.round((selectedObject.opacity ?? 1) * 100)}%</label>
                   <input type="range" min="0" max="1" step="0.01" value={selectedObject.opacity ?? 1}
-                    onChange={e => { selectedObject.set("opacity", parseFloat(e.target.value)); fabricRef.current?.renderAll(); setSelectedObject({ ...selectedObject } as fabric.Object); }}
+                    onChange={e => { selectedObject.set("opacity", parseFloat(e.target.value)); fabricRef.current?.renderAll(); setSelectedObject({ ...selectedObject } as fabric.Object); syncAvatarTextureFromCanvas(); }}
                     className="w-full"
                   />
                 </div>
@@ -1457,6 +1508,7 @@ export default function Editor() {
                       selectedObject.set("angle", parseFloat(e.target.value));
                       fabricRef.current?.renderAll();
                       setSelectedObject({ ...selectedObject } as fabric.Object);
+                      syncAvatarTextureFromCanvas();
                     }}
                     className="w-full"
                   />
@@ -1476,6 +1528,7 @@ export default function Editor() {
                       if (zone) constrainObjectToZone(selectedObject, zone);
                       fabricRef.current?.renderAll();
                       setSelectedObject({ ...selectedObject } as fabric.Object);
+                      syncAvatarTextureFromCanvas();
                     }}
                     className="w-full"
                   />
@@ -1492,6 +1545,7 @@ export default function Editor() {
                         if (zone) constrainObjectToZone(selectedObject, zone);
                         fabricRef.current?.renderAll();
                         setSelectedObject({ ...selectedObject } as fabric.Object);
+                        syncAvatarTextureFromCanvas();
                       }}
                       className="h-6 mt-1 bg-white/5 border-white/10 text-[10px]"
                     />
@@ -1507,6 +1561,7 @@ export default function Editor() {
                         if (zone) constrainObjectToZone(selectedObject, zone);
                         fabricRef.current?.renderAll();
                         setSelectedObject({ ...selectedObject } as fabric.Object);
+                        syncAvatarTextureFromCanvas();
                       }}
                       className="h-6 mt-1 bg-white/5 border-white/10 text-[10px]"
                     />
