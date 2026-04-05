@@ -8,7 +8,19 @@ import { aiValidationService } from "./ai-validation.service";
 type GenerateInput = z.infer<typeof aiGenerateRequestSchema>;
 
 function parseStrictJson(content: string): unknown {
-  return JSON.parse(content);
+  try {
+    return JSON.parse(content);
+  } catch {
+    const fenced = content.match(/```(?:json)?\s*([\s\S]*?)\s*```/i)?.[1];
+    if (fenced) return JSON.parse(fenced);
+
+    const firstBrace = content.indexOf("{");
+    const lastBrace = content.lastIndexOf("}");
+    if (firstBrace >= 0 && lastBrace > firstBrace) {
+      return JSON.parse(content.slice(firstBrace, lastBrace + 1));
+    }
+    throw new SyntaxError("AI returned non-JSON content");
+  }
 }
 
 function normalizeHex(color: unknown): string | null {
@@ -189,7 +201,12 @@ export class AiGenerationService {
       throw new SyntaxError("AI returned empty content");
     }
     console.info("ai.model.raw_response", { content });
-    return parseStrictJson(content);
+    try {
+      return parseStrictJson(content);
+    } catch (error) {
+      console.error("ai.model.invalid_json", { content, error });
+      throw error;
+    }
   }
 
   private async saveGeneration(userId: string, prompt: string, type: string, result: unknown, style: string | null = null) {
