@@ -186,27 +186,34 @@ export class AiGenerationService {
   }
 
   private async askModel(prompt: string): Promise<unknown> {
-    const completion = await openai.chat.completions.create({
-      model: "gpt-5.2",
-      max_completion_tokens: 1400,
-      response_format: { type: "json_object" },
-      messages: [
-        { role: "system", content: "You are the My Skins structured Roblox design engine. Always return JSON only." },
-        { role: "user", content: prompt },
-      ],
-    });
+    let lastError: Error | null = null;
 
-    const content = completion.choices[0]?.message?.content;
-    if (!content) {
-      throw new SyntaxError("AI returned empty content");
+    for (let attempt = 1; attempt <= 2; attempt += 1) {
+      const completion = await openai.chat.completions.create({
+        model: "gpt-5.2",
+        max_completion_tokens: 1400,
+        response_format: { type: "json_object" },
+        messages: [
+          { role: "system", content: "You are the My Skins structured Roblox design engine. Always return JSON only." },
+          { role: "user", content: prompt },
+        ],
+      });
+
+      const content = completion.choices[0]?.message?.content;
+      if (!content) {
+        lastError = new SyntaxError("AI returned empty content");
+        continue;
+      }
+      console.info("ai.model.raw_response", { attempt, content });
+      try {
+        return parseStrictJson(content);
+      } catch (error) {
+        lastError = error instanceof Error ? error : new SyntaxError("AI returned non-JSON content");
+        console.error("ai.model.invalid_json", { attempt, content, error: lastError });
+      }
     }
-    console.info("ai.model.raw_response", { content });
-    try {
-      return parseStrictJson(content);
-    } catch (error) {
-      console.error("ai.model.invalid_json", { content, error });
-      throw error;
-    }
+
+    throw lastError ?? new SyntaxError("AI returned non-JSON content");
   }
 
   private async saveGeneration(userId: string, prompt: string, type: string, result: unknown, style: string | null = null) {
@@ -237,7 +244,15 @@ export class AiGenerationService {
   async improveDesign(userId: string, instruction: string, source: unknown, mode: "improve" | "remix") {
     const designSource = aiValidationService.ensureDesign(source);
     const modelResult = await this.askModel(`${mode} this design with instruction: ${instruction}\nsource:${JSON.stringify(designSource)}`);
-    const design = aiValidationService.ensureDesign(modelResult);
+    const design = aiValidationService.ensureDesign(this.normalizeDesignPayload(
+      {
+        prompt: instruction,
+        itemType: designSource.itemType,
+        style: designSource.style,
+        theme: designSource.theme,
+      },
+      modelResult,
+    ));
     const generationId = await this.saveGeneration(userId, instruction, mode, design, null);
     return aiDesignResponseSchema.parse({
       meta: { generationId, status: "completed", warnings: [] },

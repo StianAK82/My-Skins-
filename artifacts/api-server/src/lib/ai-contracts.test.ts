@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { aiDesignSchema, validatePlacementForItemType } from "./ai-contracts.ts";
+import { aiDesignResponseSchema, aiGenerateRequestSchema, aiImproveRequestSchema, aiDesignSchema, validatePlacementForItemType } from "./ai-contracts.ts";
 
 const base = {
   title: "Neon Drift",
@@ -54,4 +54,27 @@ test("placement validation accepts pants with disabled sleeves", () => {
   });
 
   assert.equal(validatePlacementForItemType(payload), true);
+});
+
+test("aiGenerateRequestSchema rejects unsupported 3d item types", () => {
+  assert.throws(() => aiGenerateRequestSchema.parse({
+    prompt: "futuristic hoodie concept",
+    itemType: "layered_3d_hoodie",
+  }));
+});
+
+test("aiDesignResponseSchema parses canonical completed payload", () => {
+  const parsed = aiDesignResponseSchema.parse({
+    meta: { generationId: "gen-1", status: "completed", warnings: [] },
+    result: base,
+  });
+  assert.equal(parsed.meta.status, "completed");
+  assert.equal(parsed.result.itemType, "classic_shirt");
+});
+
+test("aiImproveRequestSchema requires complete canonical design payload", () => {
+  assert.throws(() => aiImproveRequestSchema.parse({
+    instruction: "add more contrast",
+    design: { title: "invalid-design-only-title" },
+  }));
 });
