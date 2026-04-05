@@ -12,7 +12,7 @@ import { AiPanel } from "@/components/editor/AiPanel";
 import { AvatarPreview } from "@/components/editor/AvatarPreview";
 import {
   Save, Download, ArrowLeft, Image as ImageIcon, Type, Square, Circle,
-  PenTool, Trash2, ZoomIn, ZoomOut, Layers, Sparkles, ChevronDown, X, Copy, Lock, Unlock, MoveUp, MoveDown, Grid3X3, Group, Ungroup, User, Shirt, LayoutTemplate, Wand2
+  PenTool, Trash2, ZoomIn, ZoomOut, Layers, Sparkles, ChevronDown, X, Copy, Lock, Unlock, MoveUp, MoveDown, Grid3X3, Group, Ungroup, User, Shirt, LayoutTemplate, Wand2, Boxes, Palette, SlidersHorizontal
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { normalizeAiResponse, type NormalizedAiResponse } from "@/lib/ai/normalize-ai-response";
@@ -52,6 +52,8 @@ interface ModuleDefinition {
 type StylePreset = "streetwear" | "anime" | "sport" | "cyberpunk" | "minimal";
 type EditorMetaState = { avatar?: { avatarType?: string; bodyType?: string }; creationMode?: string; stylePreset?: StylePreset };
 type FabricObjectMeta = { role?: string; layerName?: string; zone?: string; moduleId?: string };
+type ClothingDimension = "2d" | "3d";
+type GarmentMaterial = "cotton" | "denim" | "nylon";
 
 const MODULE_LIBRARY: ModuleDefinition[] = [
   { id: "mod-sleeve-stripe", name: "Sleeve Stripe", category: "Clothing Parts", shape: "stripe", color: "#ef4444" },
@@ -262,6 +264,12 @@ export default function Editor() {
   const [isBuyingCredit, setIsBuyingCredit] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [creationMode, setCreationMode] = useState("ai");
+  const [dimension, setDimension] = useState<ClothingDimension>("2d");
+  const [classicItemType, setClassicItemType] = useState<"shirt" | "pants">("shirt");
+  const [garmentType3d, setGarmentType3d] = useState<"hoodie">("hoodie");
+  const [garmentColor, setGarmentColor] = useState("#2563eb");
+  const [garmentMaterial, setGarmentMaterial] = useState<GarmentMaterial>("cotton");
+  const [garmentScale, setGarmentScale] = useState(1);
   const [avatarProfile, setAvatarProfile] = useState({ avatarType: "neutral", bodyType: "regular" });
   const [activeModuleCategory, setActiveModuleCategory] = useState("Clothing Parts");
   const [selectedStylePreset, setSelectedStylePreset] = useState<StylePreset>("streetwear");
@@ -273,6 +281,14 @@ export default function Editor() {
   const { data: me, refetch: refetchMe } = useGetMe();
   const saveCanvas = useSaveCanvas();
   const createExport = useCreateExport();
+  const activeClassicType = classicItemType ?? ((project?.type as "shirt" | "pants") ?? "shirt");
+
+  useEffect(() => {
+    if (!project?.type) return;
+    if (project.type === "shirt" || project.type === "pants") {
+      setClassicItemType(project.type);
+    }
+  }, [project?.type]);
 
   // These must be declared BEFORE the canvas useEffect that depends on them
   const handleUseColors = useCallback((colors: string[]) => {
@@ -284,7 +300,7 @@ export default function Editor() {
   const addTemplateGuideLayer = useCallback(() => {
     if (!fabricRef.current) return;
     const canvas = fabricRef.current;
-    const type = (project?.type as "shirt" | "pants") ?? "shirt";
+    const type = activeClassicType;
     const zones = TEMPLATE_ZONES[type];
 
     canvas.getObjects().forEach((obj) => {
@@ -322,12 +338,12 @@ export default function Editor() {
       canvas.sendObjectToBack(label);
       canvas.sendObjectToBack(frame);
     });
-  }, [project?.type]);
+  }, [activeClassicType]);
 
   const ensureVisibleStarterDesign = useCallback((preset: StylePreset = "streetwear") => {
     if (!fabricRef.current) return;
     const canvas = fabricRef.current;
-    const type = (project?.type as "shirt" | "pants") ?? "shirt";
+    const type = activeClassicType;
     const zones = TEMPLATE_ZONES[type];
     const hasUserObjects = canvas.getObjects().some((obj) => getObjectMeta(obj).role !== "template-guide");
     if (hasUserObjects) return;
@@ -346,7 +362,7 @@ export default function Editor() {
     addFallbackShapeToZone(zones.leftRegion, palette[1], "Starter Left Sleeve");
     addFallbackShapeToZone(zones.rightRegion, palette[2], "Starter Right Sleeve");
     canvas.renderAll();
-  }, [project?.type]);
+  }, [activeClassicType]);
 
   // Initialize Canvas
   useEffect(() => {
@@ -894,7 +910,6 @@ export default function Editor() {
 
   return (
     <div className="flex flex-col h-screen overflow-hidden bg-background text-foreground">
-      {/* Topbar */}
       <header className="h-14 border-b border-border bg-card flex items-center justify-between px-4 shrink-0 gap-4">
         <div className="flex items-center gap-3">
           <Link href="/dashboard">
@@ -902,7 +917,7 @@ export default function Editor() {
           </Link>
           <div className="font-semibold text-sm truncate max-w-[180px]">{project?.title}</div>
           <div className="flex items-center gap-1">
-            <span className="text-xs bg-muted px-2 py-0.5 rounded uppercase text-muted-foreground">{project?.type}</span>
+            <span className="text-xs bg-muted px-2 py-0.5 rounded uppercase text-muted-foreground">{dimension === "2d" ? "Classic 2D" : "3D clothing"}</span>
             <span className="text-xs bg-muted px-2 py-0.5 rounded uppercase text-muted-foreground">{creationMode}</span>
             <span className="text-xs bg-muted px-2 py-0.5 rounded">{avatarProfile.avatarType}/{avatarProfile.bodyType}</span>
             {project?.isAiGenerated && (
@@ -918,14 +933,6 @@ export default function Editor() {
           <Button size="sm" variant="outline" onClick={() => setPaymentOpen(true)}>
             Buy 1 Credit (10 NOK)
           </Button>
-          <Button variant="ghost" size="icon" onClick={zoomOut}><ZoomOut className="w-4 h-4" /></Button>
-          <Button variant="ghost" size="icon" onClick={zoomIn}><ZoomIn className="w-4 h-4" /></Button>
-          {selectedObject && (
-            <Button variant="ghost" size="icon" onClick={deleteSelected}>
-              <Trash2 className="w-4 h-4 text-destructive" />
-            </Button>
-          )}
-          <div className="w-px h-6 bg-border" />
           <Button variant="outline" size="sm" onClick={handleSave} disabled={saveCanvas.isPending}>
             <Save className="w-4 h-4 mr-1.5" />
             {saveCanvas.isPending ? (language === "no" ? "Lagrer..." : "Saving...") : t("editor.save")}
@@ -936,9 +943,6 @@ export default function Editor() {
           </Button>
           <Button size="sm" onClick={handleUploadToRoblox} disabled={credits < 1 || isUploading}>
             {isUploading ? "Uploading..." : "Upload to Roblox (1 Credit)"}
-          </Button>
-          <Button size="sm" variant="secondary" onClick={() => setPreviewOpen(true)}>
-            Preview on Avatar
           </Button>
           <Button size="sm" variant={snapEnabled ? "default" : "outline"} onClick={() => setSnapEnabled((prev) => !prev)}>
             <Grid3X3 className="w-3.5 h-3.5 mr-1" /> Snap
@@ -957,8 +961,15 @@ export default function Editor() {
         )}
       </AnimatePresence>
 
-      {/* Main workspace */}
-      <div className="grid flex-1 overflow-hidden xl:grid-cols-[280px_minmax(0,1fr)_340px] lg:grid-cols-[250px_minmax(0,1fr)]">
+      <div className="border-b border-border bg-card/70 px-4 py-3 shrink-0">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Creation dimension</span>
+          <Button size="sm" variant={dimension === "2d" ? "default" : "outline"} onClick={() => setDimension("2d")} className="gap-1"><Shirt className="w-3.5 h-3.5" /> Classic 2D Clothing</Button>
+          <Button size="sm" variant={dimension === "3d" ? "default" : "outline"} onClick={() => setDimension("3d")} className="gap-1"><Boxes className="w-3.5 h-3.5" /> 3D Clothing</Button>
+        </div>
+      </div>
+
+      <div className="grid flex-1 overflow-hidden 2xl:grid-cols-[290px_minmax(0,1fr)_360px] xl:grid-cols-[270px_minmax(0,1fr)_340px] lg:grid-cols-[250px_minmax(0,1fr)]">
         <aside className="border-r border-border bg-card overflow-y-auto p-4 space-y-4">
           <div>
             <h3 className="font-semibold text-sm flex items-center gap-2"><User className="w-4 h-4" /> Build Controls</h3>
@@ -986,10 +997,44 @@ export default function Editor() {
           </div>
           <div className="space-y-2">
             <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Item type</p>
-            <div className="flex gap-2">
-              <Button size="sm" variant="outline" className="text-xs">{project?.type ?? "shirt"}</Button>
+            <div className="flex flex-wrap gap-2">
+              {dimension === "2d" ? (
+                <>
+                  <Button size="sm" variant={activeClassicType === "shirt" ? "default" : "outline"} className="text-xs" onClick={() => setClassicItemType("shirt")}>Shirt</Button>
+                  <Button size="sm" variant={activeClassicType === "pants" ? "default" : "outline"} className="text-xs" onClick={() => setClassicItemType("pants")}>Pants</Button>
+                </>
+              ) : (
+                <Button size="sm" variant="default" className="text-xs" onClick={() => setGarmentType3d("hoodie")}>Hoodie</Button>
+              )}
             </div>
           </div>
+          {dimension === "3d" && (
+            <div className="space-y-3 rounded-lg border border-border bg-muted/20 p-3">
+              <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1"><SlidersHorizontal className="w-3.5 h-3.5" /> 3D garment controls</h4>
+              <div className="space-y-1">
+                <label className="text-[10px] uppercase tracking-wide text-muted-foreground">Garment color</label>
+                <div className="flex items-center gap-2">
+                  <input type="color" value={garmentColor} onChange={(e) => setGarmentColor(e.target.value)} className="w-8 h-8 rounded border border-border bg-transparent cursor-pointer" />
+                  <span className="text-xs font-mono">{garmentColor}</span>
+                </div>
+              </div>
+              <div className="space-y-1">
+                <label className="text-[10px] uppercase tracking-wide text-muted-foreground">Material</label>
+                <div className="grid grid-cols-3 gap-1">
+                  {(["cotton", "denim", "nylon"] as const).map((material) => (
+                    <Button key={material} size="sm" variant={garmentMaterial === material ? "default" : "outline"} className="h-7 text-[10px]" onClick={() => setGarmentMaterial(material)}>
+                      {material}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+              <div className="space-y-1">
+                <label className="text-[10px] uppercase tracking-wide text-muted-foreground">Fit / scale · {garmentScale.toFixed(2)}x</label>
+                <input type="range" min={0.85} max={1.2} step={0.01} value={garmentScale} onChange={(e) => setGarmentScale(parseFloat(e.target.value))} className="w-full" />
+              </div>
+              <p className="text-[11px] text-muted-foreground">Decal placement uses your live design as chest graphic in 3D preview.</p>
+            </div>
+          )}
           <div className="space-y-2">
             <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Style presets</p>
             <div className="grid grid-cols-2 gap-2">
@@ -1013,17 +1058,17 @@ export default function Editor() {
           <div className="space-y-2">
             <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Template zones</p>
             <div className="rounded-md border border-border bg-muted/20 p-2 text-xs text-muted-foreground space-y-1">
-              {Object.values(TEMPLATE_ZONES[(project?.type as "shirt" | "pants") ?? "shirt"]).map((zone) => (
+              {Object.values(TEMPLATE_ZONES[activeClassicType]).map((zone) => (
                 <div key={zone.label} className="flex items-center justify-between"><span>{zone.label}</span><span>{zone.width}×{zone.height}</span></div>
               ))}
             </div>
           </div>
         </aside>
 
-        <main className="bg-[#0f172a] relative overflow-auto p-4 lg:p-6">
-          <div className="max-w-5xl mx-auto space-y-4">
+        <main className="bg-[#0f172a] relative overflow-auto p-4 lg:p-6 lg:col-span-1 col-span-full order-first lg:order-none">
+          <div className="max-w-5xl mx-auto space-y-4 min-h-full">
             <div className="rounded-xl border border-white/10 bg-black/20 p-3 text-xs text-slate-200 flex items-center justify-between">
-              <span>Live Avatar Preview · your clothing updates render here instantly.</span>
+              <span>Live Avatar Preview · always visible while editing.</span>
               <div className="flex items-center gap-2">
                 <Button size="sm" variant={previewFacing === "front" ? "secondary" : "outline"} onClick={() => setPreviewFacing("front")}>Front</Button>
                 <Button size="sm" variant={previewFacing === "back" ? "secondary" : "outline"} onClick={() => setPreviewFacing("back")}>Back</Button>
@@ -1035,37 +1080,49 @@ export default function Editor() {
               bodyType={avatarProfile.bodyType}
               view={previewFacing}
               onViewChange={setPreviewFacing}
-              itemType={(project?.type as "shirt" | "pants") ?? "shirt"}
+              itemType={activeClassicType}
+              dimension={dimension}
+              garmentColor={garmentColor}
+              garmentMaterial={garmentMaterial}
+              garmentScale={garmentScale}
               className="border-primary/20 shadow-2xl"
             />
-            <div className="rounded-xl border border-white/10 bg-card p-4">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-sm font-semibold flex items-center gap-2"><Shirt className="w-4 h-4" /> Design Surface</h3>
-                <div className="flex gap-1.5">
-                  <Button variant="ghost" size="icon" onClick={zoomOut}><ZoomOut className="w-4 h-4" /></Button>
-                  <Button variant="ghost" size="icon" onClick={zoomIn}><ZoomIn className="w-4 h-4" /></Button>
+            {dimension === "2d" ? (
+              <div className="rounded-xl border border-white/10 bg-card p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-sm font-semibold flex items-center gap-2"><Shirt className="w-4 h-4" /> Classic 2D Design Surface</h3>
+                  <div className="flex gap-1.5">
+                    <Button variant="ghost" size="icon" onClick={zoomOut}><ZoomOut className="w-4 h-4" /></Button>
+                    <Button variant="ghost" size="icon" onClick={zoomIn}><ZoomIn className="w-4 h-4" /></Button>
+                  </div>
+                </div>
+                <div className="flex items-center justify-center overflow-auto">
+                  <canvas
+                    ref={canvasRef}
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      if (!draggingModuleId || !fabricRef.current) return;
+                      const module = MODULE_LIBRARY.find((m) => m.id === draggingModuleId);
+                      if (!module) return;
+                      const rect = (e.target as HTMLCanvasElement).getBoundingClientRect();
+                      addModuleAt(module, e.clientX - rect.left, e.clientY - rect.top);
+                      setDraggingModuleId(null);
+                    }}
+                  />
                 </div>
               </div>
-              <div className="flex items-center justify-center overflow-auto">
-                <canvas
-                  ref={canvasRef}
-                  onDragOver={(e) => e.preventDefault()}
-                  onDrop={(e) => {
-                    e.preventDefault();
-                    if (!draggingModuleId || !fabricRef.current) return;
-                    const module = MODULE_LIBRARY.find((m) => m.id === draggingModuleId);
-                    if (!module) return;
-                    const rect = (e.target as HTMLCanvasElement).getBoundingClientRect();
-                    addModuleAt(module, e.clientX - rect.left, e.clientY - rect.top);
-                    setDraggingModuleId(null);
-                  }}
-                />
+            ) : (
+              <div className="rounded-xl border border-white/10 bg-card p-4 text-sm text-muted-foreground">
+                <h3 className="text-sm font-semibold text-foreground flex items-center gap-2 mb-2"><Palette className="w-4 h-4" /> 3D garment workspace</h3>
+                <p className="mb-2">You are in 3D clothing mode ({garmentType3d}). Use left panel material, color and fit controls. Right panel AI can generate 3D concepts (beta).</p>
+                <p>Current release keeps classic 2D export/upload pipeline. 3D previews are live in the center avatar and workflow is separated for future backend completion.</p>
               </div>
-            </div>
+            )}
           </div>
         </main>
 
-        <aside className="border-t xl:border-t-0 xl:border-l border-border bg-card p-3 overflow-y-auto shrink-0 lg:col-span-2 xl:col-span-1">
+        <aside className="border-t lg:border-t-0 lg:border-l border-border bg-card p-3 overflow-y-auto shrink-0 lg:col-span-2 xl:col-span-1">
           <Tabs value={creatorMode} onValueChange={(value) => { const mode = value as "ai" | "manual" | "template" | "remix"; setCreatorMode(mode); setCreationMode(mode); }} className="space-y-3">
             <TabsList className="grid grid-cols-2 h-auto gap-1 bg-muted/40 p-1">
               <TabsTrigger value="ai" className="text-xs"><Sparkles className="w-3 h-3 mr-1" /> AI Design</TabsTrigger>
@@ -1074,25 +1131,36 @@ export default function Editor() {
               <TabsTrigger value="remix" className="text-xs"><Wand2 className="w-3 h-3 mr-1" /> Remix</TabsTrigger>
             </TabsList>
             <TabsContent value="ai" className="m-0">
-              <AiPanel projectType={(project?.type as "shirt" | "pants") ?? "shirt"} onUseColors={handleUseColors} onApplyAssets={applyAiOutfitToCanvas} />
+              <AiPanel
+                projectType={activeClassicType}
+                dimension={dimension}
+                onDimensionChange={setDimension}
+                onUseColors={handleUseColors}
+                onApplyAssets={applyAiOutfitToCanvas}
+              />
             </TabsContent>
             <TabsContent value="manual" className="m-0 space-y-3">
               <h3 className="font-semibold text-sm flex items-center gap-2"><Layers className="w-4 h-4" /> Manual Builder</h3>
+              {dimension === "3d" && (
+                <div className="rounded-md border border-amber-500/30 bg-amber-500/10 p-2 text-xs text-amber-100">
+                  Manual 3D tooling currently supports garment controls in the left panel. 2D canvas tools are disabled in 3D mode.
+                </div>
+              )}
               <div className="grid grid-cols-2 gap-1.5">
-                <Button variant="outline" className="flex-col h-14 gap-1 text-xs" onClick={addText}><Type className="w-4 h-4" />Text</Button>
-                <Button variant="outline" className="flex-col h-14 gap-1 text-xs" onClick={addRect}><Square className="w-4 h-4" />Rect</Button>
-                <Button variant="outline" className="flex-col h-14 gap-1 text-xs" onClick={addCircle}><Circle className="w-4 h-4" />Circle</Button>
-                <Button variant={drawingMode ? "default" : "outline"} className="flex-col h-14 gap-1 text-xs" onClick={() => setDrawingMode((p) => !p)}><PenTool className="w-4 h-4" />Draw</Button>
+                <Button variant="outline" className="flex-col h-14 gap-1 text-xs" onClick={addText} disabled={dimension === "3d"}><Type className="w-4 h-4" />Text</Button>
+                <Button variant="outline" className="flex-col h-14 gap-1 text-xs" onClick={addRect} disabled={dimension === "3d"}><Square className="w-4 h-4" />Rect</Button>
+                <Button variant="outline" className="flex-col h-14 gap-1 text-xs" onClick={addCircle} disabled={dimension === "3d"}><Circle className="w-4 h-4" />Circle</Button>
+                <Button variant={drawingMode ? "default" : "outline"} className="flex-col h-14 gap-1 text-xs" onClick={() => setDrawingMode((p) => !p)} disabled={dimension === "3d"}><PenTool className="w-4 h-4" />Draw</Button>
               </div>
               <label className="flex flex-col items-center gap-1.5 h-14 border border-dashed border-border rounded-md cursor-pointer hover:border-primary/50 text-xs text-muted-foreground justify-center">
                 <ImageIcon className="w-4 h-4" /> Upload Image
-                <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
+                <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} disabled={dimension === "3d"} />
               </label>
               <div className="space-y-2">
                 <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Module library</p>
                 <div className="grid grid-cols-2 gap-2">
                   {MODULE_LIBRARY.filter((module) => module.category === activeModuleCategory).map((module) => (
-                    <button key={module.id} onClick={() => addModule(module)} draggable onDragStart={() => setDraggingModuleId(module.id)} className="border rounded-md p-2 text-left hover:border-primary/60 transition-colors">
+                    <button key={module.id} onClick={() => addModule(module)} draggable={dimension !== "3d"} onDragStart={() => setDraggingModuleId(module.id)} className="border rounded-md p-2 text-left hover:border-primary/60 transition-colors disabled:opacity-50" disabled={dimension === "3d"}>
                       <div className="w-full h-8 rounded mb-1" style={{ backgroundColor: module.color, opacity: 0.85 }} />
                       <p className="text-xs font-medium leading-tight">{module.name}</p>
                     </button>
@@ -1118,7 +1186,12 @@ export default function Editor() {
             {t("editor.properties")}
           </h3>
 
-          {selectedObject ? (
+          {dimension === "3d" ? (
+            <div className="text-xs text-muted-foreground py-4 leading-relaxed space-y-2">
+              <p>3D mode keeps object properties separate from the classic 2D canvas.</p>
+              <p>Use left panel controls for color, material, fit and decal behavior.</p>
+            </div>
+          ) : selectedObject ? (
             <div className="space-y-3">
               <div className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded capitalize">
                 {getObjectMeta(selectedObject).layerName ?? selectedObject.type}
@@ -1241,7 +1314,11 @@ export default function Editor() {
             bodyType={avatarProfile.bodyType}
             view={previewFacing}
             onViewChange={setPreviewFacing}
-            itemType={(project?.type as "shirt" | "pants") ?? "shirt"}
+            itemType={activeClassicType}
+            dimension={dimension}
+            garmentColor={garmentColor}
+            garmentMaterial={garmentMaterial}
+            garmentScale={garmentScale}
             className="border-0 rounded-none"
           />
         </DialogContent>
