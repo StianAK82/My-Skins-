@@ -234,19 +234,19 @@ export default function Dashboard() {
             <div className="flex items-center gap-2 text-primary mb-3">
               <Sparkles className="w-5 h-5" />
               <span className="text-sm font-semibold uppercase tracking-widest">
-                {language === "no" ? "Steg 1 · Oppsett" : "Step 1 · Pre-create setup"}
+                {language === "no" ? "Prosjektinngang" : "Project entry"}
               </span>
             </div>
 
             <h1 className="text-3xl md:text-4xl font-bold mb-2 leading-tight">
               {language === "no"
-                ? "Start designet ditt her"
-                : "Start your design here"}
+                ? "Start her, bygg i editoren"
+                : "Start here, build in the editor"}
             </h1>
             <p className="text-muted-foreground mb-8">
               {language === "no"
-                ? "Dette er klargjøringsskjermen. Live 3D-avatar vises i editoren etter at du oppretter eller åpner et design."
-                : "This is the pre-create screen. The live 3D avatar appears in the editor after you create or open a design."}
+                ? "Dashboarden er inngangssiden. Selve creator studio med live avatar åpnes direkte i /editor/:id."
+                : "The dashboard is the entry page. The real creator studio with live avatar opens directly in /editor/:id."}
             </p>
 
             <div className="mb-5 rounded-xl border border-primary/25 bg-primary/5 px-4 py-3">

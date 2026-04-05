@@ -6,6 +6,10 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { RotateCw, ZoomIn, ZoomOut } from "lucide-react";
 
+type EditorDimension = "2d" | "3d";
+
+type GarmentMaterial = "cotton" | "denim" | "nylon";
+
 type AvatarPreviewProps = {
   textureUrl?: string;
   className?: string;
@@ -14,6 +18,10 @@ type AvatarPreviewProps = {
   view?: "front" | "back";
   onViewChange?: (view: "front" | "back") => void;
   itemType?: "shirt" | "pants";
+  dimension?: EditorDimension;
+  garmentColor?: string;
+  garmentMaterial?: GarmentMaterial;
+  garmentScale?: number;
 };
 
 type Zone = { left: number; top: number; width: number; height: number };
@@ -47,17 +55,7 @@ function makeTextureFromZone(source: CanvasImageSource, zone: Zone, fallback = "
 
   ctx.fillStyle = fallback;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
-  ctx.drawImage(
-    source,
-    zone.left,
-    zone.top,
-    zone.width,
-    zone.height,
-    0,
-    0,
-    zone.width,
-    zone.height,
-  );
+  ctx.drawImage(source, zone.left, zone.top, zone.width, zone.height, 0, 0, zone.width, zone.height);
 
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
@@ -132,7 +130,7 @@ function useClothingMaps(textureUrl?: string) {
   return maps;
 }
 
-function Mannequin({ maps, bodyType, view, itemType }: { maps: ClothingMaps; bodyType: string; view: "front" | "back"; itemType: "shirt" | "pants" }) {
+function Mannequin2D({ maps, bodyType, view, itemType }: { maps: ClothingMaps; bodyType: string; view: "front" | "back"; itemType: "shirt" | "pants" }) {
   const bodyScale = useMemo(() => {
     if (bodyType === "slim") return [0.93, 1, 0.9] as const;
     if (bodyType === "athletic") return [1.08, 1.04, 1.06] as const;
@@ -153,7 +151,6 @@ function Mannequin({ maps, bodyType, view, itemType }: { maps: ClothingMaps; bod
         <sphereGeometry args={[0.23, 32, 32]} />
         <meshStandardMaterial color="#f1c7a6" roughness={0.8} />
       </mesh>
-
       <mesh position={[0, 1.2, 0]} castShadow>
         <boxGeometry args={[0.72, 0.82, 0.36]} />
         <meshStandardMaterial attach="material-0" map={torsoSide} roughness={0.7} />
@@ -163,16 +160,8 @@ function Mannequin({ maps, bodyType, view, itemType }: { maps: ClothingMaps; bod
         <meshStandardMaterial attach="material-4" map={torsoFront} roughness={0.7} />
         <meshStandardMaterial attach="material-5" map={torsoBack} roughness={0.7} />
       </mesh>
-
-      <mesh position={[-0.56, 1.2, 0]} castShadow>
-        <boxGeometry args={[0.28, 0.78, 0.28]} />
-        <meshStandardMaterial map={torsoSide} roughness={0.7} />
-      </mesh>
-      <mesh position={[0.56, 1.2, 0]} castShadow>
-        <boxGeometry args={[0.28, 0.78, 0.28]} />
-        <meshStandardMaterial map={torsoSide} roughness={0.7} />
-      </mesh>
-
+      <mesh position={[-0.56, 1.2, 0]} castShadow><boxGeometry args={[0.28, 0.78, 0.28]} /><meshStandardMaterial map={torsoSide} roughness={0.7} /></mesh>
+      <mesh position={[0.56, 1.2, 0]} castShadow><boxGeometry args={[0.28, 0.78, 0.28]} /><meshStandardMaterial map={torsoSide} roughness={0.7} /></mesh>
       <mesh position={[-0.2, 0.46, 0]} castShadow>
         <boxGeometry args={[0.3, 0.92, 0.3]} />
         <meshStandardMaterial attach="material-0" map={legSide} roughness={0.7} />
@@ -182,7 +171,6 @@ function Mannequin({ maps, bodyType, view, itemType }: { maps: ClothingMaps; bod
         <meshStandardMaterial attach="material-4" map={legFront} roughness={0.7} />
         <meshStandardMaterial attach="material-5" map={legBack} roughness={0.7} />
       </mesh>
-
       <mesh position={[0.2, 0.46, 0]} castShadow>
         <boxGeometry args={[0.3, 0.92, 0.3]} />
         <meshStandardMaterial attach="material-0" map={legSide} roughness={0.7} />
@@ -196,7 +184,80 @@ function Mannequin({ maps, bodyType, view, itemType }: { maps: ClothingMaps; bod
   );
 }
 
-export function AvatarPreview({ textureUrl, className, avatarType = "neutral", bodyType = "regular", view: controlledView, onViewChange, itemType = "shirt" }: AvatarPreviewProps) {
+function materialProps(material: GarmentMaterial) {
+  if (material === "denim") return { roughness: 0.86, metalness: 0.1 };
+  if (material === "nylon") return { roughness: 0.35, metalness: 0.2 };
+  return { roughness: 0.7, metalness: 0.05 };
+}
+
+function Mannequin3D({ view, bodyType, garmentColor, garmentMaterial, garmentScale, textureUrl }: {
+  view: "front" | "back";
+  bodyType: string;
+  garmentColor: string;
+  garmentMaterial: GarmentMaterial;
+  garmentScale: number;
+  textureUrl?: string;
+}) {
+  const bodyScale = useMemo(() => {
+    if (bodyType === "slim") return [0.92, 1, 0.92] as const;
+    if (bodyType === "athletic") return [1.08, 1.04, 1.05] as const;
+    return [1, 1, 1] as const;
+  }, [bodyType]);
+
+  const decalMap = useMemo(() => {
+    if (!textureUrl) return null;
+    const texture = new THREE.TextureLoader().load(textureUrl);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    return texture;
+  }, [textureUrl]);
+
+  const mat = materialProps(garmentMaterial);
+
+  return (
+    <group rotation-y={view === "back" ? Math.PI : 0} scale={bodyScale}>
+      <mesh position={[0, 1.8, 0]} castShadow>
+        <sphereGeometry args={[0.23, 24, 24]} />
+        <meshStandardMaterial color="#f1c7a6" roughness={0.75} />
+      </mesh>
+      <mesh position={[0, 1.2, 0]} castShadow>
+        <boxGeometry args={[0.68, 0.8, 0.34]} />
+        <meshStandardMaterial color="#e5e7eb" roughness={0.9} />
+      </mesh>
+      <mesh position={[0, 1.22, 0]} scale={[garmentScale, garmentScale, garmentScale]} castShadow>
+        <boxGeometry args={[0.82, 0.94, 0.46]} />
+        <meshStandardMaterial color={garmentColor} {...mat} />
+      </mesh>
+      <mesh position={[-0.62, 1.2, 0]} scale={[garmentScale, garmentScale, garmentScale]} castShadow>
+        <cylinderGeometry args={[0.14, 0.16, 0.78, 24]} />
+        <meshStandardMaterial color={garmentColor} {...mat} />
+      </mesh>
+      <mesh position={[0.62, 1.2, 0]} scale={[garmentScale, garmentScale, garmentScale]} castShadow>
+        <cylinderGeometry args={[0.14, 0.16, 0.78, 24]} />
+        <meshStandardMaterial color={garmentColor} {...mat} />
+      </mesh>
+      <mesh position={[0, 1.54, 0.26]} scale={[garmentScale, garmentScale, garmentScale]}>
+        <planeGeometry args={[0.38, 0.28]} />
+        <meshStandardMaterial color="#ffffff" map={decalMap ?? undefined} transparent={Boolean(decalMap)} />
+      </mesh>
+      <mesh position={[0, 0.46, 0]} castShadow><boxGeometry args={[0.34, 0.92, 0.3]} /><meshStandardMaterial color="#111827" /></mesh>
+      <mesh position={[0.35, 0.46, 0]} castShadow><boxGeometry args={[0.34, 0.92, 0.3]} /><meshStandardMaterial color="#111827" /></mesh>
+    </group>
+  );
+}
+
+export function AvatarPreview({
+  textureUrl,
+  className,
+  avatarType = "neutral",
+  bodyType = "regular",
+  view: controlledView,
+  onViewChange,
+  itemType = "shirt",
+  dimension = "2d",
+  garmentColor = "#2563eb",
+  garmentMaterial = "cotton",
+  garmentScale = 1,
+}: AvatarPreviewProps) {
   const [internalView, setInternalView] = useState<"front" | "back">("front");
   const [zoom, setZoom] = useState(3.8);
   const [rotation, setRotation] = useState(0);
@@ -210,7 +271,7 @@ export function AvatarPreview({ textureUrl, className, avatarType = "neutral", b
 
   return (
     <Card className={className}>
-      <div className="p-4 text-sm font-medium border-b border-border">Avatar Studio Preview · {avatarType}</div>
+      <div className="p-4 text-sm font-medium border-b border-border">Avatar Studio Preview · {avatarType} · {dimension === "2d" ? "Classic 2D" : "3D Clothing"}</div>
       <div className="px-4 pt-3 flex flex-wrap items-center gap-2">
         <Button size="sm" variant={view === "front" ? "default" : "outline"} onClick={() => setView("front")}>Front</Button>
         <Button size="sm" variant={view === "back" ? "default" : "outline"} onClick={() => setView("back")}>Back</Button>
@@ -218,7 +279,7 @@ export function AvatarPreview({ textureUrl, className, avatarType = "neutral", b
         <Button size="icon" variant="outline" onClick={() => setZoom((p) => Math.min(5.2, p + 0.25))}><ZoomOut className="w-4 h-4" /></Button>
         <Button size="icon" variant="outline" onClick={() => setZoom((p) => Math.max(2.4, p - 0.25))}><ZoomIn className="w-4 h-4" /></Button>
       </div>
-      <div className="h-[520px] p-4">
+      <div className="h-[560px] p-4">
         {maps ? (
           <Canvas shadows camera={{ position: [0, 1.25, zoom], fov: 38 }}>
             <color attach="background" args={["#0f172a"]} />
@@ -226,7 +287,18 @@ export function AvatarPreview({ textureUrl, className, avatarType = "neutral", b
             <directionalLight position={[4, 6, 4]} intensity={1.1} castShadow shadow-mapSize-width={1024} shadow-mapSize-height={1024} />
             <directionalLight position={[-3, 3, -4]} intensity={0.45} />
             <group rotation-y={rotation}>
-              <Mannequin maps={maps} bodyType={bodyType} view={view} itemType={itemType} />
+              {dimension === "2d" ? (
+                <Mannequin2D maps={maps} bodyType={bodyType} view={view} itemType={itemType} />
+              ) : (
+                <Mannequin3D
+                  view={view}
+                  bodyType={bodyType}
+                  garmentColor={garmentColor}
+                  garmentMaterial={garmentMaterial}
+                  garmentScale={garmentScale}
+                  textureUrl={textureUrl}
+                />
+              )}
             </group>
             <mesh rotation-x={-Math.PI / 2} position={[0, 0, 0]} receiveShadow>
               <circleGeometry args={[2.2, 64]} />
