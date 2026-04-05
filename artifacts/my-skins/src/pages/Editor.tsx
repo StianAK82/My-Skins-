@@ -937,7 +937,7 @@ export default function Editor() {
           <Button size="sm" onClick={handleUploadToRoblox} disabled={credits < 1 || isUploading}>
             {isUploading ? "Uploading..." : "Upload to Roblox (1 Credit)"}
           </Button>
-          <Button size="sm" variant="secondary" onClick={() => setPreviewOpen(true)} disabled={!avatarTextureUrl}>
+          <Button size="sm" variant="secondary" onClick={() => setPreviewOpen(true)}>
             Preview on Avatar
           </Button>
           <Button size="sm" variant={snapEnabled ? "default" : "outline"} onClick={() => setSnapEnabled((prev) => !prev)}>
@@ -1029,20 +1029,15 @@ export default function Editor() {
                 <Button size="sm" variant={previewFacing === "back" ? "secondary" : "outline"} onClick={() => setPreviewFacing("back")}>Back</Button>
               </div>
             </div>
-            {avatarTextureUrl ? (
-              <AvatarPreview
-                textureUrl={avatarTextureUrl}
-                avatarType={avatarProfile.avatarType}
-                bodyType={avatarProfile.bodyType}
-                view={previewFacing}
-                onViewChange={setPreviewFacing}
-                className="border-primary/20 shadow-2xl"
-              />
-            ) : (
-              <div className="h-[520px] rounded-xl border border-dashed border-white/20 bg-black/30 flex items-center justify-center text-center text-slate-300 px-6">
-                Start designing to see your clothing previewed on the avatar in real time.
-              </div>
-            )}
+            <AvatarPreview
+              textureUrl={avatarTextureUrl}
+              avatarType={avatarProfile.avatarType}
+              bodyType={avatarProfile.bodyType}
+              view={previewFacing}
+              onViewChange={setPreviewFacing}
+              itemType={(project?.type as "shirt" | "pants") ?? "shirt"}
+              className="border-primary/20 shadow-2xl"
+            />
             <div className="rounded-xl border border-white/10 bg-card p-4">
               <div className="flex items-center justify-between mb-3">
                 <h3 className="text-sm font-semibold flex items-center gap-2"><Shirt className="w-4 h-4" /> Design Surface</h3>
@@ -1240,18 +1235,15 @@ export default function Editor() {
           <DialogHeader className="px-6 pt-6 pb-0">
             <DialogTitle>Preview on Avatar</DialogTitle>
           </DialogHeader>
-          {avatarTextureUrl ? (
-            <AvatarPreview
-              textureUrl={avatarTextureUrl}
-              avatarType={avatarProfile.avatarType}
-              bodyType={avatarProfile.bodyType}
-              className="border-0 rounded-none"
-            />
-          ) : (
-            <div className="h-[420px] flex items-center justify-center text-sm text-muted-foreground">
-              Add content on the canvas to preview your design.
-            </div>
-          )}
+          <AvatarPreview
+            textureUrl={avatarTextureUrl}
+            avatarType={avatarProfile.avatarType}
+            bodyType={avatarProfile.bodyType}
+            view={previewFacing}
+            onViewChange={setPreviewFacing}
+            itemType={(project?.type as "shirt" | "pants") ?? "shirt"}
+            className="border-0 rounded-none"
+          />
         </DialogContent>
       </Dialog>
 
