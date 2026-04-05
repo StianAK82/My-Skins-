@@ -2,7 +2,14 @@
 
 ## Overview
 
-Full-production Roblox clothing creation platform. pnpm workspace monorepo with TypeScript. Users can design Roblox shirts/pants with a Fabric.js canvas editor, AI design tools (powered by OpenAI via Replit AI Integrations), color palette generation, project management, export to PNG, and share links. Dark gaming aesthetic. Auth via Replit OIDC.
+Full-production Roblox clothing creation platform. pnpm workspace monorepo with TypeScript. 3-panel creator studio: Left panel (avatar type, body type, clothing, style), Center (3D avatar always visible, full-height, rotatable/zoomable, live clothing preview via Three.js/R3F), Right panel (AI generation: prompt, Create/Improve/Remix). The Fabric.js 2D canvas opens in a bottom Sheet drawer when clicking "Edit Texture". 8 item types, multilingual (EN/NO/ES), Roblox 585×559 template, OpenAI integration via user's own OPENAI_API_KEY. Dark gaming aesthetic (#080e1a). Auth via Replit OIDC.
+
+### Editor Architecture (3-Panel Studio)
+- **Left panel** (240px): Avatar type (neutral/feminine/masculine/stylized), body type (slim/regular/athletic), clothing type (shirt/pants for 2D; hoodie/jacket for 3D), style presets, 3D garment controls (color, material, fit), upload to Roblox
+- **Center** (flex-1): `AvatarPreview` in `studioMode={true}` — fills 100% height, Three.js/R3F avatar with live texture mapping from Fabric.js canvas, OrbitControls, floating front/back/rotate/zoom controls
+- **Right panel** (300px): `AiPanel` — AI prompt → generate/improve/remix, color palette display, style presets
+- **2D Texture Editor** (Sheet, bottom drawer, 82vh): Fabric.js canvas (always in DOM for state persistence), draw/text/rect/circle/upload tools, module library, object properties. Auto-saves on close.
+- **Header**: Project title, 2D/3D toggle (center), Edit Texture button, Save, Export PNG
 
 ## Stack
 

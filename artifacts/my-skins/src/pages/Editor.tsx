@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { useToast } from "@/hooks/use-toast";
 import { AiPanel } from "@/components/editor/AiPanel";
 import { AvatarPreview } from "@/components/editor/AvatarPreview";
@@ -258,6 +259,7 @@ export default function Editor() {
   const [aiConcept, setAiConcept] = useState<AiConcept | null>(null);
   const [showConcept, setShowConcept] = useState(true);
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [textureEditorOpen, setTextureEditorOpen] = useState(false);
   const [avatarTextureUrl, setAvatarTextureUrl] = useState("");
   const [credits, setCredits] = useState(0);
   const [paymentOpen, setPaymentOpen] = useState(false);
@@ -902,412 +904,212 @@ export default function Editor() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-background">
-        <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+      <div className="flex items-center justify-center h-screen bg-[#080e1a]">
+        <div className="w-10 h-10 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col h-screen overflow-hidden bg-background text-foreground">
-      <header className="h-14 border-b border-border bg-card flex items-center justify-between px-4 shrink-0 gap-4">
-        <div className="flex items-center gap-3">
+    <div className="flex flex-col h-screen overflow-hidden bg-[#080e1a] text-white">
+
+      {/* ── HEADER ──────────────────────────────────────────────────── */}
+      <header className="h-12 border-b border-white/10 bg-[#0d1117] flex items-center justify-between px-4 shrink-0 gap-3 z-20">
+        <div className="flex items-center gap-2 min-w-0">
           <Link href="/dashboard">
-            <Button variant="ghost" size="icon"><ArrowLeft className="w-4 h-4" /></Button>
+            <button className="p-1.5 rounded hover:bg-white/10 transition-colors text-white/60 hover:text-white">
+              <ArrowLeft className="w-4 h-4" />
+            </button>
           </Link>
-          <div className="font-semibold text-sm truncate max-w-[180px]">{project?.title}</div>
-          <div className="flex items-center gap-1">
-            <span className="text-xs bg-muted px-2 py-0.5 rounded uppercase text-muted-foreground">{dimension === "2d" ? "Classic 2D" : "3D clothing"}</span>
-            <span className="text-xs bg-muted px-2 py-0.5 rounded uppercase text-muted-foreground">{creationMode}</span>
-            <span className="text-xs bg-muted px-2 py-0.5 rounded">{avatarProfile.avatarType}/{avatarProfile.bodyType}</span>
-            {project?.isAiGenerated && (
-              <span className="text-xs bg-primary/20 text-primary px-2 py-0.5 rounded uppercase font-semibold flex items-center gap-0.5">
-                <Sparkles className="w-2.5 h-2.5" /> AI
-              </span>
-            )}
-          </div>
+          <span className="font-semibold text-sm truncate max-w-[160px] text-white">{project?.title}</span>
+          {project?.isAiGenerated && (
+            <span className="text-[10px] bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 px-2 py-0.5 rounded-full flex items-center gap-1 shrink-0">
+              <Sparkles className="w-2.5 h-2.5" /> AI
+            </span>
+          )}
         </div>
 
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-medium px-2 py-1 rounded bg-muted">Credits: {credits}</span>
-          <Button size="sm" variant="outline" onClick={() => setPaymentOpen(true)}>
-            Buy 1 Credit (10 NOK)
-          </Button>
-          <Button variant="outline" size="sm" onClick={handleSave} disabled={saveCanvas.isPending}>
-            <Save className="w-4 h-4 mr-1.5" />
-            {saveCanvas.isPending ? (language === "no" ? "Lagrer..." : "Saving...") : t("editor.save")}
-          </Button>
-          <Button size="sm" onClick={handleExport}>
-            <Download className="w-4 h-4 mr-1.5" />
-            {t("editor.export")}
-          </Button>
-          <Button size="sm" onClick={handleUploadToRoblox} disabled={credits < 1 || isUploading}>
-            {isUploading ? "Uploading..." : "Upload to Roblox (1 Credit)"}
-          </Button>
-          <Button size="sm" variant={snapEnabled ? "default" : "outline"} onClick={() => setSnapEnabled((prev) => !prev)}>
-            <Grid3X3 className="w-3.5 h-3.5 mr-1" /> Snap
-          </Button>
+        {/* Center: 2D / 3D mode toggle */}
+        <div className="flex items-center bg-white/5 rounded-lg p-0.5 border border-white/10 shrink-0">
+          <button
+            onClick={() => setDimension("2d")}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${dimension === "2d" ? "bg-indigo-600 text-white shadow" : "text-white/50 hover:text-white"}`}
+          >
+            <Shirt className="w-3.5 h-3.5" /> Classic 2D
+          </button>
+          <button
+            onClick={() => setDimension("3d")}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${dimension === "3d" ? "bg-indigo-600 text-white shadow" : "text-white/50 hover:text-white"}`}
+          >
+            <Boxes className="w-3.5 h-3.5" /> 3D Clothing
+          </button>
+        </div>
+
+        <div className="flex items-center gap-1.5 shrink-0">
+          <button
+            onClick={() => setTextureEditorOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-white/10 hover:bg-white/15 border border-white/10 transition-colors"
+          >
+            <PenTool className="w-3.5 h-3.5" /> Edit Texture
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={saveCanvas.isPending}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-white/10 hover:bg-white/15 border border-white/10 transition-colors disabled:opacity-50"
+          >
+            <Save className="w-3.5 h-3.5" />
+            {saveCanvas.isPending ? "..." : "Save"}
+          </button>
+          <button
+            onClick={handleExport}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-indigo-600 hover:bg-indigo-500 transition-colors"
+          >
+            <Download className="w-3.5 h-3.5" /> Export
+          </button>
         </div>
       </header>
 
-      {/* AI Concept Banner */}
-      <AnimatePresence>
-        {aiConcept && showConcept && (
-          <AiConceptBanner
-            concept={aiConcept}
-            onClose={() => setShowConcept(false)}
-            onUseColors={handleUseColors}
-          />
-        )}
-      </AnimatePresence>
+      {/* ── 3-PANEL BODY ─────────────────────────────────────────────── */}
+      <div className="flex flex-1 overflow-hidden">
 
-      <div className="border-b border-border bg-card/70 px-4 py-3 shrink-0">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Creation dimension</span>
-          <Button size="sm" variant={dimension === "2d" ? "default" : "outline"} onClick={() => setDimension("2d")} className="gap-1"><Shirt className="w-3.5 h-3.5" /> Classic 2D Clothing</Button>
-          <Button size="sm" variant={dimension === "3d" ? "default" : "outline"} onClick={() => setDimension("3d")} className="gap-1"><Boxes className="w-3.5 h-3.5" /> 3D Clothing</Button>
-        </div>
-      </div>
+        {/* ── LEFT: Build Tools ──────────────────────────────────────── */}
+        <aside className="w-[240px] shrink-0 border-r border-white/8 bg-[#0d1117] overflow-y-auto flex flex-col">
+          <div className="px-4 pt-4 pb-2 border-b border-white/8">
+            <p className="text-[11px] font-bold uppercase tracking-widest text-white/40">Studio</p>
+          </div>
 
-      <div className="grid flex-1 overflow-hidden 2xl:grid-cols-[290px_minmax(0,1fr)_360px] xl:grid-cols-[270px_minmax(0,1fr)_340px] lg:grid-cols-[250px_minmax(0,1fr)]">
-        <aside className="border-r border-border bg-card overflow-y-auto p-4 space-y-4">
-          <div>
-            <h3 className="font-semibold text-sm flex items-center gap-2"><User className="w-4 h-4" /> Build Controls</h3>
-            <p className="text-xs text-muted-foreground mt-1">Pick who you are designing for and what garment you are building.</p>
-          </div>
-          <div className="space-y-2">
-            <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Avatar selection</p>
-            <div className="grid grid-cols-2 gap-2">
-              {["neutral", "feminine", "masculine", "stylized"].map((type) => (
-                <Button key={type} size="sm" variant={avatarProfile.avatarType === type ? "default" : "outline"} className="text-[11px]" onClick={() => setAvatarProfile((p) => ({ ...p, avatarType: type }))}>
-                  {type}
-                </Button>
-              ))}
-            </div>
-          </div>
-          <div className="space-y-2">
-            <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Body type</p>
-            <div className="grid grid-cols-3 gap-2">
-              {["regular", "slim", "athletic"].map((type) => (
-                <Button key={type} size="sm" variant={avatarProfile.bodyType === type ? "default" : "outline"} className="text-[11px]" onClick={() => setAvatarProfile((p) => ({ ...p, bodyType: type }))}>
-                  {type}
-                </Button>
-              ))}
-            </div>
-          </div>
-          <div className="space-y-2">
-            <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Item type</p>
-            <div className="flex flex-wrap gap-2">
-              {dimension === "2d" ? (
-                <>
-                  <Button size="sm" variant={activeClassicType === "shirt" ? "default" : "outline"} className="text-xs" onClick={() => setClassicItemType("shirt")}>Shirt</Button>
-                  <Button size="sm" variant={activeClassicType === "pants" ? "default" : "outline"} className="text-xs" onClick={() => setClassicItemType("pants")}>Pants</Button>
-                </>
-              ) : (
-                <Button size="sm" variant="default" className="text-xs" onClick={() => setGarmentType3d("hoodie")}>Hoodie</Button>
-              )}
-            </div>
-          </div>
-          {dimension === "3d" && (
-            <div className="space-y-3 rounded-lg border border-border bg-muted/20 p-3">
-              <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1"><SlidersHorizontal className="w-3.5 h-3.5" /> 3D garment controls</h4>
-              <div className="space-y-1">
-                <label className="text-[10px] uppercase tracking-wide text-muted-foreground">Garment color</label>
-                <div className="flex items-center gap-2">
-                  <input type="color" value={garmentColor} onChange={(e) => setGarmentColor(e.target.value)} className="w-8 h-8 rounded border border-border bg-transparent cursor-pointer" />
-                  <span className="text-xs font-mono">{garmentColor}</span>
-                </div>
-              </div>
-              <div className="space-y-1">
-                <label className="text-[10px] uppercase tracking-wide text-muted-foreground">Material</label>
-                <div className="grid grid-cols-3 gap-1">
-                  {(["cotton", "denim", "nylon"] as const).map((material) => (
-                    <Button key={material} size="sm" variant={garmentMaterial === material ? "default" : "outline"} className="h-7 text-[10px]" onClick={() => setGarmentMaterial(material)}>
-                      {material}
-                    </Button>
-                  ))}
-                </div>
-              </div>
-              <div className="space-y-1">
-                <label className="text-[10px] uppercase tracking-wide text-muted-foreground">Fit / scale · {garmentScale.toFixed(2)}x</label>
-                <input type="range" min={0.85} max={1.2} step={0.01} value={garmentScale} onChange={(e) => setGarmentScale(parseFloat(e.target.value))} className="w-full" />
-              </div>
-              <p className="text-[11px] text-muted-foreground">Decal placement uses your live design as chest graphic in 3D preview.</p>
-            </div>
-          )}
-          <div className="space-y-2">
-            <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Style presets</p>
-            <div className="grid grid-cols-2 gap-2">
-              {STYLE_PRESET_VALUES.map((preset) => (
-                <Button key={preset} size="sm" variant={selectedStylePreset === preset ? "default" : "outline"} className="h-8 text-[11px] capitalize" onClick={() => setSelectedStylePreset(preset)}>
-                  {preset}
-                </Button>
-              ))}
-            </div>
-          </div>
-          <div className="space-y-2">
-            <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Module categories</p>
-            <div className="flex flex-wrap gap-1">
-              {Array.from(new Set(MODULE_LIBRARY.map((m) => m.category))).map((category) => (
-                <button key={category} onClick={() => setActiveModuleCategory(category)} className={`px-2 py-1 text-[10px] rounded border ${activeModuleCategory === category ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground"}`}>
-                  {category}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div className="space-y-2">
-            <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Template zones</p>
-            <div className="rounded-md border border-border bg-muted/20 p-2 text-xs text-muted-foreground space-y-1">
-              {Object.values(TEMPLATE_ZONES[activeClassicType]).map((zone) => (
-                <div key={zone.label} className="flex items-center justify-between"><span>{zone.label}</span><span>{zone.width}×{zone.height}</span></div>
-              ))}
-            </div>
-          </div>
-        </aside>
-
-        <main className="bg-[#0f172a] relative overflow-auto p-4 lg:p-6 lg:col-span-1 col-span-full order-first lg:order-none">
-          <div className="max-w-5xl mx-auto space-y-4 min-h-full">
-            <div className="rounded-xl border border-white/10 bg-black/20 p-3 text-xs text-slate-200 flex items-center justify-between">
-              <span>Live Avatar Preview · always visible while editing.</span>
-              <div className="flex items-center gap-2">
-                <Button size="sm" variant={previewFacing === "front" ? "secondary" : "outline"} onClick={() => setPreviewFacing("front")}>Front</Button>
-                <Button size="sm" variant={previewFacing === "back" ? "secondary" : "outline"} onClick={() => setPreviewFacing("back")}>Back</Button>
-              </div>
-            </div>
-            <AvatarPreview
-              textureUrl={avatarTextureUrl}
-              avatarType={avatarProfile.avatarType}
-              bodyType={avatarProfile.bodyType}
-              view={previewFacing}
-              onViewChange={setPreviewFacing}
-              itemType={activeClassicType}
-              dimension={dimension}
-              garmentColor={garmentColor}
-              garmentMaterial={garmentMaterial}
-              garmentScale={garmentScale}
-              className="border-primary/20 shadow-2xl"
-            />
-            {dimension === "2d" ? (
-              <div className="rounded-xl border border-white/10 bg-card p-4">
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-sm font-semibold flex items-center gap-2"><Shirt className="w-4 h-4" /> Classic 2D Design Surface</h3>
-                  <div className="flex gap-1.5">
-                    <Button variant="ghost" size="icon" onClick={zoomOut}><ZoomOut className="w-4 h-4" /></Button>
-                    <Button variant="ghost" size="icon" onClick={zoomIn}><ZoomIn className="w-4 h-4" /></Button>
-                  </div>
-                </div>
-                <div className="flex items-center justify-center overflow-auto">
-                  <canvas
-                    ref={canvasRef}
-                    onDragOver={(e) => e.preventDefault()}
-                    onDrop={(e) => {
-                      e.preventDefault();
-                      if (!draggingModuleId || !fabricRef.current) return;
-                      const module = MODULE_LIBRARY.find((m) => m.id === draggingModuleId);
-                      if (!module) return;
-                      const rect = (e.target as HTMLCanvasElement).getBoundingClientRect();
-                      addModuleAt(module, e.clientX - rect.left, e.clientY - rect.top);
-                      setDraggingModuleId(null);
-                    }}
-                  />
-                </div>
-              </div>
-            ) : (
-              <div className="rounded-xl border border-white/10 bg-card p-4 text-sm text-muted-foreground">
-                <h3 className="text-sm font-semibold text-foreground flex items-center gap-2 mb-2"><Palette className="w-4 h-4" /> 3D garment workspace</h3>
-                <p className="mb-2">You are in 3D clothing mode ({garmentType3d}). Use left panel material, color and fit controls. Right panel AI can generate 3D concepts (beta).</p>
-                <p>Current release keeps classic 2D export/upload pipeline. 3D previews are live in the center avatar and workflow is separated for future backend completion.</p>
-              </div>
-            )}
-          </div>
-        </main>
-
-        <aside className="border-t lg:border-t-0 lg:border-l border-border bg-card p-3 overflow-y-auto shrink-0 lg:col-span-2 xl:col-span-1">
-          <Tabs value={creatorMode} onValueChange={(value) => { const mode = value as "ai" | "manual" | "template" | "remix"; setCreatorMode(mode); setCreationMode(mode); }} className="space-y-3">
-            <TabsList className="grid grid-cols-2 h-auto gap-1 bg-muted/40 p-1">
-              <TabsTrigger value="ai" className="text-xs"><Sparkles className="w-3 h-3 mr-1" /> AI Design</TabsTrigger>
-              <TabsTrigger value="manual" className="text-xs"><PenTool className="w-3 h-3 mr-1" /> Build Manually</TabsTrigger>
-              <TabsTrigger value="template" className="text-xs"><LayoutTemplate className="w-3 h-3 mr-1" /> Start Template</TabsTrigger>
-              <TabsTrigger value="remix" className="text-xs"><Wand2 className="w-3 h-3 mr-1" /> Remix</TabsTrigger>
-            </TabsList>
-            <TabsContent value="ai" className="m-0">
-              <AiPanel
-                projectType={activeClassicType}
-                dimension={dimension}
-                onDimensionChange={setDimension}
-                onUseColors={handleUseColors}
-                onApplyAssets={applyAiOutfitToCanvas}
-              />
-            </TabsContent>
-            <TabsContent value="manual" className="m-0 space-y-3">
-              <h3 className="font-semibold text-sm flex items-center gap-2"><Layers className="w-4 h-4" /> Manual Builder</h3>
-              {dimension === "3d" && (
-                <div className="rounded-md border border-amber-500/30 bg-amber-500/10 p-2 text-xs text-amber-100">
-                  Manual 3D tooling currently supports garment controls in the left panel. 2D canvas tools are disabled in 3D mode.
-                </div>
-              )}
+          <div className="p-3 space-y-5 flex-1">
+            {/* Avatar type */}
+            <div className="space-y-2">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-white/40">Avatar</p>
               <div className="grid grid-cols-2 gap-1.5">
-                <Button variant="outline" className="flex-col h-14 gap-1 text-xs" onClick={addText} disabled={dimension === "3d"}><Type className="w-4 h-4" />Text</Button>
-                <Button variant="outline" className="flex-col h-14 gap-1 text-xs" onClick={addRect} disabled={dimension === "3d"}><Square className="w-4 h-4" />Rect</Button>
-                <Button variant="outline" className="flex-col h-14 gap-1 text-xs" onClick={addCircle} disabled={dimension === "3d"}><Circle className="w-4 h-4" />Circle</Button>
-                <Button variant={drawingMode ? "default" : "outline"} className="flex-col h-14 gap-1 text-xs" onClick={() => setDrawingMode((p) => !p)} disabled={dimension === "3d"}><PenTool className="w-4 h-4" />Draw</Button>
+                {[{ id: "neutral", label: "Neutral" }, { id: "feminine", label: "Female" }, { id: "masculine", label: "Male" }, { id: "stylized", label: "Stylized" }].map((a) => (
+                  <button
+                    key={a.id}
+                    onClick={() => setAvatarProfile((p) => ({ ...p, avatarType: a.id }))}
+                    className={`text-[11px] py-1.5 px-2 rounded-md border transition-all ${avatarProfile.avatarType === a.id ? "bg-indigo-600/80 border-indigo-500 text-white" : "border-white/10 text-white/50 hover:text-white hover:border-white/20"}`}
+                  >
+                    {a.label}
+                  </button>
+                ))}
               </div>
-              <label className="flex flex-col items-center gap-1.5 h-14 border border-dashed border-border rounded-md cursor-pointer hover:border-primary/50 text-xs text-muted-foreground justify-center">
-                <ImageIcon className="w-4 h-4" /> Upload Image
-                <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} disabled={dimension === "3d"} />
-              </label>
-              <div className="space-y-2">
-                <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Module library</p>
-                <div className="grid grid-cols-2 gap-2">
-                  {MODULE_LIBRARY.filter((module) => module.category === activeModuleCategory).map((module) => (
-                    <button key={module.id} onClick={() => addModule(module)} draggable={dimension !== "3d"} onDragStart={() => setDraggingModuleId(module.id)} className="border rounded-md p-2 text-left hover:border-primary/60 transition-colors disabled:opacity-50" disabled={dimension === "3d"}>
-                      <div className="w-full h-8 rounded mb-1" style={{ backgroundColor: module.color, opacity: 0.85 }} />
-                      <p className="text-xs font-medium leading-tight">{module.name}</p>
+            </div>
+
+            {/* Body type */}
+            <div className="space-y-2">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-white/40">Body Type</p>
+              <div className="grid grid-cols-3 gap-1.5">
+                {["Slim", "Regular", "Athletic"].map((b) => (
+                  <button
+                    key={b}
+                    onClick={() => setAvatarProfile((p) => ({ ...p, bodyType: b.toLowerCase() }))}
+                    className={`text-[11px] py-1.5 rounded-md border transition-all ${avatarProfile.bodyType === b.toLowerCase() ? "bg-indigo-600/80 border-indigo-500 text-white" : "border-white/10 text-white/50 hover:text-white hover:border-white/20"}`}
+                  >
+                    {b}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Item type */}
+            <div className="space-y-2">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-white/40">Clothing</p>
+              {dimension === "2d" ? (
+                <div className="grid grid-cols-2 gap-1.5">
+                  {[
+                    { id: "shirt", label: "👕 Shirt" },
+                    { id: "pants", label: "👖 Pants" },
+                  ].map((item) => (
+                    <button
+                      key={item.id}
+                      onClick={() => setClassicItemType(item.id as "shirt" | "pants")}
+                      className={`text-[11px] py-2 rounded-md border transition-all ${activeClassicType === item.id ? "bg-indigo-600/80 border-indigo-500 text-white" : "border-white/10 text-white/50 hover:text-white hover:border-white/20"}`}
+                    >
+                      {item.label}
                     </button>
                   ))}
                 </div>
-              </div>
-            </TabsContent>
-            <TabsContent value="template" className="m-0 space-y-3">
-              <h3 className="font-semibold text-sm flex items-center gap-2"><LayoutTemplate className="w-4 h-4" /> Template Loader</h3>
-              <p className="text-xs text-muted-foreground">Load zone guides and starter layout for fast composition.</p>
-              <Button className="w-full" onClick={() => addTemplateGuideLayer()}>Reload Template Zones</Button>
-              <Button variant="outline" className="w-full" onClick={() => ensureVisibleStarterDesign(selectedStylePreset)}>Apply Starter Design</Button>
-            </TabsContent>
-            <TabsContent value="remix" className="m-0 space-y-3">
-              <h3 className="font-semibold text-sm flex items-center gap-2"><Wand2 className="w-4 h-4" /> Remix Existing</h3>
-              <p className="text-xs text-muted-foreground">Select a source from current canvas + AI concept and iterate quickly.</p>
-              <Button className="w-full" variant="outline" onClick={() => setCreatorMode("ai")}>Open AI Remix Tools</Button>
-            </TabsContent>
-          </Tabs>
-
-          <h3 className="font-semibold text-sm mb-3 flex items-center gap-2">
-            <Layers className="w-4 h-4" />
-            {t("editor.properties")}
-          </h3>
-
-          {dimension === "3d" ? (
-            <div className="text-xs text-muted-foreground py-4 leading-relaxed space-y-2">
-              <p>3D mode keeps object properties separate from the classic 2D canvas.</p>
-              <p>Use left panel controls for color, material, fit and decal behavior.</p>
-            </div>
-          ) : selectedObject ? (
-            <div className="space-y-3">
-              <div className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded capitalize">
-                {getObjectMeta(selectedObject).layerName ?? selectedObject.type}
-              </div>
-
-              {(selectedObject.type === "i-text" || selectedObject.type === "text") && (
-                <div className="space-y-2">
-                  <label className="text-[10px] text-muted-foreground uppercase tracking-wide block">
-                    {language === "no" ? "Tekst" : "Text"}
-                  </label>
-                  <Input
-                    value={(selectedObject as fabric.IText).text ?? ""}
-                    onChange={e => { (selectedObject as fabric.IText).set("text", e.target.value); fabricRef.current?.renderAll(); }}
-                    className="h-8 text-xs"
-                  />
-                  <div className="flex items-center gap-2">
-                    <label className="text-[10px] text-muted-foreground w-10">
-                      {language === "no" ? "Str." : "Size"}
-                    </label>
-                    <Input
-                      type="number"
-                      value={(selectedObject as fabric.IText).fontSize ?? 32}
-                      onChange={e => { (selectedObject as fabric.IText).set("fontSize", parseInt(e.target.value) || 32); fabricRef.current?.renderAll(); }}
-                      className="h-8 text-xs"
-                    />
-                  </div>
-                </div>
-              )}
-
-              <div className="space-y-1">
-                <label className="text-[10px] text-muted-foreground uppercase tracking-wide block">
-                  {language === "no" ? "Farge" : "Fill"}
-                </label>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="color"
-                    value={typeof selectedObject.fill === "string" ? selectedObject.fill : "#000000"}
-                    onChange={e => { selectedObject.set("fill", e.target.value); setFillColor(e.target.value); fabricRef.current?.renderAll(); }}
-                    className="w-8 h-8 rounded border border-border bg-transparent cursor-pointer"
-                  />
-                  <span className="text-xs font-mono text-muted-foreground">
-                    {typeof selectedObject.fill === "string" ? selectedObject.fill : "–"}
-                  </span>
-                </div>
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-[10px] text-muted-foreground uppercase tracking-wide block">
-                  {language === "no" ? `Gjennomsiktighet — ${Math.round((selectedObject.opacity ?? 1) * 100)}%` : `Opacity — ${Math.round((selectedObject.opacity ?? 1) * 100)}%`}
-                </label>
-                <input
-                  type="range" min="0" max="1" step="0.01"
-                  value={selectedObject.opacity ?? 1}
-                  onChange={e => { selectedObject.set("opacity", parseFloat(e.target.value)); fabricRef.current?.renderAll(); setSelectedObject({ ...selectedObject } as fabric.Object); }}
-                  className="w-full"
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-[10px] text-muted-foreground uppercase tracking-wide block">
-                  {language === "no" ? "Posisjon" : "Position"}
-                </label>
-                <div className="grid grid-cols-2 gap-1">
-                  {["left", "top"].map(axis => (
-                    <div key={axis}>
-                      <span className="text-[9px] text-muted-foreground">{axis === "left" ? "X" : "Y"}</span>
-                      <Input
-                        type="number"
-                        value={Math.round(axis === "left" ? (selectedObject.left ?? 0) : (selectedObject.top ?? 0))}
-                        onChange={e => { selectedObject.set(axis as "left" | "top", parseInt(e.target.value) || 0); fabricRef.current?.renderAll(); }}
-                        className="h-7 text-xs mt-0.5"
-                      />
-                    </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-1.5">
+                  {["Hoodie", "Jacket", "T-Shirt", "Suit"].map((g) => (
+                    <button
+                      key={g}
+                      className="text-[11px] py-2 rounded-md border border-white/10 text-white/50 hover:text-white hover:border-white/20 transition-all"
+                    >
+                      {g}
+                    </button>
                   ))}
                 </div>
-              </div>
+              )}
+            </div>
 
-              <Button variant="destructive" size="sm" className="w-full mt-2 h-8 text-xs" onClick={deleteSelected}>
-                <Trash2 className="w-3.5 h-3.5 mr-1.5" />
-                {t("common.delete")}
-              </Button>
-              <div className="grid grid-cols-2 gap-1">
-                <Button variant="outline" size="sm" className="h-8 text-xs" onClick={duplicateSelected}>
-                  <Copy className="w-3.5 h-3.5 mr-1" /> Duplicate
-                </Button>
-                <Button variant="outline" size="sm" className="h-8 text-xs" onClick={toggleObjectLock}>
-                  {selectedObject.lockMovementX ? <Unlock className="w-3.5 h-3.5 mr-1" /> : <Lock className="w-3.5 h-3.5 mr-1" />}
-                  {selectedObject.lockMovementX ? "Unlock" : "Lock"}
-                </Button>
-                <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => moveLayer("up")}>
-                  <MoveUp className="w-3.5 h-3.5 mr-1" /> Up
-                </Button>
-                <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => moveLayer("down")}>
-                  <MoveDown className="w-3.5 h-3.5 mr-1" /> Down
-                </Button>
-                <Button variant="outline" size="sm" className="h-8 text-xs" onClick={groupSelection}>
-                  <Group className="w-3.5 h-3.5 mr-1" /> Group
-                </Button>
-                <Button variant="outline" size="sm" className="h-8 text-xs" onClick={ungroupSelection}>
-                  <Ungroup className="w-3.5 h-3.5 mr-1" /> Ungroup
-                </Button>
+            {/* Style presets */}
+            <div className="space-y-2">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-white/40">Style</p>
+              <div className="grid grid-cols-2 gap-1.5">
+                {STYLE_PRESET_VALUES.map((preset) => (
+                  <button
+                    key={preset}
+                    onClick={() => setSelectedStylePreset(preset)}
+                    className={`text-[11px] py-1.5 capitalize rounded-md border transition-all ${selectedStylePreset === preset ? "bg-indigo-600/80 border-indigo-500 text-white" : "border-white/10 text-white/50 hover:text-white hover:border-white/20"}`}
+                  >
+                    {preset}
+                  </button>
+                ))}
               </div>
             </div>
-          ) : (
-            <div className="text-xs text-muted-foreground text-center py-8 leading-relaxed">
-              {language === "no" ? "Velg et objekt for å redigere egenskaper" : "Select an object to edit its properties"}
+
+            {/* 3D garment controls */}
+            {dimension === "3d" && (
+              <div className="space-y-3 rounded-lg border border-white/10 bg-white/5 p-3">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-white/40 flex items-center gap-1"><SlidersHorizontal className="w-3 h-3" /> 3D Controls</p>
+                <div className="space-y-1">
+                  <label className="text-[10px] text-white/40">Color</label>
+                  <div className="flex items-center gap-2">
+                    <input type="color" value={garmentColor} onChange={(e) => setGarmentColor(e.target.value)} className="w-8 h-8 rounded border border-white/20 bg-transparent cursor-pointer" />
+                    <span className="text-xs font-mono text-white/60">{garmentColor}</span>
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] text-white/40">Material</label>
+                  <div className="grid grid-cols-3 gap-1">
+                    {(["cotton", "denim", "nylon"] as const).map((m) => (
+                      <button key={m} onClick={() => setGarmentMaterial(m)} className={`text-[10px] py-1 rounded border transition-all ${garmentMaterial === m ? "bg-indigo-600/80 border-indigo-500 text-white" : "border-white/10 text-white/40 hover:text-white"}`}>{m}</button>
+                    ))}
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] text-white/40">Fit {garmentScale.toFixed(2)}x</label>
+                  <input type="range" min={0.85} max={1.2} step={0.01} value={garmentScale} onChange={(e) => setGarmentScale(parseFloat(e.target.value))} className="w-full" />
+                </div>
+              </div>
+            )}
+
+            {/* Upload + Roblox */}
+            <div className="pt-2 border-t border-white/8 space-y-2">
+              <div className="flex items-center justify-between text-[10px] text-white/40">
+                <span>Credits</span>
+                <span className="font-mono font-bold text-white/60">{credits}</span>
+              </div>
+              <button
+                onClick={handleUploadToRoblox}
+                disabled={credits < 1 || isUploading}
+                className="w-full text-[11px] py-2 rounded-md border border-white/10 text-white/50 hover:text-white hover:border-white/20 transition-all disabled:opacity-30"
+              >
+                {isUploading ? "Uploading…" : "↑ Upload to Roblox"}
+              </button>
+              <button
+                onClick={() => setPaymentOpen(true)}
+                className="w-full text-[11px] py-1.5 rounded-md text-white/30 hover:text-white/60 transition-colors"
+              >
+                Buy credits
+              </button>
             </div>
-          )}
+          </div>
         </aside>
-      </div>
 
-      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
-        <DialogContent className="w-[90vw] max-w-5xl p-0 overflow-hidden">
-          <DialogHeader className="px-6 pt-6 pb-0">
-            <DialogTitle>Preview on Avatar</DialogTitle>
-          </DialogHeader>
+        {/* ── CENTER: 3D Avatar Stage ─────────────────────────────────── */}
+        <main className="flex-1 relative overflow-hidden bg-[#080e1a]">
           <AvatarPreview
             textureUrl={avatarTextureUrl}
             avatarType={avatarProfile.avatarType}
@@ -1319,19 +1121,211 @@ export default function Editor() {
             garmentColor={garmentColor}
             garmentMaterial={garmentMaterial}
             garmentScale={garmentScale}
-            className="border-0 rounded-none"
+            studioMode={true}
           />
-        </DialogContent>
-      </Dialog>
+        </main>
 
+        {/* ── RIGHT: AI Panel ─────────────────────────────────────────── */}
+        <aside className="w-[300px] shrink-0 border-l border-white/8 bg-[#0d1117] overflow-y-auto flex flex-col">
+          <div className="px-4 pt-4 pb-2 border-b border-white/8 flex items-center gap-2">
+            <Sparkles className="w-4 h-4 text-indigo-400" />
+            <p className="text-[11px] font-bold uppercase tracking-widest text-white/40">AI Studio</p>
+          </div>
+
+          <div className="flex-1 p-3">
+            <AiPanel
+              projectType={activeClassicType}
+              dimension={dimension}
+              onDimensionChange={setDimension}
+              onUseColors={handleUseColors}
+              onApplyAssets={applyAiOutfitToCanvas}
+            />
+          </div>
+
+          {/* AI Concept banner (inline when there's a result) */}
+          {aiConcept && showConcept && (
+            <div className="mx-3 mb-3 rounded-lg border border-indigo-500/20 bg-indigo-500/10 p-3">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-semibold text-indigo-300 flex items-center gap-1"><Sparkles className="w-3 h-3" /> {aiConcept.title ?? "AI Design"}</span>
+                <button onClick={() => setShowConcept(false)} className="text-white/30 hover:text-white"><X className="w-3.5 h-3.5" /></button>
+              </div>
+              {aiConcept.colors && aiConcept.colors.length > 0 && (
+                <div className="flex gap-1 flex-wrap">
+                  {aiConcept.colors.slice(0, 6).map((c, i) => (
+                    <button
+                      key={i}
+                      onClick={() => handleUseColors(aiConcept.colors!.map((x) => x.hex))}
+                      title={c.name}
+                      className="w-5 h-5 rounded-full border border-white/20 hover:scale-110 transition-transform"
+                      style={{ backgroundColor: c.hex }}
+                    />
+                  ))}
+                </div>
+              )}
+              {aiConcept.style && <p className="text-[10px] text-white/40 mt-1.5">{aiConcept.style}</p>}
+            </div>
+          )}
+        </aside>
+      </div>
+
+      {/* ── 2D TEXTURE EDITOR SHEET ──────────────────────────────────── */}
+      <Sheet open={textureEditorOpen} onOpenChange={(open) => { if (!open) handleSave(); setTextureEditorOpen(open); }}>
+        <SheetContent side="bottom" className="h-[82vh] bg-[#0d1117] border-t border-white/10 p-0 flex flex-col">
+          <SheetHeader className="px-4 py-3 border-b border-white/10 flex-row items-center justify-between space-y-0 shrink-0">
+            <SheetTitle className="text-sm font-semibold text-white flex items-center gap-2">
+              <Shirt className="w-4 h-4 text-indigo-400" /> 2D Texture Editor — {activeClassicType === "shirt" ? "Shirt" : "Pants"}
+            </SheetTitle>
+            <div className="flex items-center gap-2">
+              <button onClick={() => setDrawingMode((p) => !p)} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs border transition-all ${drawingMode ? "bg-indigo-600 border-indigo-500 text-white" : "border-white/10 text-white/50 hover:text-white"}`}>
+                <PenTool className="w-3.5 h-3.5" /> Draw
+              </button>
+              <button onClick={addText} className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs border border-white/10 text-white/50 hover:text-white transition-all">
+                <Type className="w-3.5 h-3.5" /> Text
+              </button>
+              <button onClick={addRect} className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs border border-white/10 text-white/50 hover:text-white transition-all">
+                <Square className="w-3.5 h-3.5" /> Rect
+              </button>
+              <button onClick={addCircle} className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs border border-white/10 text-white/50 hover:text-white transition-all">
+                <Circle className="w-3.5 h-3.5" /> Circle
+              </button>
+              <label className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs border border-white/10 text-white/50 hover:text-white transition-all cursor-pointer">
+                <ImageIcon className="w-3.5 h-3.5" /> Image
+                <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
+              </label>
+              <div className="flex items-center gap-1">
+                <button onClick={zoomOut} className="p-1.5 rounded border border-white/10 text-white/50 hover:text-white"><ZoomOut className="w-3.5 h-3.5" /></button>
+                <button onClick={zoomIn} className="p-1.5 rounded border border-white/10 text-white/50 hover:text-white"><ZoomIn className="w-3.5 h-3.5" /></button>
+              </div>
+              <button
+                onClick={() => { handleSave(); setTextureEditorOpen(false); }}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs bg-indigo-600 hover:bg-indigo-500 text-white transition-colors"
+              >
+                <Save className="w-3.5 h-3.5" /> Done
+              </button>
+            </div>
+          </SheetHeader>
+
+          <div className="flex flex-1 overflow-hidden">
+            {/* Canvas area */}
+            <div
+              className="flex-1 overflow-auto flex items-center justify-center bg-[#080e1a] p-4"
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={(e) => {
+                e.preventDefault();
+                if (!draggingModuleId || !fabricRef.current) return;
+                const module = MODULE_LIBRARY.find((m) => m.id === draggingModuleId);
+                if (!module) return;
+                const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
+                addModuleAt(module, e.clientX - rect.left, e.clientY - rect.top);
+                setDraggingModuleId(null);
+              }}
+            >
+              <canvas ref={canvasRef} className="shadow-2xl" />
+            </div>
+
+            {/* Right: properties + modules */}
+            <div className="w-[220px] shrink-0 border-l border-white/8 bg-[#0d1117] overflow-y-auto p-3 space-y-4">
+              {/* Colors */}
+              <div className="space-y-2">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-white/40">Colors</p>
+                <div className="flex items-center gap-2">
+                  <div className="space-y-1">
+                    <label className="text-[9px] text-white/30">Fill</label>
+                    <input type="color" value={fillColor} onChange={(e) => setFillColor(e.target.value)} className="w-8 h-8 rounded border border-white/20 cursor-pointer bg-transparent" />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[9px] text-white/30">Stroke</label>
+                    <input type="color" value={strokeColor} onChange={(e) => setStrokeColor(e.target.value)} className="w-8 h-8 rounded border border-white/20 cursor-pointer bg-transparent" />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[9px] text-white/30">Brush</label>
+                    <input type="range" min={1} max={40} value={brushSize} onChange={(e) => setBrushSize(parseInt(e.target.value))} className="w-14" />
+                  </div>
+                </div>
+              </div>
+
+              {/* Selected object properties */}
+              {selectedObject && (
+                <div className="space-y-2">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-white/40">Selected</p>
+                  <div className="text-[10px] text-white/30 bg-white/5 px-2 py-1 rounded capitalize">
+                    {getObjectMeta(selectedObject).layerName ?? selectedObject.type}
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="color"
+                      value={typeof selectedObject.fill === "string" ? selectedObject.fill : "#000000"}
+                      onChange={e => { selectedObject.set("fill", e.target.value); setFillColor(e.target.value); fabricRef.current?.renderAll(); }}
+                      className="w-7 h-7 rounded border border-white/20 cursor-pointer bg-transparent"
+                    />
+                    <span className="text-[10px] font-mono text-white/40">{typeof selectedObject.fill === "string" ? selectedObject.fill : "–"}</span>
+                  </div>
+
+                  <div className="space-y-0.5">
+                    <label className="text-[9px] text-white/30">Opacity {Math.round((selectedObject.opacity ?? 1) * 100)}%</label>
+                    <input type="range" min="0" max="1" step="0.01" value={selectedObject.opacity ?? 1}
+                      onChange={e => { selectedObject.set("opacity", parseFloat(e.target.value)); fabricRef.current?.renderAll(); setSelectedObject({ ...selectedObject } as fabric.Object); }}
+                      className="w-full"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-1">
+                    <button onClick={deleteSelected} className="flex items-center justify-center gap-1 py-1.5 text-[10px] rounded border border-red-500/30 text-red-400 hover:bg-red-500/10 transition-colors">
+                      <Trash2 className="w-3 h-3" /> Delete
+                    </button>
+                    <button onClick={duplicateSelected} className="flex items-center justify-center gap-1 py-1.5 text-[10px] rounded border border-white/10 text-white/40 hover:text-white transition-colors">
+                      <Copy className="w-3 h-3" /> Copy
+                    </button>
+                    <button onClick={() => moveLayer("up")} className="flex items-center justify-center gap-1 py-1.5 text-[10px] rounded border border-white/10 text-white/40 hover:text-white transition-colors">
+                      <MoveUp className="w-3 h-3" /> Up
+                    </button>
+                    <button onClick={() => moveLayer("down")} className="flex items-center justify-center gap-1 py-1.5 text-[10px] rounded border border-white/10 text-white/40 hover:text-white transition-colors">
+                      <MoveDown className="w-3 h-3" /> Down
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Module library */}
+              <div className="space-y-2">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-white/40">Modules</p>
+                <div className="flex flex-wrap gap-1 mb-2">
+                  {Array.from(new Set(MODULE_LIBRARY.map((m) => m.category))).map((cat) => (
+                    <button key={cat} onClick={() => setActiveModuleCategory(cat)}
+                      className={`px-1.5 py-0.5 text-[9px] rounded border transition-all ${activeModuleCategory === cat ? "border-indigo-500 bg-indigo-600/30 text-indigo-300" : "border-white/10 text-white/30 hover:text-white"}`}
+                    >{cat}</button>
+                  ))}
+                </div>
+                <div className="grid grid-cols-2 gap-1.5">
+                  {MODULE_LIBRARY.filter((m) => m.category === activeModuleCategory).map((module) => (
+                    <button
+                      key={module.id}
+                      onClick={() => addModule(module)}
+                      draggable
+                      onDragStart={() => setDraggingModuleId(module.id)}
+                      className="border border-white/10 rounded-md p-1.5 text-left hover:border-white/20 transition-colors"
+                    >
+                      <div className="w-full h-6 rounded mb-1" style={{ backgroundColor: module.color, opacity: 0.85 }} />
+                      <p className="text-[9px] text-white/50 leading-tight">{module.name}</p>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        </SheetContent>
+      </Sheet>
+
+      {/* ── PAYMENT DIALOG ───────────────────────────────────────────── */}
       <Dialog open={paymentOpen} onOpenChange={setPaymentOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md bg-[#0d1117] border-white/10 text-white">
           <DialogHeader>
             <DialogTitle>Buy Roblox Upload Credit</DialogTitle>
           </DialogHeader>
           <div className="space-y-3 text-sm">
-            <p>You need 1 credit (10 NOK) to upload to Roblox.</p>
-            <p className="text-muted-foreground">Current credits: <strong>{credits}</strong></p>
+            <p className="text-white/70">You need 1 credit (10 NOK) to upload to Roblox.</p>
+            <p className="text-white/50">Current credits: <strong className="text-white">{credits}</strong></p>
             <Button className="w-full" onClick={handleBuyCredit} disabled={isBuyingCredit}>
               {isBuyingCredit ? "Opening Stripe..." : "Buy 1 Credit (10 NOK)"}
             </Button>
