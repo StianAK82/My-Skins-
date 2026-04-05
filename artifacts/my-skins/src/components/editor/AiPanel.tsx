@@ -35,7 +35,9 @@ export function AiPanel({ projectType, dimension, onDimensionChange, onUseColors
   const itemType = selectedTarget === "shirt" ? "classic_shirt" : "classic_pants";
 
   const runAction = async (mode: "generate" | "improve" | "remix") => {
-    if (!prompt.trim() || loading) return;
+    if (loading) return;
+    if (mode === "generate" && !prompt.trim()) return;
+    if ((mode === "improve" || mode === "remix") && !remixInstruction.trim()) return;
 
     if (dimension === "3d") {
       toast({

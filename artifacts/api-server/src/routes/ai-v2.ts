@@ -19,8 +19,11 @@ function getUserId(req: any): string {
 }
 
 function schema422(res: any, err: z.ZodError | SyntaxError) {
+  const issues = err instanceof z.ZodError ? err.issues : [];
+  const invalidFields = issues.map((issue) => issue.path.join("."));
   res.status(422).json({
     error: "Invalid AI response schema",
+    invalidFields,
     details: err instanceof z.ZodError ? err.issues.map((i) => `${i.path.join(".")}: ${i.message}`) : ["AI returned non-JSON content"],
   });
 }
@@ -36,6 +39,9 @@ router.post("/ai/generate", async (req, res): Promise<void> => {
   try {
     res.json(await aiGenerationService.generateDesign(getUserId(req), parsed.data));
   } catch (err) {
+    if (err instanceof z.ZodError) {
+      req.log.error({ issues: err.issues }, "ai.v2.generate.schema_invalid");
+    }
     if (err instanceof z.ZodError || err instanceof SyntaxError) return schema422(res, err);
     req.log.error({ err }, "ai.v2.generate.failed");
     res.status(500).json({ error: "AI generation failed" });
