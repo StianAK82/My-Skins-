@@ -7,7 +7,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { useToast } from "@/hooks/use-toast";
 import { AiPanel } from "@/components/editor/AiPanel";
 import { AvatarPreview } from "@/components/editor/AvatarPreview";
@@ -911,10 +910,10 @@ export default function Editor() {
   }
 
   return (
-    <div className="flex flex-col h-screen overflow-hidden bg-[#080e1a] text-white">
+    <div className="fixed inset-0 flex flex-col overflow-hidden bg-[#080e1a] text-white" style={{ zIndex: 0 }}>
 
       {/* ── HEADER ──────────────────────────────────────────────────── */}
-      <header className="h-12 border-b border-white/10 bg-[#0d1117] flex items-center justify-between px-4 shrink-0 gap-3 z-20">
+      <header className="h-12 border-b border-white/10 bg-[#0d1117] flex items-center justify-between px-4 shrink-0 gap-3 z-10">
         <div className="flex items-center gap-2 min-w-0">
           <Link href="/dashboard">
             <button className="p-1.5 rounded hover:bg-white/10 transition-colors text-white/60 hover:text-white">
@@ -1168,154 +1167,150 @@ export default function Editor() {
         </aside>
       </div>
 
-      {/* ── 2D TEXTURE EDITOR SHEET ──────────────────────────────────── */}
-      <Sheet open={textureEditorOpen} onOpenChange={(open) => { if (!open) handleSave(); setTextureEditorOpen(open); }}>
-        <SheetContent side="bottom" className="h-[82vh] bg-[#0d1117] border-t border-white/10 p-0 flex flex-col">
-          <SheetHeader className="px-4 py-3 border-b border-white/10 flex-row items-center justify-between space-y-0 shrink-0">
-            <SheetTitle className="text-sm font-semibold text-white flex items-center gap-2">
-              <Shirt className="w-4 h-4 text-indigo-400" /> 2D Texture Editor — {activeClassicType === "shirt" ? "Shirt" : "Pants"}
-            </SheetTitle>
-            <div className="flex items-center gap-2">
-              <button onClick={() => setDrawingMode((p) => !p)} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs border transition-all ${drawingMode ? "bg-indigo-600 border-indigo-500 text-white" : "border-white/10 text-white/50 hover:text-white"}`}>
-                <PenTool className="w-3.5 h-3.5" /> Draw
-              </button>
-              <button onClick={addText} className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs border border-white/10 text-white/50 hover:text-white transition-all">
-                <Type className="w-3.5 h-3.5" /> Text
-              </button>
-              <button onClick={addRect} className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs border border-white/10 text-white/50 hover:text-white transition-all">
-                <Square className="w-3.5 h-3.5" /> Rect
-              </button>
-              <button onClick={addCircle} className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs border border-white/10 text-white/50 hover:text-white transition-all">
-                <Circle className="w-3.5 h-3.5" /> Circle
-              </button>
-              <label className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs border border-white/10 text-white/50 hover:text-white transition-all cursor-pointer">
-                <ImageIcon className="w-3.5 h-3.5" /> Image
-                <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
-              </label>
-              <div className="flex items-center gap-1">
-                <button onClick={zoomOut} className="p-1.5 rounded border border-white/10 text-white/50 hover:text-white"><ZoomOut className="w-3.5 h-3.5" /></button>
-                <button onClick={zoomIn} className="p-1.5 rounded border border-white/10 text-white/50 hover:text-white"><ZoomIn className="w-3.5 h-3.5" /></button>
-              </div>
-              <button
-                onClick={() => { handleSave(); setTextureEditorOpen(false); }}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs bg-indigo-600 hover:bg-indigo-500 text-white transition-colors"
-              >
-                <Save className="w-3.5 h-3.5" /> Done
-              </button>
-            </div>
-          </SheetHeader>
+      {/* ── 2D TEXTURE EDITOR OVERLAY ─────────────────────────────────
+           Canvas is ALWAYS in the DOM here (never unmounted) so Fabric.js
+           keeps its state. We toggle visibility with opacity + pointer-events.  */}
+      <div
+        className="fixed inset-0 flex flex-col bg-[#080e1a] transition-opacity duration-200"
+        style={{ zIndex: 60, opacity: textureEditorOpen ? 1 : 0, pointerEvents: textureEditorOpen ? "auto" : "none" }}
+      >
+        {/* Toolbar */}
+        <div className="h-12 shrink-0 border-b border-white/10 bg-[#0d1117] flex items-center px-4 gap-2 overflow-x-auto">
+          <span className="text-sm font-semibold text-white flex items-center gap-2 shrink-0 mr-2">
+            <Shirt className="w-4 h-4 text-indigo-400" />
+            {activeClassicType === "shirt" ? "Shirt Texture" : "Pants Texture"}
+          </span>
 
-          <div className="flex flex-1 overflow-hidden">
-            {/* Canvas area */}
-            <div
-              className="flex-1 overflow-auto flex items-center justify-center bg-[#080e1a] p-4"
-              onDragOver={(e) => e.preventDefault()}
-              onDrop={(e) => {
-                e.preventDefault();
-                if (!draggingModuleId || !fabricRef.current) return;
-                const module = MODULE_LIBRARY.find((m) => m.id === draggingModuleId);
-                if (!module) return;
-                const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
-                addModuleAt(module, e.clientX - rect.left, e.clientY - rect.top);
-                setDraggingModuleId(null);
-              }}
-            >
-              <canvas ref={canvasRef} className="shadow-2xl" />
-            </div>
+          <button onClick={() => setDrawingMode((p) => !p)} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs border transition-all shrink-0 ${drawingMode ? "bg-indigo-600 border-indigo-500 text-white" : "border-white/10 text-white/50 hover:text-white"}`}>
+            <PenTool className="w-3.5 h-3.5" /> Draw
+          </button>
+          <button onClick={addText} className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs border border-white/10 text-white/50 hover:text-white transition-all shrink-0">
+            <Type className="w-3.5 h-3.5" /> Text
+          </button>
+          <button onClick={addRect} className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs border border-white/10 text-white/50 hover:text-white transition-all shrink-0">
+            <Square className="w-3.5 h-3.5" /> Rect
+          </button>
+          <button onClick={addCircle} className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs border border-white/10 text-white/50 hover:text-white transition-all shrink-0">
+            <Circle className="w-3.5 h-3.5" /> Circle
+          </button>
+          <label className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs border border-white/10 text-white/50 hover:text-white transition-all cursor-pointer shrink-0">
+            <ImageIcon className="w-3.5 h-3.5" /> Image
+            <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
+          </label>
+          <button onClick={zoomOut} className="p-2 rounded border border-white/10 text-white/50 hover:text-white shrink-0"><ZoomOut className="w-3.5 h-3.5" /></button>
+          <button onClick={zoomIn} className="p-2 rounded border border-white/10 text-white/50 hover:text-white shrink-0"><ZoomIn className="w-3.5 h-3.5" /></button>
 
-            {/* Right: properties + modules */}
-            <div className="w-[220px] shrink-0 border-l border-white/8 bg-[#0d1117] overflow-y-auto p-3 space-y-4">
-              {/* Colors */}
-              <div className="space-y-2">
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-white/40">Colors</p>
-                <div className="flex items-center gap-2">
-                  <div className="space-y-1">
-                    <label className="text-[9px] text-white/30">Fill</label>
-                    <input type="color" value={fillColor} onChange={(e) => setFillColor(e.target.value)} className="w-8 h-8 rounded border border-white/20 cursor-pointer bg-transparent" />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[9px] text-white/30">Stroke</label>
-                    <input type="color" value={strokeColor} onChange={(e) => setStrokeColor(e.target.value)} className="w-8 h-8 rounded border border-white/20 cursor-pointer bg-transparent" />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[9px] text-white/30">Brush</label>
-                    <input type="range" min={1} max={40} value={brushSize} onChange={(e) => setBrushSize(parseInt(e.target.value))} className="w-14" />
-                  </div>
+          <div className="flex-1" />
+
+          <button
+            onClick={() => { handleSave(); setTextureEditorOpen(false); }}
+            className="flex items-center gap-1.5 px-4 py-1.5 rounded-md text-xs bg-indigo-600 hover:bg-indigo-500 text-white transition-colors shrink-0"
+          >
+            <Save className="w-3.5 h-3.5" /> Done
+          </button>
+        </div>
+
+        {/* Canvas + sidebar */}
+        <div className="flex flex-1 overflow-hidden">
+          {/* Canvas area */}
+          <div
+            className="flex-1 overflow-auto flex items-center justify-center bg-[#060b14] p-6"
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={(e) => {
+              e.preventDefault();
+              if (!draggingModuleId || !fabricRef.current) return;
+              const module = MODULE_LIBRARY.find((m) => m.id === draggingModuleId);
+              if (!module) return;
+              const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
+              addModuleAt(module, e.clientX - rect.left, e.clientY - rect.top);
+              setDraggingModuleId(null);
+            }}
+          >
+            <canvas ref={canvasRef} className="shadow-2xl rounded" />
+          </div>
+
+          {/* Right sidebar: colors + properties + modules */}
+          <div className="w-52 shrink-0 border-l border-white/10 bg-[#0d1117] overflow-y-auto p-3 space-y-4">
+            <div className="space-y-2">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-white/40">Colors</p>
+              <div className="flex flex-wrap gap-2">
+                <div className="space-y-1">
+                  <label className="text-[9px] text-white/30 block">Fill</label>
+                  <input type="color" value={fillColor} onChange={(e) => setFillColor(e.target.value)} className="w-8 h-8 rounded border border-white/20 cursor-pointer bg-transparent" />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[9px] text-white/30 block">Stroke</label>
+                  <input type="color" value={strokeColor} onChange={(e) => setStrokeColor(e.target.value)} className="w-8 h-8 rounded border border-white/20 cursor-pointer bg-transparent" />
                 </div>
               </div>
-
-              {/* Selected object properties */}
-              {selectedObject && (
-                <div className="space-y-2">
-                  <p className="text-[10px] font-semibold uppercase tracking-wider text-white/40">Selected</p>
-                  <div className="text-[10px] text-white/30 bg-white/5 px-2 py-1 rounded capitalize">
-                    {getObjectMeta(selectedObject).layerName ?? selectedObject.type}
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="color"
-                      value={typeof selectedObject.fill === "string" ? selectedObject.fill : "#000000"}
-                      onChange={e => { selectedObject.set("fill", e.target.value); setFillColor(e.target.value); fabricRef.current?.renderAll(); }}
-                      className="w-7 h-7 rounded border border-white/20 cursor-pointer bg-transparent"
-                    />
-                    <span className="text-[10px] font-mono text-white/40">{typeof selectedObject.fill === "string" ? selectedObject.fill : "–"}</span>
-                  </div>
-
-                  <div className="space-y-0.5">
-                    <label className="text-[9px] text-white/30">Opacity {Math.round((selectedObject.opacity ?? 1) * 100)}%</label>
-                    <input type="range" min="0" max="1" step="0.01" value={selectedObject.opacity ?? 1}
-                      onChange={e => { selectedObject.set("opacity", parseFloat(e.target.value)); fabricRef.current?.renderAll(); setSelectedObject({ ...selectedObject } as fabric.Object); }}
-                      className="w-full"
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-1">
-                    <button onClick={deleteSelected} className="flex items-center justify-center gap-1 py-1.5 text-[10px] rounded border border-red-500/30 text-red-400 hover:bg-red-500/10 transition-colors">
-                      <Trash2 className="w-3 h-3" /> Delete
-                    </button>
-                    <button onClick={duplicateSelected} className="flex items-center justify-center gap-1 py-1.5 text-[10px] rounded border border-white/10 text-white/40 hover:text-white transition-colors">
-                      <Copy className="w-3 h-3" /> Copy
-                    </button>
-                    <button onClick={() => moveLayer("up")} className="flex items-center justify-center gap-1 py-1.5 text-[10px] rounded border border-white/10 text-white/40 hover:text-white transition-colors">
-                      <MoveUp className="w-3 h-3" /> Up
-                    </button>
-                    <button onClick={() => moveLayer("down")} className="flex items-center justify-center gap-1 py-1.5 text-[10px] rounded border border-white/10 text-white/40 hover:text-white transition-colors">
-                      <MoveDown className="w-3 h-3" /> Down
-                    </button>
-                  </div>
+              {drawingMode && (
+                <div className="space-y-1">
+                  <label className="text-[9px] text-white/30 block">Brush size: {brushSize}px</label>
+                  <input type="range" min={1} max={40} value={brushSize} onChange={(e) => setBrushSize(parseInt(e.target.value))} className="w-full" />
                 </div>
               )}
+            </div>
 
-              {/* Module library */}
-              <div className="space-y-2">
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-white/40">Modules</p>
-                <div className="flex flex-wrap gap-1 mb-2">
-                  {Array.from(new Set(MODULE_LIBRARY.map((m) => m.category))).map((cat) => (
-                    <button key={cat} onClick={() => setActiveModuleCategory(cat)}
-                      className={`px-1.5 py-0.5 text-[9px] rounded border transition-all ${activeModuleCategory === cat ? "border-indigo-500 bg-indigo-600/30 text-indigo-300" : "border-white/10 text-white/30 hover:text-white"}`}
-                    >{cat}</button>
-                  ))}
+            {selectedObject && (
+              <div className="space-y-2 pt-2 border-t border-white/8">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-white/40">Selected</p>
+                <div className="text-[10px] text-white/30 bg-white/5 px-2 py-1 rounded capitalize">
+                  {getObjectMeta(selectedObject).layerName ?? selectedObject.type}
                 </div>
-                <div className="grid grid-cols-2 gap-1.5">
-                  {MODULE_LIBRARY.filter((m) => m.category === activeModuleCategory).map((module) => (
-                    <button
-                      key={module.id}
-                      onClick={() => addModule(module)}
-                      draggable
-                      onDragStart={() => setDraggingModuleId(module.id)}
-                      className="border border-white/10 rounded-md p-1.5 text-left hover:border-white/20 transition-colors"
-                    >
-                      <div className="w-full h-6 rounded mb-1" style={{ backgroundColor: module.color, opacity: 0.85 }} />
-                      <p className="text-[9px] text-white/50 leading-tight">{module.name}</p>
-                    </button>
-                  ))}
+                <div className="flex items-center gap-2">
+                  <input type="color" value={typeof selectedObject.fill === "string" ? selectedObject.fill : "#000000"}
+                    onChange={e => { selectedObject.set("fill", e.target.value); setFillColor(e.target.value); fabricRef.current?.renderAll(); }}
+                    className="w-7 h-7 rounded border border-white/20 cursor-pointer bg-transparent"
+                  />
+                  <span className="text-[10px] font-mono text-white/40">{typeof selectedObject.fill === "string" ? selectedObject.fill : "–"}</span>
                 </div>
+                <div className="space-y-0.5">
+                  <label className="text-[9px] text-white/30 block">Opacity {Math.round((selectedObject.opacity ?? 1) * 100)}%</label>
+                  <input type="range" min="0" max="1" step="0.01" value={selectedObject.opacity ?? 1}
+                    onChange={e => { selectedObject.set("opacity", parseFloat(e.target.value)); fabricRef.current?.renderAll(); setSelectedObject({ ...selectedObject } as fabric.Object); }}
+                    className="w-full"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-1">
+                  <button onClick={deleteSelected} className="flex items-center justify-center gap-1 py-1.5 text-[10px] rounded border border-red-500/30 text-red-400 hover:bg-red-500/10 transition-colors">
+                    <Trash2 className="w-3 h-3" /> Del
+                  </button>
+                  <button onClick={duplicateSelected} className="flex items-center justify-center gap-1 py-1.5 text-[10px] rounded border border-white/10 text-white/40 hover:text-white transition-colors">
+                    <Copy className="w-3 h-3" /> Copy
+                  </button>
+                  <button onClick={() => moveLayer("up")} className="flex items-center justify-center gap-1 py-1.5 text-[10px] rounded border border-white/10 text-white/40 hover:text-white transition-colors">
+                    <MoveUp className="w-3 h-3" /> Up
+                  </button>
+                  <button onClick={() => moveLayer("down")} className="flex items-center justify-center gap-1 py-1.5 text-[10px] rounded border border-white/10 text-white/40 hover:text-white transition-colors">
+                    <MoveDown className="w-3 h-3" /> Down
+                  </button>
+                </div>
+              </div>
+            )}
+
+            <div className="pt-2 border-t border-white/8 space-y-2">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-white/40">Modules</p>
+              <div className="flex flex-wrap gap-1">
+                {Array.from(new Set(MODULE_LIBRARY.map((m) => m.category))).map((cat) => (
+                  <button key={cat} onClick={() => setActiveModuleCategory(cat)}
+                    className={`px-1.5 py-0.5 text-[9px] rounded border transition-all ${activeModuleCategory === cat ? "border-indigo-500 bg-indigo-600/30 text-indigo-300" : "border-white/10 text-white/30 hover:text-white"}`}
+                  >{cat}</button>
+                ))}
+              </div>
+              <div className="grid grid-cols-2 gap-1.5">
+                {MODULE_LIBRARY.filter((m) => m.category === activeModuleCategory).map((module) => (
+                  <button key={module.id} onClick={() => addModule(module)} draggable onDragStart={() => setDraggingModuleId(module.id)}
+                    className="border border-white/10 rounded-md p-1.5 text-left hover:border-white/20 transition-colors"
+                  >
+                    <div className="w-full h-6 rounded mb-1" style={{ backgroundColor: module.color, opacity: 0.85 }} />
+                    <p className="text-[9px] text-white/50 leading-tight">{module.name}</p>
+                  </button>
+                ))}
               </div>
             </div>
           </div>
-        </SheetContent>
-      </Sheet>
+        </div>
+      </div>
 
       {/* ── PAYMENT DIALOG ───────────────────────────────────────────── */}
       <Dialog open={paymentOpen} onOpenChange={setPaymentOpen}>
