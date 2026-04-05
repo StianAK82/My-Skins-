@@ -34,6 +34,7 @@ interface AiConcept {
 }
 
 interface TemplateZone {
+  key: string;
   label: string;
   left: number;
   top: number;
@@ -54,6 +55,15 @@ type EditorMetaState = { avatar?: { avatarType?: string; bodyType?: string }; cr
 type FabricObjectMeta = { role?: string; layerName?: string; zone?: string; moduleId?: string };
 type ClothingDimension = "2d" | "3d";
 type GarmentMaterial = "cotton" | "denim" | "nylon";
+type ZoneKey =
+  | "front"
+  | "back"
+  | "left_sleeve"
+  | "right_sleeve"
+  | "left_leg_front"
+  | "right_leg_front"
+  | "left_leg_back"
+  | "right_leg_back";
 
 const MODULE_LIBRARY: ModuleDefinition[] = [
   { id: "mod-sleeve-stripe", name: "Sleeve Stripe", category: "Clothing Parts", shape: "stripe", color: "#ef4444" },
@@ -70,18 +80,26 @@ const MODULE_LIBRARY: ModuleDefinition[] = [
 ];
 const STYLE_PRESET_VALUES: StylePreset[] = ["streetwear", "anime", "sport", "cyberpunk", "minimal"];
 
-const TEMPLATE_ZONES: Record<"shirt" | "pants", { front: TemplateZone; back: TemplateZone; leftRegion: TemplateZone; rightRegion: TemplateZone }> = {
+const TEMPLATE_ZONES: Record<"shirt" | "pants", Record<ZoneKey, TemplateZone>> = {
   shirt: {
-    front: { label: "Front / Chest", left: 196, top: 118, width: 128, height: 128 },
-    back: { label: "Back", left: 338, top: 118, width: 128, height: 128 },
-    leftRegion: { label: "Left Sleeve", left: 44, top: 118, width: 128, height: 128 },
-    rightRegion: { label: "Right Sleeve", left: 481, top: 118, width: 88, height: 128 },
+    front: { key: "front", label: "Front", left: 196, top: 118, width: 128, height: 128 },
+    back: { key: "back", label: "Back", left: 338, top: 118, width: 128, height: 128 },
+    left_sleeve: { key: "left_sleeve", label: "Left Sleeve", left: 44, top: 118, width: 128, height: 128 },
+    right_sleeve: { key: "right_sleeve", label: "Right Sleeve", left: 441, top: 118, width: 128, height: 128 },
+    left_leg_front: { key: "left_leg_front", label: "Left Leg Front", left: 196, top: 288, width: 64, height: 192 },
+    right_leg_front: { key: "right_leg_front", label: "Right Leg Front", left: 260, top: 288, width: 64, height: 192 },
+    left_leg_back: { key: "left_leg_back", label: "Left Leg Back", left: 338, top: 288, width: 64, height: 192 },
+    right_leg_back: { key: "right_leg_back", label: "Right Leg Back", left: 402, top: 288, width: 64, height: 192 },
   },
   pants: {
-    front: { label: "Front / Legs", left: 196, top: 288, width: 128, height: 192 },
-    back: { label: "Back / Legs", left: 338, top: 288, width: 128, height: 192 },
-    leftRegion: { label: "Left Leg", left: 44, top: 288, width: 128, height: 192 },
-    rightRegion: { label: "Right Leg", left: 481, top: 288, width: 88, height: 192 },
+    front: { key: "front", label: "Front", left: 196, top: 118, width: 128, height: 128 },
+    back: { key: "back", label: "Back", left: 338, top: 118, width: 128, height: 128 },
+    left_sleeve: { key: "left_sleeve", label: "Left Sleeve", left: 44, top: 118, width: 128, height: 128 },
+    right_sleeve: { key: "right_sleeve", label: "Right Sleeve", left: 441, top: 118, width: 128, height: 128 },
+    left_leg_front: { key: "left_leg_front", label: "Left Leg Front", left: 44, top: 288, width: 128, height: 192 },
+    right_leg_front: { key: "right_leg_front", label: "Right Leg Front", left: 196, top: 288, width: 128, height: 192 },
+    left_leg_back: { key: "left_leg_back", label: "Left Leg Back", left: 338, top: 288, width: 128, height: 192 },
+    right_leg_back: { key: "right_leg_back", label: "Right Leg Back", left: 441, top: 288, width: 128, height: 192 },
   },
 };
 
@@ -101,6 +119,14 @@ function getObjectMeta(obj: fabric.Object): FabricObjectMeta {
 
 function isStylePreset(value: unknown): value is StylePreset {
   return typeof value === "string" && STYLE_PRESET_VALUES.includes(value as StylePreset);
+}
+
+function getEnabledZones(type: "shirt" | "pants"): TemplateZone[] {
+  const zones = TEMPLATE_ZONES[type];
+  if (type === "shirt") {
+    return [zones.front, zones.back, zones.left_sleeve, zones.right_sleeve];
+  }
+  return [zones.left_leg_front, zones.right_leg_front, zones.left_leg_back, zones.right_leg_back];
 }
 
 function AiConceptBanner({ concept, onClose, onUseColors }: {
@@ -252,6 +278,7 @@ export default function Editor() {
   const [creatorMode, setCreatorMode] = useState<"ai" | "manual" | "template" | "remix">("ai");
   const [selectedObject, setSelectedObject] = useState<fabric.Object | null>(null);
   const [drawingMode, setDrawingMode] = useState(false);
+  const [eraserMode, setEraserMode] = useState(false);
   const [fillColor, setFillColor] = useState("#3b82f6");
   const [strokeColor, setStrokeColor] = useState("#000000");
   const [brushSize, setBrushSize] = useState(8);
@@ -277,6 +304,7 @@ export default function Editor() {
   const [snapEnabled, setSnapEnabled] = useState(true);
   const [draggingModuleId, setDraggingModuleId] = useState<string | null>(null);
   const [previewFacing, setPreviewFacing] = useState<"front" | "back">("front");
+  const [activeZone, setActiveZone] = useState<ZoneKey>("front");
 
   const { data: project, isLoading } = useGetProject(id);
   const { data: me, refetch: refetchMe } = useGetMe();
@@ -291,6 +319,11 @@ export default function Editor() {
     }
   }, [project?.type]);
 
+  useEffect(() => {
+    const next = getEnabledZones(activeClassicType)[0];
+    if (next) setActiveZone(next.key as ZoneKey);
+  }, [activeClassicType]);
+
   // These must be declared BEFORE the canvas useEffect that depends on them
   const handleUseColors = useCallback((colors: string[]) => {
     if (colors[0]) setFillColor(colors[0]);
@@ -298,11 +331,30 @@ export default function Editor() {
     toast({ title: language === "no" ? "Farger brukt!" : "Colors applied!" });
   }, [toast, language]);
 
+  const getZoneByKey = useCallback((zoneKey: string): TemplateZone | undefined => {
+    return TEMPLATE_ZONES[activeClassicType][zoneKey as ZoneKey];
+  }, [activeClassicType]);
+
+  const constrainObjectToZone = useCallback((obj: fabric.Object, zoneKey: string) => {
+    const zone = getZoneByKey(zoneKey);
+    if (!zone) return;
+    const objectWidth = obj.getScaledWidth();
+    const objectHeight = obj.getScaledHeight();
+    const minLeft = zone.left;
+    const maxLeft = zone.left + zone.width - objectWidth;
+    const minTop = zone.top;
+    const maxTop = zone.top + zone.height - objectHeight;
+    obj.set({
+      left: Math.min(Math.max(obj.left ?? minLeft, minLeft), Math.max(minLeft, maxLeft)),
+      top: Math.min(Math.max(obj.top ?? minTop, minTop), Math.max(minTop, maxTop)),
+    });
+  }, [getZoneByKey]);
+
   const addTemplateGuideLayer = useCallback(() => {
     if (!fabricRef.current) return;
     const canvas = fabricRef.current;
     const type = activeClassicType;
-    const zones = TEMPLATE_ZONES[type];
+    const zones = getEnabledZones(type);
 
     canvas.getObjects().forEach((obj) => {
       if (getObjectMeta(obj).role === "template-guide") {
@@ -310,28 +362,32 @@ export default function Editor() {
       }
     });
 
-    (Object.values(zones) as TemplateZone[]).forEach((zone) => {
+    zones.forEach((zone) => {
+      const isActiveZone = zone.key === activeZone;
       const frame = new fabric.Rect({
         left: zone.left,
         top: zone.top,
         width: zone.width,
         height: zone.height,
-        fill: "rgba(59, 130, 246, 0.06)",
-        stroke: "rgba(59, 130, 246, 0.4)",
-        strokeWidth: 1,
-        selectable: false,
-        evented: false,
-        data: { role: "template-guide" },
+        fill: isActiveZone ? "rgba(99, 102, 241, 0.18)" : "rgba(59, 130, 246, 0.06)",
+        stroke: isActiveZone ? "rgba(129, 140, 248, 0.95)" : "rgba(59, 130, 246, 0.4)",
+        strokeWidth: isActiveZone ? 2 : 1,
+        selectable: true,
+        evented: true,
+        hoverCursor: "pointer",
+        excludeFromExport: true,
+        data: { role: "template-guide", zone: zone.key, layerName: zone.label },
       });
 
       const label = new fabric.Text(zone.label, {
         left: zone.left + 6,
         top: zone.top + 6,
         fontSize: 10,
-        fill: "rgba(59, 130, 246, 0.8)",
+        fill: isActiveZone ? "rgba(199, 210, 254, 1)" : "rgba(59, 130, 246, 0.8)",
         selectable: false,
         evented: false,
-        data: { role: "template-guide" },
+        excludeFromExport: true,
+        data: { role: "template-guide", zone: zone.key },
       });
 
       canvas.add(frame);
@@ -339,7 +395,7 @@ export default function Editor() {
       canvas.sendObjectToBack(label);
       canvas.sendObjectToBack(frame);
     });
-  }, [activeClassicType]);
+  }, [activeClassicType, activeZone]);
 
   const ensureVisibleStarterDesign = useCallback((preset: StylePreset = "streetwear") => {
     if (!fabricRef.current) return;
@@ -360,8 +416,13 @@ export default function Editor() {
     canvas.backgroundColor = palette[0];
     addFallbackShapeToZone(zones.front, palette[1], "Starter Front");
     addFallbackShapeToZone(zones.back, palette[2], "Starter Back");
-    addFallbackShapeToZone(zones.leftRegion, palette[1], "Starter Left Sleeve");
-    addFallbackShapeToZone(zones.rightRegion, palette[2], "Starter Right Sleeve");
+    if (type === "shirt") {
+      addFallbackShapeToZone(zones.left_sleeve, palette[1], "Starter Left Sleeve");
+      addFallbackShapeToZone(zones.right_sleeve, palette[2], "Starter Right Sleeve");
+    } else {
+      addFallbackShapeToZone(zones.left_leg_front, palette[1], "Starter Left Leg Front");
+      addFallbackShapeToZone(zones.right_leg_front, palette[2], "Starter Right Leg Front");
+    }
     canvas.renderAll();
   }, [activeClassicType]);
 
@@ -423,20 +484,49 @@ export default function Editor() {
       canvas.renderAll();
     }
 
-    canvas.on("selection:created", (e) => setSelectedObject(e.selected?.[0] || null));
-    canvas.on("selection:updated", (e) => setSelectedObject(e.selected?.[0] || null));
+    canvas.on("selection:created", (e) => {
+      const obj = e.selected?.[0] || null;
+      if (obj && getObjectMeta(obj).role === "template-guide" && getObjectMeta(obj).zone) {
+        setActiveZone(getObjectMeta(obj).zone as ZoneKey);
+        canvas.discardActiveObject();
+        canvas.requestRenderAll();
+        return;
+      }
+      setSelectedObject(obj);
+    });
+    canvas.on("selection:updated", (e) => {
+      const obj = e.selected?.[0] || null;
+      if (obj && getObjectMeta(obj).role === "template-guide" && getObjectMeta(obj).zone) {
+        setActiveZone(getObjectMeta(obj).zone as ZoneKey);
+        canvas.discardActiveObject();
+        canvas.requestRenderAll();
+        return;
+      }
+      setSelectedObject(obj);
+    });
     canvas.on("selection:cleared", () => setSelectedObject(null));
     canvas.on("object:moving", (e) => {
-      if (!snapEnabled || !e.target) return;
+      if (!e.target) return;
       const grid = 8;
-      e.target.set({
-        left: Math.round((e.target.left ?? 0) / grid) * grid,
-        top: Math.round((e.target.top ?? 0) / grid) * grid,
-      });
+      const meta = getObjectMeta(e.target);
+      if (meta.zone) {
+        constrainObjectToZone(e.target, meta.zone);
+      }
+      if (snapEnabled) {
+        e.target.set({
+          left: Math.round((e.target.left ?? 0) / grid) * grid,
+          top: Math.round((e.target.top ?? 0) / grid) * grid,
+        });
+      }
+    });
+    canvas.on("object:scaling", (e) => {
+      if (!e.target) return;
+      const meta = getObjectMeta(e.target);
+      if (meta.zone) constrainObjectToZone(e.target, meta.zone);
     });
 
     return () => { canvas.dispose(); fabricRef.current = null; };
-  }, [addTemplateGuideLayer, project?.id, snapEnabled]);
+  }, [project?.id, snapEnabled, constrainObjectToZone]);
 
   // Drawing mode
   useEffect(() => {
@@ -444,10 +534,31 @@ export default function Editor() {
     const canvas = fabricRef.current;
     canvas.isDrawingMode = drawingMode;
     if (drawingMode && canvas.freeDrawingBrush) {
-      canvas.freeDrawingBrush.color = strokeColor;
+      canvas.freeDrawingBrush.color = eraserMode ? "#000000" : strokeColor;
       canvas.freeDrawingBrush.width = brushSize;
+      (canvas.freeDrawingBrush as unknown as { globalCompositeOperation?: string }).globalCompositeOperation = eraserMode ? "destination-out" : "source-over";
     }
-  }, [drawingMode, strokeColor, brushSize]);
+  }, [drawingMode, strokeColor, brushSize, eraserMode]);
+
+  useEffect(() => {
+    if (!fabricRef.current) return;
+    const canvas = fabricRef.current;
+    const onPathCreated = (evt: fabric.TEvent<fabric.TPointerEvent>) => {
+      const path = evt.path;
+      const zone = getZoneByKey(activeZone);
+      if (!path || !zone) return;
+      path.set({
+        data: { ...(getObjectMeta(path)), role: "manual-path", zone: zone.key, layerName: `${zone.label} Drawing` },
+        clipPath: new fabric.Rect({ left: zone.left, top: zone.top, width: zone.width, height: zone.height, absolutePositioned: true }),
+      });
+      constrainObjectToZone(path, zone.key);
+      canvas.requestRenderAll();
+    };
+    canvas.on("path:created", onPathCreated);
+    return () => {
+      canvas.off("path:created", onPathCreated);
+    };
+  }, [activeZone, constrainObjectToZone, getZoneByKey]);
 
   useEffect(() => {
     if (!fabricRef.current) return;
@@ -568,11 +679,15 @@ export default function Editor() {
   const addText = () => {
     if (!fabricRef.current) return;
     setDrawingMode(false);
+    const zone = getZoneByKey(activeZone);
     const text = new fabric.IText(language === "no" ? "Rediger tekst" : "Edit text", {
-      left: 150, top: 150,
+      left: zone ? zone.left + 12 : 150,
+      top: zone ? zone.top + 12 : 150,
       fontFamily: "Inter, sans-serif",
       fill: fillColor, fontSize: 36,
+      data: { role: "manual-text", zone: zone?.key, layerName: "Text" },
     });
+    if (zone) constrainObjectToZone(text, zone.key);
     fabricRef.current.add(text);
     fabricRef.current.setActiveObject(text);
     fabricRef.current.renderAll();
@@ -581,11 +696,15 @@ export default function Editor() {
   const addRect = () => {
     if (!fabricRef.current) return;
     setDrawingMode(false);
+    const zone = getZoneByKey(activeZone);
     const rect = new fabric.Rect({
-      left: 100, top: 100,
+      left: zone ? zone.left + 12 : 100,
+      top: zone ? zone.top + 12 : 100,
       fill: fillColor, stroke: strokeColor, strokeWidth: 2,
       width: 120, height: 80, rx: 4,
+      data: { role: "manual-shape", zone: zone?.key, layerName: "Rectangle" },
     });
+    if (zone) constrainObjectToZone(rect, zone.key);
     fabricRef.current.add(rect);
     fabricRef.current.setActiveObject(rect);
     fabricRef.current.renderAll();
@@ -594,10 +713,14 @@ export default function Editor() {
   const addCircle = () => {
     if (!fabricRef.current) return;
     setDrawingMode(false);
+    const zone = getZoneByKey(activeZone);
     const circle = new fabric.Circle({
-      left: 120, top: 120,
+      left: zone ? zone.left + 18 : 120,
+      top: zone ? zone.top + 18 : 120,
       fill: fillColor, stroke: strokeColor, strokeWidth: 2, radius: 50,
+      data: { role: "manual-shape", zone: zone?.key, layerName: "Circle" },
     });
+    if (zone) constrainObjectToZone(circle, zone.key);
     fabricRef.current.add(circle);
     fabricRef.current.setActiveObject(circle);
     fabricRef.current.renderAll();
@@ -606,39 +729,41 @@ export default function Editor() {
   const addModule = (module: ModuleDefinition) => {
     if (!fabricRef.current) return;
     setDrawingMode(false);
+    const zone = getZoneByKey(activeZone);
     let object: fabric.Object;
     if (module.shape === "circle") {
       object = new fabric.Circle({
-        left: 160,
-        top: 160,
+        left: zone ? zone.left + 16 : 160,
+        top: zone ? zone.top + 16 : 160,
         radius: 36,
         fill: module.color,
         opacity: 0.9,
-        data: { role: "module", category: module.category, moduleName: module.name, layerName: module.name },
+        data: { role: "module", category: module.category, moduleName: module.name, layerName: module.name, zone: zone?.key },
       });
     } else if (module.shape === "stripe") {
       object = new fabric.Rect({
-        left: 120,
-        top: 120,
+        left: zone ? zone.left + 12 : 120,
+        top: zone ? zone.top + 12 : 120,
         width: 160,
         height: 22,
         fill: module.color,
         rx: 8,
         opacity: 0.9,
-        data: { role: "module", category: module.category, moduleName: module.name, layerName: module.name },
+        data: { role: "module", category: module.category, moduleName: module.name, layerName: module.name, zone: zone?.key },
       });
     } else {
       object = new fabric.Rect({
-        left: 120,
-        top: 120,
+        left: zone ? zone.left + 12 : 120,
+        top: zone ? zone.top + 12 : 120,
         width: 110,
         height: 90,
         rx: 12,
         fill: module.color,
         opacity: 0.9,
-        data: { role: "module", category: module.category, moduleName: module.name, layerName: module.name },
+        data: { role: "module", category: module.category, moduleName: module.name, layerName: module.name, zone: zone?.key },
       });
     }
+    if (zone) constrainObjectToZone(object, zone.key);
     fabricRef.current.add(object);
     fabricRef.current.setActiveObject(object);
     fabricRef.current.renderAll();
@@ -649,6 +774,8 @@ export default function Editor() {
     const obj = fabricRef.current?.getActiveObject();
     if (!obj || !fabricRef.current) return;
     obj.set({ left, top });
+    const zone = getObjectMeta(obj).zone;
+    if (zone) constrainObjectToZone(obj, zone);
     fabricRef.current.renderAll();
   };
 
@@ -694,6 +821,25 @@ export default function Editor() {
     fabricRef.current.discardActiveObject();
     fabricRef.current.renderAll();
     setSelectedObject(null);
+  };
+
+  const fillActiveZone = () => {
+    if (!fabricRef.current) return;
+    const zone = getZoneByKey(activeZone);
+    if (!zone) return;
+    const fillRect = new fabric.Rect({
+      left: zone.left,
+      top: zone.top,
+      width: zone.width,
+      height: zone.height,
+      fill: fillColor,
+      selectable: true,
+      evented: true,
+      data: { role: "manual-fill", zone: zone.key, layerName: `${zone.label} Fill` },
+    });
+    fabricRef.current.add(fillRect);
+    fabricRef.current.setActiveObject(fillRect);
+    fabricRef.current.renderAll();
   };
 
   const groupSelection = () => {
@@ -888,6 +1034,12 @@ export default function Editor() {
     if (!project?.id || !fabricRef.current) return;
     ensureVisibleStarterDesign(selectedStylePreset);
   }, [ensureVisibleStarterDesign, project?.id, selectedStylePreset]);
+
+  useEffect(() => {
+    if (!fabricRef.current) return;
+    addTemplateGuideLayer();
+    fabricRef.current.renderAll();
+  }, [addTemplateGuideLayer, activeZone]);
 
   const zoomIn = () => {
     if (!fabricRef.current) return;
@@ -1179,8 +1331,17 @@ export default function Editor() {
             {activeClassicType === "shirt" ? "Shirt Texture" : "Pants Texture"}
           </span>
 
-          <button onClick={() => setDrawingMode((p) => !p)} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs border transition-all shrink-0 ${drawingMode ? "bg-indigo-600 border-indigo-500 text-white" : "border-white/10 text-white/50 hover:text-white"}`}>
+          <button onClick={() => { setEraserMode(false); setDrawingMode((p) => !p); }} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs border transition-all shrink-0 ${drawingMode && !eraserMode ? "bg-indigo-600 border-indigo-500 text-white" : "border-white/10 text-white/50 hover:text-white"}`}>
             <PenTool className="w-3.5 h-3.5" /> Draw
+          </button>
+          <button
+            onClick={() => { setEraserMode((prev) => !prev); setDrawingMode(true); }}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs border transition-all shrink-0 ${eraserMode ? "bg-red-600 border-red-500 text-white" : "border-white/10 text-white/50 hover:text-white"}`}
+          >
+            <Trash2 className="w-3.5 h-3.5" /> Erase
+          </button>
+          <button onClick={fillActiveZone} className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs border border-white/10 text-white/50 hover:text-white transition-all shrink-0">
+            <Palette className="w-3.5 h-3.5" /> Fill Zone
           </button>
           <button onClick={addText} className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs border border-white/10 text-white/50 hover:text-white transition-all shrink-0">
             <Type className="w-3.5 h-3.5" /> Text
@@ -1197,6 +1358,21 @@ export default function Editor() {
           </label>
           <button onClick={zoomOut} className="p-2 rounded border border-white/10 text-white/50 hover:text-white shrink-0"><ZoomOut className="w-3.5 h-3.5" /></button>
           <button onClick={zoomIn} className="p-2 rounded border border-white/10 text-white/50 hover:text-white shrink-0"><ZoomIn className="w-3.5 h-3.5" /></button>
+
+          <div className="flex items-center gap-1 px-2 py-1 rounded-md border border-white/10 bg-white/5 shrink-0">
+            <span className="text-[10px] uppercase tracking-wide text-white/40">Zone</span>
+            <select
+              value={activeZone}
+              onChange={(e) => setActiveZone(e.target.value as ZoneKey)}
+              className="bg-transparent text-xs text-white/80 outline-none"
+            >
+              {getEnabledZones(activeClassicType).map((zone) => (
+                <option key={zone.key} value={zone.key} className="bg-[#0d1117]">
+                  {zone.label}
+                </option>
+              ))}
+            </select>
+          </div>
 
           <div className="flex-1" />
 
@@ -1268,6 +1444,73 @@ export default function Editor() {
                     onChange={e => { selectedObject.set("opacity", parseFloat(e.target.value)); fabricRef.current?.renderAll(); setSelectedObject({ ...selectedObject } as fabric.Object); }}
                     className="w-full"
                   />
+                </div>
+                <div className="space-y-0.5">
+                  <label className="text-[9px] text-white/30 block">Rotation {Math.round(selectedObject.angle ?? 0)}°</label>
+                  <input
+                    type="range"
+                    min={-180}
+                    max={180}
+                    step={1}
+                    value={selectedObject.angle ?? 0}
+                    onChange={(e) => {
+                      selectedObject.set("angle", parseFloat(e.target.value));
+                      fabricRef.current?.renderAll();
+                      setSelectedObject({ ...selectedObject } as fabric.Object);
+                    }}
+                    className="w-full"
+                  />
+                </div>
+                <div className="space-y-0.5">
+                  <label className="text-[9px] text-white/30 block">Size {Number(selectedObject.scaleX ?? 1).toFixed(2)}x</label>
+                  <input
+                    type="range"
+                    min={0.2}
+                    max={3}
+                    step={0.01}
+                    value={selectedObject.scaleX ?? 1}
+                    onChange={(e) => {
+                      const nextScale = parseFloat(e.target.value);
+                      selectedObject.set({ scaleX: nextScale, scaleY: nextScale });
+                      const zone = getObjectMeta(selectedObject).zone;
+                      if (zone) constrainObjectToZone(selectedObject, zone);
+                      fabricRef.current?.renderAll();
+                      setSelectedObject({ ...selectedObject } as fabric.Object);
+                    }}
+                    className="w-full"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-1">
+                  <label className="text-[9px] text-white/30">
+                    X
+                    <Input
+                      value={Math.round(selectedObject.left ?? 0)}
+                      onChange={(e) => {
+                        const next = Number(e.target.value);
+                        selectedObject.set("left", Number.isFinite(next) ? next : 0);
+                        const zone = getObjectMeta(selectedObject).zone;
+                        if (zone) constrainObjectToZone(selectedObject, zone);
+                        fabricRef.current?.renderAll();
+                        setSelectedObject({ ...selectedObject } as fabric.Object);
+                      }}
+                      className="h-6 mt-1 bg-white/5 border-white/10 text-[10px]"
+                    />
+                  </label>
+                  <label className="text-[9px] text-white/30">
+                    Y
+                    <Input
+                      value={Math.round(selectedObject.top ?? 0)}
+                      onChange={(e) => {
+                        const next = Number(e.target.value);
+                        selectedObject.set("top", Number.isFinite(next) ? next : 0);
+                        const zone = getObjectMeta(selectedObject).zone;
+                        if (zone) constrainObjectToZone(selectedObject, zone);
+                        fabricRef.current?.renderAll();
+                        setSelectedObject({ ...selectedObject } as fabric.Object);
+                      }}
+                      className="h-6 mt-1 bg-white/5 border-white/10 text-[10px]"
+                    />
+                  </label>
                 </div>
                 <div className="grid grid-cols-2 gap-1">
                   <button onClick={deleteSelected} className="flex items-center justify-center gap-1 py-1.5 text-[10px] rounded border border-red-500/30 text-red-400 hover:bg-red-500/10 transition-colors">
