@@ -120,6 +120,36 @@ export default function Dashboard() {
     return () => clearInterval(timer);
   }, [examples.length]);
 
+  const navigateToEditorWorkspace = async (projectId: string) => {
+    const targetPath = `/editor/${projectId}`;
+
+    try {
+      setLocation(targetPath);
+      await Promise.resolve();
+
+      const currentPath = window.location.pathname;
+      const landedInEditor = currentPath === targetPath || currentPath.endsWith(targetPath);
+      if (landedInEditor) return;
+
+      toast({
+        title: language === "no" ? "Kunne ikke åpne editor" : "Could not open editor",
+        description: language === "no"
+          ? "Prøver en direkte videresending nå."
+          : "Trying a direct redirect now.",
+        variant: "destructive",
+      });
+      window.location.assign(targetPath);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Navigation failed";
+      toast({
+        title: language === "no" ? "Navigasjon feilet" : "Navigation failed",
+        description: message,
+        variant: "destructive",
+      });
+      window.location.assign(targetPath);
+    }
+  };
+
   const handleAiCreate = async () => {
     if (!prompt.trim() || isGenerating) return;
     setIsGenerating(true);
@@ -151,7 +181,7 @@ export default function Dashboard() {
       console.info("dashboard.ai.step.apply.queued", { projectId: result.id });
 
       setGeneratingStep("Done");
-      setLocation(`/editor/${result.id}`);
+      await navigateToEditorWorkspace(result.id);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "AI creation failed";
       setFailedStep(generatingStep || "Creating concept...");
@@ -164,32 +194,41 @@ export default function Dashboard() {
   };
 
   const handleCreateByMode = async () => {
-    if (creationMode === "ai") {
-      await handleAiCreate();
-      return;
-    }
-
-    if (creationMode === "remix") {
-      const existing = projects[0];
-      if (!existing) {
-        toast({ title: "No projects to remix", description: "Create at least one design first.", variant: "destructive" });
+    try {
+      if (creationMode === "ai") {
+        await handleAiCreate();
         return;
       }
-      setLocation(`/editor/${existing.id}`);
-      return;
-    }
 
-    const targetType = currentItemType.roblox as "shirt" | "pants";
-    const title = creationMode === "manual"
-      ? `Manual ${currentItemType.label}`
-      : `Template ${currentItemType.label}`;
-    const project = await createBlankProject(targetType, title);
-    sessionStorage.setItem(`my-skins:editor-meta:${project.id}`, JSON.stringify({
-      avatar: { avatarType, bodyType },
-      creationMode,
-      stylePreset: selectedStyle || null,
-    }));
-    setLocation(`/editor/${project.id}`);
+      if (creationMode === "remix") {
+        const existing = projects[0];
+        if (!existing) {
+          toast({ title: "No projects to remix", description: "Create at least one design first.", variant: "destructive" });
+          return;
+        }
+        await navigateToEditorWorkspace(existing.id);
+        return;
+      }
+
+      const targetType = currentItemType.roblox as "shirt" | "pants";
+      const title = creationMode === "manual"
+        ? `Manual ${currentItemType.label}`
+        : `Template ${currentItemType.label}`;
+      const project = await createBlankProject(targetType, title);
+      sessionStorage.setItem(`my-skins:editor-meta:${project.id}`, JSON.stringify({
+        avatar: { avatarType, bodyType },
+        creationMode,
+        stylePreset: selectedStyle || null,
+      }));
+      await navigateToEditorWorkspace(project.id);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Project creation failed";
+      toast({
+        title: language === "no" ? "Feil" : "Error",
+        description: message,
+        variant: "destructive",
+      });
+    }
   };
 
   const handleBlankCreate = async (type: "shirt" | "pants") => {
@@ -198,9 +237,10 @@ export default function Dashboard() {
         ? (language === "no" ? "Ny Skjorte" : "New Shirt")
         : (language === "no" ? "Ny Bukse" : "New Pants");
       const project = await createBlankProject(type, label);
-      setLocation(`/editor/${project.id}`);
-    } catch {
-      toast({ title: language === "no" ? "Feil" : "Error", variant: "destructive" });
+      await navigateToEditorWorkspace(project.id);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Could not create project";
+      toast({ title: language === "no" ? "Feil" : "Error", description: message, variant: "destructive" });
     }
   };
 
