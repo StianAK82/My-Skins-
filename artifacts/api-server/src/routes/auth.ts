@@ -225,7 +225,7 @@ async function ensureAuthSchemaReady() {
   `);
 
   const [idDefault] = idDefaultResult.rows;
-  const defaultExpr = idDefault?.column_default ?? "";
+  const defaultExpr = typeof idDefault?.column_default === "string" ? idDefault.column_default : "";
   const idDefaultIsDbGenerated = /gen_random_uuid\(\)|uuid_generate_v4\(\)/.test(defaultExpr);
   if (!authSchemaDiagnosticLogged) {
     authSchemaDiagnosticLogged = true;

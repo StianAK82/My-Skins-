@@ -291,7 +291,6 @@ export default function Editor() {
   const [paymentOpen, setPaymentOpen] = useState(false);
   const [isBuyingCredit, setIsBuyingCredit] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
-  const [creationMode, setCreationMode] = useState("ai");
   const [dimension, setDimension] = useState<ClothingDimension>("2d");
   const [garmentType3d, setGarmentType3d] = useState<"hoodie">("hoodie");
   const [garmentColor, setGarmentColor] = useState("#2563eb");
@@ -541,7 +540,7 @@ export default function Editor() {
   useEffect(() => {
     if (!fabricRef.current) return;
     const canvas = fabricRef.current;
-    const onPathCreated = (evt: fabric.TEvent<fabric.TPointerEvent>) => {
+    const onPathCreated = (evt: { path?: fabric.Path }) => {
       const path = evt.path;
       const zone = getZoneByKey(activeZone);
       if (!path || !zone) return;
@@ -552,9 +551,9 @@ export default function Editor() {
       constrainObjectToZone(path, zone.key);
       canvas.requestRenderAll();
     };
-    canvas.on("path:created", onPathCreated);
+    canvas.on("path:created", onPathCreated as unknown as ((event: unknown) => void));
     return () => {
-      canvas.off("path:created", onPathCreated);
+      canvas.off("path:created", onPathCreated as unknown as ((event: unknown) => void));
     };
   }, [activeZone, constrainObjectToZone, getZoneByKey]);
 
@@ -597,15 +596,25 @@ export default function Editor() {
     setAvatarTextureUrl(dataUrl);
   }, []);
 
-  const handleSave = async () => {
-    if (!fabricRef.current) return;
+  const buildCanvasPersistencePayload = useCallback(() => {
+    if (!fabricRef.current) return null;
     const canvasJSON = fabricRef.current.toJSON();
-    if (aiConcept) (canvasJSON as Record<string, unknown>).__aiConcept = aiConcept;
-    const json = JSON.stringify(canvasJSON);
-    const dataUrl = fabricRef.current.toDataURL({ format: "png", quality: 0.5, multiplier: 0.5 });
+    if (aiConcept) {
+      (canvasJSON as Record<string, unknown>).__aiConcept = aiConcept;
+    }
+    return {
+      canvasData: JSON.stringify(canvasJSON),
+      thumbnailUrl: fabricRef.current.toDataURL({ format: "png", quality: 0.5, multiplier: 0.5 }),
+      exportUrl: fabricRef.current.toDataURL({ format: "png", multiplier: 1, quality: 0.92 }),
+    };
+  }, [aiConcept]);
+
+  const handleSave = async () => {
+    const payload = buildCanvasPersistencePayload();
+    if (!payload) return;
 
     saveCanvas.mutate(
-      { id, data: { canvasData: json, thumbnailUrl: dataUrl } },
+      { id, data: { canvasData: payload.canvasData, thumbnailUrl: payload.thumbnailUrl } },
       {
         onSuccess: () => toast({ title: language === "no" ? "Lagret!" : "Saved!", description: language === "no" ? "Prosjektet er lagret." : "Project saved." }),
         onError: () => toast({ title: language === "no" ? "Feil" : "Error", description: language === "no" ? "Klarte ikke å lagre." : "Failed to save.", variant: "destructive" }),
@@ -614,7 +623,8 @@ export default function Editor() {
   };
 
   const handleExport = async () => {
-    if (!fabricRef.current) return;
+    const payload = buildCanvasPersistencePayload();
+    if (!payload) return;
     if (dimension === "3d") {
       toast({
         title: "3D export is not yet supported",
@@ -624,15 +634,9 @@ export default function Editor() {
       return;
     }
     try {
-      const canvasJSON = fabricRef.current.toJSON();
-      if (aiConcept) (canvasJSON as Record<string, unknown>).__aiConcept = aiConcept;
-      const json = JSON.stringify(canvasJSON);
-      const thumbnailUrl = fabricRef.current.toDataURL({ format: "png", quality: 0.5, multiplier: 0.5 });
-      await saveCanvas.mutateAsync({ id, data: { canvasData: json, thumbnailUrl } });
-
-      const dataUrl = fabricRef.current.toDataURL({ format: "png", multiplier: 1 });
+      await saveCanvas.mutateAsync({ id, data: { canvasData: payload.canvasData, thumbnailUrl: payload.thumbnailUrl } });
       const a = document.createElement("a");
-      a.href = dataUrl;
+      a.href = payload.exportUrl;
       a.download = `${project?.title ?? "design"}.png`;
       a.click();
       createExport.mutate({ data: { projectId: id, format: "png" } });
@@ -1097,7 +1101,6 @@ export default function Editor() {
         });
       }
       if (parsed.creationMode) {
-        setCreationMode(parsed.creationMode);
         if (["ai", "manual", "template", "remix"].includes(parsed.creationMode)) {
           setCreatorMode(parsed.creationMode as "ai" | "manual" | "template" | "remix");
         }
