@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { aiGenerateDesign, useGetDashboardSummary, useGetProjects } from "@workspace/api-client-react";
+import { aiGenerateDesign, createProject, deleteProject, useGetDashboardSummary, useGetProjects } from "@workspace/api-client-react";
 import type { Project } from "@workspace/api-client-react";
 import { useLanguage } from "@/hooks/use-language";
 import { Link, useLocation } from "wouter";
@@ -45,15 +45,9 @@ const BODY_TYPES = [
 ] as const;
 
 const ITEM_TYPES = [
-  { id: "shirt",   label: "Shirt",   labelNo: "Skjorte",  emoji: "👕", roblox: "shirt" },
-  { id: "pants",   label: "Pants",   labelNo: "Bukse",    emoji: "👖", roblox: "pants" },
-  { id: "hoodie",  label: "Hoodie",  labelNo: "Genser",   emoji: "🧥", roblox: "shirt" },
-  { id: "jacket",  label: "Jacket",  labelNo: "Jakke",    emoji: "🥼", roblox: "shirt" },
-  { id: "uniform", label: "Uniform", labelNo: "Uniform",  emoji: "👔", roblox: "shirt" },
-  { id: "tshirt",  label: "T-Shirt", labelNo: "T-Skjorte",emoji: "👕", roblox: "shirt" },
-  { id: "suit",    label: "Suit",    labelNo: "Dress",    emoji: "🤵", roblox: "shirt" },
-  { id: "vest",    label: "Vest",    labelNo: "Vest",     emoji: "🦺", roblox: "shirt" },
-];
+  { id: "shirt", label: "Shirt", labelNo: "Skjorte", emoji: "👕" },
+  { id: "pants", label: "Pants", labelNo: "Bukse", emoji: "👖" },
+] as const;
 
 const EXAMPLE_PROMPTS_NO = [
   "svart hettegenser med flammetegninger og drager",
@@ -73,21 +67,8 @@ const EXAMPLE_PROMPTS_EN = [
   "purple fantasy robe with runes and magical symbols",
 ];
 
-async function deleteProject(id: string) {
-  const res = await fetch(`/api/projects/${id}`, { method: "DELETE", credentials: "include" });
-  if (!res.ok) throw new Error("Delete failed");
-  return res.json();
-}
-
 async function createBlankProject(type: "shirt" | "pants", title: string) {
-  const res = await fetch("/api/projects", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    credentials: "include",
-    body: JSON.stringify({ title, type }),
-  });
-  if (!res.ok) throw new Error("Failed to create project");
-  return res.json();
+  return createProject({ title, type });
 }
 
 export default function Dashboard() {
@@ -97,7 +78,7 @@ export default function Dashboard() {
 
   const [prompt, setPrompt] = useState("");
   const [creationMode, setCreationMode] = useState<(typeof CREATION_MODES)[number]["id"]>("ai");
-  const [selectedType, setSelectedType] = useState("shirt");
+  const [selectedType, setSelectedType] = useState<(typeof ITEM_TYPES)[number]["id"]>("shirt");
   const [selectedStyle, setSelectedStyle] = useState("");
   const [avatarType, setAvatarType] = useState<(typeof AVATAR_OPTIONS)[number]["id"]>("neutral");
   const [bodyType, setBodyType] = useState<(typeof BODY_TYPES)[number]["id"]>("regular");
@@ -160,7 +141,7 @@ export default function Dashboard() {
       const normalizedStyle = selectedStyle
         ? `${selectedStyle.charAt(0).toUpperCase()}${selectedStyle.slice(1)}`
         : undefined;
-      const aiTarget = currentItemType.roblox === "pants" ? "classic_pants" : "classic_shirt";
+      const aiTarget = currentItemType.id === "pants" ? "classic_pants" : "classic_shirt";
 
       setGeneratingStep("Creating concept...");
       const generated = await aiGenerateDesign({ prompt: prompt.trim(), itemType: aiTarget, style: normalizedStyle, theme: normalizedStyle });
@@ -170,7 +151,7 @@ export default function Dashboard() {
       console.info("dashboard.ai.step.concept.completed", { prompt: prompt.trim(), aiTarget, normalizedStyle });
 
       setGeneratingStep("Generating visuals...");
-      const result = await createBlankProject(currentItemType.roblox as "shirt" | "pants", prompt.trim().slice(0, 60));
+      const result = await createBlankProject(currentItemType.id, prompt.trim().slice(0, 60));
       console.info("dashboard.ai.step.visuals.completed", { projectId: result.id });
 
       setGeneratingStep("Applying to canvas...");
@@ -211,7 +192,7 @@ export default function Dashboard() {
         return;
       }
 
-      const targetType = currentItemType.roblox as "shirt" | "pants";
+      const targetType = currentItemType.id;
       const title = creationMode === "manual"
         ? `Manual ${currentItemType.label}`
         : `Template ${currentItemType.label}`;
@@ -464,7 +445,7 @@ export default function Dashboard() {
         <AvatarPreview
           avatarType={avatarType}
           bodyType={bodyType}
-          itemType={currentItemType.roblox as "shirt" | "pants"}
+          itemType={currentItemType.id}
           dimension="3d"
           studioMode={true}
         />
