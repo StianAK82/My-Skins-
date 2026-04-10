@@ -2,7 +2,7 @@ import { randomUUID } from "crypto";
 import { z } from "zod";
 import { openai } from "@workspace/integrations-openai-ai-server";
 import { aiGenerationsTable, db } from "@workspace/db";
-import { aiDesignResponseSchema, aiIdeaSchema, type aiGenerateRequestSchema } from "../../lib/ai-contracts";
+import { aiDesignResponseSchema, aiDesignSchema, aiIdeaSchema, type aiGenerateRequestSchema } from "../../lib/ai-contracts";
 import { aiValidationService } from "./ai-validation.service";
 
 type GenerateInput = z.infer<typeof aiGenerateRequestSchema>;
@@ -50,8 +50,11 @@ function mapModuleType(value: unknown): string {
 
 export class AiGenerationService {
   private buildPrompt(input: GenerateInput, mode: string): string {
+    const placementRule = input.itemType === "classic_shirt"
+      ? "For classic_shirt: leftSleeve/rightSleeve must be descriptive strings and leftLeg/rightLeg must be exactly \"not_used\"."
+      : "For classic_pants: leftLeg/rightLeg must be descriptive strings and leftSleeve/rightSleeve must be exactly \"not_used\".";
     return [
-      "Return only valid JSON. No markdown. No comments.",
+      "Return only valid JSON. No markdown. No comments. Do not wrap in backticks.",
       `mode=${mode}`,
       `itemType=${input.itemType}`,
       `prompt=${input.prompt}`,
@@ -96,10 +99,32 @@ export class AiGenerationService {
       "  }",
       "}",
       "",
-      "Placement rule:",
-      "- classic_shirt => leftSleeve/rightSleeve must be descriptive strings, leftLeg/rightLeg must be not_used.",
-      "- classic_pants => leftLeg/rightLeg must be descriptive strings, leftSleeve/rightSleeve must be not_used.",
+      "Placement rule (strict):",
+      placementRule,
+      "Every module must include a valid `type` enum value and a six-char hex color.",
     ].filter(Boolean).join("\n");
+  }
+
+  private logRawSchemaDiff(rawPayload: unknown, request: GenerateInput) {
+    const source = (rawPayload && typeof rawPayload === "object" && "result" in rawPayload)
+      ? (rawPayload as { result?: unknown }).result
+      : rawPayload;
+    const parsed = aiDesignSchema.safeParse(source);
+    if (parsed.success) {
+      console.info("ai.model.raw_schema_valid", { itemType: request.itemType });
+      return;
+    }
+
+    const details = parsed.error.issues.map((issue) => ({
+      path: issue.path.join("."),
+      message: issue.message,
+      code: issue.code,
+    }));
+    console.warn("ai.model.raw_schema_invalid", {
+      itemType: request.itemType,
+      details,
+      rawSource: source,
+    });
   }
 
   private normalizeDesignPayload(input: GenerateInput, payload: unknown): unknown {
@@ -231,6 +256,7 @@ export class AiGenerationService {
 
   async generateDesign(userId: string, input: GenerateInput) {
     const modelResult = await this.askModel(this.buildPrompt(input, "generate"));
+    this.logRawSchemaDiff(modelResult, input);
     const normalized = this.normalizeDesignPayload(input, modelResult);
     const design = aiValidationService.ensureDesign(normalized);
     const generationId = await this.saveGeneration(userId, input.prompt, "generate", design, input.style ?? null);
@@ -244,6 +270,12 @@ export class AiGenerationService {
   async improveDesign(userId: string, instruction: string, source: unknown, mode: "improve" | "remix") {
     const designSource = aiValidationService.ensureDesign(source);
     const modelResult = await this.askModel(`${mode} this design with instruction: ${instruction}\nsource:${JSON.stringify(designSource)}`);
+    this.logRawSchemaDiff(modelResult, {
+      prompt: instruction,
+      itemType: designSource.itemType,
+      style: designSource.style,
+      theme: designSource.theme,
+    });
     const design = aiValidationService.ensureDesign(this.normalizeDesignPayload(
       {
         prompt: instruction,

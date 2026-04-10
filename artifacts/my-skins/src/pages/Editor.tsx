@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { useParams, Link } from "wouter";
 import * as fabric from "fabric";
 import { useGetProject, useSaveCanvas, useCreateExport, useGetMe } from "@workspace/api-client-react";
@@ -284,16 +284,13 @@ export default function Editor() {
   const [brushSize, setBrushSize] = useState(8);
   const [aiConcept, setAiConcept] = useState<AiConcept | null>(null);
   const [showConcept, setShowConcept] = useState(true);
-  const [previewOpen, setPreviewOpen] = useState(false);
   const [textureEditorOpen, setTextureEditorOpen] = useState(false);
   const [avatarTextureUrl, setAvatarTextureUrl] = useState("");
   const [credits, setCredits] = useState(0);
   const [paymentOpen, setPaymentOpen] = useState(false);
   const [isBuyingCredit, setIsBuyingCredit] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
-  const [creationMode, setCreationMode] = useState("ai");
   const [dimension, setDimension] = useState<ClothingDimension>("2d");
-  const [garmentType3d, setGarmentType3d] = useState<"hoodie">("hoodie");
   const [garmentColor, setGarmentColor] = useState("#2563eb");
   const [garmentMaterial, setGarmentMaterial] = useState<GarmentMaterial>("cotton");
   const [garmentScale, setGarmentScale] = useState(1);
@@ -310,6 +307,7 @@ export default function Editor() {
   const saveCanvas = useSaveCanvas();
   const createExport = useCreateExport();
   const activeClassicType = (project?.type === "pants" ? "pants" : "shirt") as "shirt" | "pants";
+  const targetLabel = useMemo(() => activeClassicType === "shirt" ? "Classic Shirt" : "Classic Pants", [activeClassicType]);
 
   useEffect(() => {
     const next = getEnabledZones(activeClassicType)[0];
@@ -541,7 +539,7 @@ export default function Editor() {
   useEffect(() => {
     if (!fabricRef.current) return;
     const canvas = fabricRef.current;
-    const onPathCreated = (evt: fabric.TEvent<fabric.TPointerEvent>) => {
+    const onPathCreated = (evt: { path?: fabric.Object }) => {
       const path = evt.path;
       const zone = getZoneByKey(activeZone);
       if (!path || !zone) return;
@@ -597,15 +595,21 @@ export default function Editor() {
     setAvatarTextureUrl(dataUrl);
   }, []);
 
-  const handleSave = async () => {
-    if (!fabricRef.current) return;
+  const buildCanonicalCanvasSnapshot = useCallback(() => {
+    if (!fabricRef.current) return null;
     const canvasJSON = fabricRef.current.toJSON();
     if (aiConcept) (canvasJSON as Record<string, unknown>).__aiConcept = aiConcept;
-    const json = JSON.stringify(canvasJSON);
-    const dataUrl = fabricRef.current.toDataURL({ format: "png", quality: 0.5, multiplier: 0.5 });
+    const canvasData = JSON.stringify(canvasJSON);
+    const textureDataUrl = fabricRef.current.toDataURL({ format: "png", multiplier: 1, quality: 0.92 });
+    return { canvasData, textureDataUrl };
+  }, [aiConcept]);
+
+  const handleSave = async () => {
+    const snapshot = buildCanonicalCanvasSnapshot();
+    if (!snapshot) return;
 
     saveCanvas.mutate(
-      { id, data: { canvasData: json, thumbnailUrl: dataUrl } },
+      { id, data: { canvasData: snapshot.canvasData, thumbnailUrl: snapshot.textureDataUrl } },
       {
         onSuccess: () => toast({ title: language === "no" ? "Lagret!" : "Saved!", description: language === "no" ? "Prosjektet er lagret." : "Project saved." }),
         onError: () => toast({ title: language === "no" ? "Feil" : "Error", description: language === "no" ? "Klarte ikke å lagre." : "Failed to save.", variant: "destructive" }),
@@ -614,7 +618,8 @@ export default function Editor() {
   };
 
   const handleExport = async () => {
-    if (!fabricRef.current) return;
+    const snapshot = buildCanonicalCanvasSnapshot();
+    if (!snapshot) return;
     if (dimension === "3d") {
       toast({
         title: "3D export is not yet supported",
@@ -624,17 +629,11 @@ export default function Editor() {
       return;
     }
     try {
-      const canvasJSON = fabricRef.current.toJSON();
-      if (aiConcept) (canvasJSON as Record<string, unknown>).__aiConcept = aiConcept;
-      const json = JSON.stringify(canvasJSON);
-      const thumbnailUrl = fabricRef.current.toDataURL({ format: "png", quality: 0.5, multiplier: 0.5 });
-      await saveCanvas.mutateAsync({ id, data: { canvasData: json, thumbnailUrl } });
-
-      const dataUrl = fabricRef.current.toDataURL({ format: "png", multiplier: 1 });
       const a = document.createElement("a");
-      a.href = dataUrl;
+      a.href = snapshot.textureDataUrl;
       a.download = `${project?.title ?? "design"}.png`;
       a.click();
+      await saveCanvas.mutateAsync({ id, data: { canvasData: snapshot.canvasData, thumbnailUrl: snapshot.textureDataUrl } });
       createExport.mutate({ data: { projectId: id, format: "png" } });
     } catch {
       toast({
@@ -1097,7 +1096,6 @@ export default function Editor() {
         });
       }
       if (parsed.creationMode) {
-        setCreationMode(parsed.creationMode);
         if (["ai", "manual", "template", "remix"].includes(parsed.creationMode)) {
           setCreatorMode(parsed.creationMode as "ai" | "manual" | "template" | "remix");
         }
@@ -1151,6 +1149,8 @@ export default function Editor() {
             </button>
           </Link>
           <span className="font-semibold text-sm truncate max-w-[160px] text-white">{project?.title}</span>
+          <span className="text-[10px] rounded-full border border-white/15 px-2 py-0.5 text-white/70">{targetLabel}</span>
+          <span className="text-[10px] rounded-full border border-white/15 px-2 py-0.5 text-white/70 uppercase">{creatorMode}</span>
           {project?.isAiGenerated && (
             <span className="text-[10px] bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 px-2 py-0.5 rounded-full flex items-center gap-1 shrink-0">
               <Sparkles className="w-2.5 h-2.5" /> AI
@@ -1606,6 +1606,18 @@ export default function Editor() {
                   </label>
                 </div>
                 <div className="grid grid-cols-2 gap-1">
+                  <button onClick={() => setSnapEnabled((prev) => !prev)} className={`flex items-center justify-center gap-1 py-1.5 text-[10px] rounded border transition-colors ${snapEnabled ? "border-indigo-500/60 text-indigo-300 bg-indigo-500/10" : "border-white/10 text-white/40 hover:text-white"}`}>
+                    <Grid3X3 className="w-3 h-3" /> Snap
+                  </button>
+                  <button onClick={toggleObjectLock} className="flex items-center justify-center gap-1 py-1.5 text-[10px] rounded border border-white/10 text-white/40 hover:text-white transition-colors">
+                    {selectedObject.lockMovementX ? <Unlock className="w-3 h-3" /> : <Lock className="w-3 h-3" />} {selectedObject.lockMovementX ? "Unlock" : "Lock"}
+                  </button>
+                  <button onClick={groupSelection} className="flex items-center justify-center gap-1 py-1.5 text-[10px] rounded border border-white/10 text-white/40 hover:text-white transition-colors">
+                    <Group className="w-3 h-3" /> Group
+                  </button>
+                  <button onClick={ungroupSelection} className="flex items-center justify-center gap-1 py-1.5 text-[10px] rounded border border-white/10 text-white/40 hover:text-white transition-colors">
+                    <Ungroup className="w-3 h-3" /> Ungroup
+                  </button>
                   <button onClick={deleteSelected} className="flex items-center justify-center gap-1 py-1.5 text-[10px] rounded border border-red-500/30 text-red-400 hover:bg-red-500/10 transition-colors">
                     <Trash2 className="w-3 h-3" /> Del
                   </button>

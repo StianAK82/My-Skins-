@@ -47,12 +47,6 @@ const BODY_TYPES = [
 const ITEM_TYPES = [
   { id: "shirt",   label: "Shirt",   labelNo: "Skjorte",  emoji: "👕", roblox: "shirt" },
   { id: "pants",   label: "Pants",   labelNo: "Bukse",    emoji: "👖", roblox: "pants" },
-  { id: "hoodie",  label: "Hoodie",  labelNo: "Genser",   emoji: "🧥", roblox: "shirt" },
-  { id: "jacket",  label: "Jacket",  labelNo: "Jakke",    emoji: "🥼", roblox: "shirt" },
-  { id: "uniform", label: "Uniform", labelNo: "Uniform",  emoji: "👔", roblox: "shirt" },
-  { id: "tshirt",  label: "T-Shirt", labelNo: "T-Skjorte",emoji: "👕", roblox: "shirt" },
-  { id: "suit",    label: "Suit",    labelNo: "Dress",    emoji: "🤵", roblox: "shirt" },
-  { id: "vest",    label: "Vest",    labelNo: "Vest",     emoji: "🦺", roblox: "shirt" },
 ];
 
 const EXAMPLE_PROMPTS_NO = [

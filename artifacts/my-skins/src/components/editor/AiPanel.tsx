@@ -45,6 +45,11 @@ export function AiPanel({ projectType, dimension, onDimensionChange, onUseColors
     if (loading) return;
     if (mode === "generate" && !prompt.trim()) return;
     if ((mode === "improve" || mode === "remix") && !remixInstruction.trim()) return;
+    if ((mode === "improve" || mode === "remix") && !current) {
+      setErrorMessage("Generate a structured design first before improving/remixing.");
+      toast({ title: "Missing source design", description: "Generate first, then improve or remix.", variant: "destructive" });
+      return;
+    }
 
     if (dimension === "3d") {
       toast({
@@ -57,11 +62,12 @@ export function AiPanel({ projectType, dimension, onDimensionChange, onUseColors
     setLoading(true);
     setErrorMessage(null);
     try {
+      const baseDesign = current?.result as AiDesign | undefined;
       const next = mode === "generate"
         ? normalizeAiResponse(await aiGenerateDesign({ prompt: prompt.trim(), itemType, style: selectedStyle || undefined, theme: selectedStyle || undefined }))
         : normalizeAiResponse(await (mode === "improve"
-          ? aiImproveDesign({ instruction: remixInstruction.trim(), design: current?.result as AiDesign })
-          : aiRemixDesign({ instruction: remixInstruction.trim(), design: current?.result as AiDesign })));
+          ? aiImproveDesign({ instruction: remixInstruction.trim(), design: baseDesign as AiDesign })
+          : aiRemixDesign({ instruction: remixInstruction.trim(), design: baseDesign as AiDesign })));
 
       setCurrent(next);
       if (next.meta.status !== "completed") {
