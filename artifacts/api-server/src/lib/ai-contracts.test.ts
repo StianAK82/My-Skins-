@@ -63,6 +63,14 @@ test("aiGenerateRequestSchema rejects unsupported 3d item types", () => {
   }));
 });
 
+test("aiGenerateRequestSchema requires canonical request shape", () => {
+  assert.throws(() => aiGenerateRequestSchema.parse({
+    prompt: "clean esports pants",
+    itemType: "classic_pants",
+    extra: "not-allowed",
+  }));
+});
+
 test("aiDesignResponseSchema parses canonical completed payload", () => {
   const parsed = aiDesignResponseSchema.parse({
     meta: { generationId: "gen-1", status: "completed", warnings: [] },
@@ -76,5 +84,22 @@ test("aiImproveRequestSchema requires complete canonical design payload", () => 
   assert.throws(() => aiImproveRequestSchema.parse({
     instruction: "add more contrast",
     design: { title: "invalid-design-only-title" },
+  }));
+});
+
+test("aiDesignSchema rejects invalid module enums and invalid hex", () => {
+  assert.throws(() => aiDesignSchema.parse({
+    ...base,
+    modules: [{
+      id: "mod-1",
+      type: "logo",
+      label: "Invalid module type",
+      color: "#XYZXYZ",
+      position: { x: 0.5, y: 0.5 },
+      scale: 1,
+      rotation: 0,
+      opacity: 1,
+      layer: 1,
+    }],
   }));
 });
