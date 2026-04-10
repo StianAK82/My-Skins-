@@ -63,6 +63,29 @@ test("aiGenerateRequestSchema rejects unsupported 3d item types", () => {
   }));
 });
 
+test("aiGenerateRequestSchema accepts classic shirt success payload", () => {
+  const parsed = aiGenerateRequestSchema.parse({
+    prompt: "clean esports shirt with neon trims",
+    itemType: "classic_shirt",
+    style: "Sport",
+    theme: "Neon",
+  });
+
+  assert.equal(parsed.itemType, "classic_shirt");
+  assert.equal(parsed.prompt.includes("shirt"), true);
+});
+
+test("aiGenerateRequestSchema accepts classic pants success payload", () => {
+  const parsed = aiGenerateRequestSchema.parse({
+    prompt: "black tactical pants with reflective side stripes",
+    itemType: "classic_pants",
+    style: "Tactical",
+  });
+
+  assert.equal(parsed.itemType, "classic_pants");
+  assert.equal(parsed.prompt.includes("pants"), true);
+});
+
 test("aiGenerateRequestSchema requires canonical request shape", () => {
   assert.throws(() => aiGenerateRequestSchema.parse({
     prompt: "clean esports pants",
