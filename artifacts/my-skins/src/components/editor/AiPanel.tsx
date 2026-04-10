@@ -53,8 +53,8 @@ export function AiPanel({ projectType, dimension, onDimensionChange, onUseColors
 
     if (dimension === "3d") {
       toast({
-        title: mode === "generate" ? "3D AI Clothing (Beta)" : "3D AI refinement (Beta)",
-        description: "3D generation preview is available. Full 3D model synthesis/export is still limited.",
+        title: mode === "generate" ? "3D AI concept mode (beta)" : "3D AI concept refinement (beta)",
+        description: "Launch-ready AI generation/export is currently Classic 2D only. 3D stays preview-only in this build.",
       });
       return;
     }
@@ -103,7 +103,7 @@ export function AiPanel({ projectType, dimension, onDimensionChange, onUseColors
         </div>
       ) : (
         <div className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">
-          3D mode generates concept direction for a hoodie workflow. Full mesh generation/export is marked beta.
+          3D is a concept preview only. Supported launch flows are Classic Shirt and Classic Pants in 2D.
         </div>
       )}
 

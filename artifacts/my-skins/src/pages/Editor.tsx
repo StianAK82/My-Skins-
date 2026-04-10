@@ -1325,6 +1325,9 @@ export default function Editor() {
 
             {/* Upload + Roblox */}
             <div className="pt-2 border-t border-white/8 space-y-2">
+              <p className="text-[10px] leading-relaxed text-white/45">
+                Launch scope: Classic Shirt/Pants workflows are supported. Roblox upload remains gated by integration/account state.
+              </p>
               <div className="flex items-center justify-between text-[10px] text-white/40">
                 <span>Credits</span>
                 <span className="font-mono font-bold text-white/60">{credits}</span>

@@ -18,3 +18,5 @@ export * from "./billing_prices";
 export * from "./billing_subscriptions";
 export * from "./billing_invoices";
 export * from "./entitlements";
+export * from "./promo_codes";
+export * from "./promo_code_redemptions";
