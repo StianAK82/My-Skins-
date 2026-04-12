@@ -44,7 +44,7 @@ function PublicRoute({ component: Component }: { component: React.ComponentType 
 function Router() {
   return (
     <Switch>
-      <Route path="/" component={() => <PublicRoute component={Landing} />} />
+      <Route path="/" component={Landing} />
       <Route path="/dashboard" component={() => <ProtectedRoute component={Dashboard} />} />
       <Route path="/projects" component={() => <ProtectedRoute component={Projects} />} />
       <Route path="/settings" component={() => <ProtectedRoute component={Settings} />} />
