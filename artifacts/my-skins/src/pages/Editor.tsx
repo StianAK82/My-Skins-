@@ -129,6 +129,42 @@ function getEnabledZones(type: "shirt" | "pants"): TemplateZone[] {
   return [zones.left_leg_front, zones.right_leg_front, zones.left_leg_back, zones.right_leg_back];
 }
 
+function clamp01(value: number): number {
+  return Math.min(1, Math.max(0, value));
+}
+
+function resolveZoneForModule(type: "shirt" | "pants", module: NormalizedAiResponse["result"]["modules"][number]): TemplateZone {
+  const zones = getEnabledZones(type);
+  const x = clamp01(module.position.x);
+  const y = clamp01(module.position.y);
+  const moduleType = module.type.toLowerCase();
+
+  if (type === "shirt") {
+    if (moduleType === "sleeve_detail" || moduleType === "trim") {
+      return x < 0.5 ? TEMPLATE_ZONES.shirt.left_sleeve : TEMPLATE_ZONES.shirt.right_sleeve;
+    }
+    const bodyZones = [TEMPLATE_ZONES.shirt.front, TEMPLATE_ZONES.shirt.back];
+    return x < 0.6 ? bodyZones[0] : bodyZones[1];
+  }
+
+  const rowZones = y < 0.5
+    ? [TEMPLATE_ZONES.pants.left_leg_front, TEMPLATE_ZONES.pants.right_leg_front]
+    : [TEMPLATE_ZONES.pants.left_leg_back, TEMPLATE_ZONES.pants.right_leg_back];
+  if (moduleType === "stripe") {
+    return x < 0.5 ? rowZones[0] : rowZones[1];
+  }
+  const nearest = zones.reduce((best, zone) => {
+    const cx = zone.left + zone.width / 2;
+    const cy = zone.top + zone.height / 2;
+    const dx = x * 585 - cx;
+    const dy = y * 559 - cy;
+    const distance = (dx * dx) + (dy * dy);
+    if (!best || distance < best.distance) return { zone, distance };
+    return best;
+  }, null as null | { zone: TemplateZone; distance: number });
+  return nearest?.zone ?? TEMPLATE_ZONES.pants.left_leg_front;
+}
+
 function AiConceptBanner({ concept, onClose, onUseColors }: {
   concept: AiConcept;
   onClose: () => void;
@@ -274,6 +310,7 @@ export default function Editor() {
   const { toast } = useToast();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fabricRef = useRef<fabric.Canvas | null>(null);
+  const snapEnabledRef = useRef(true);
 
   const [creatorMode, setCreatorMode] = useState<"ai" | "manual" | "template" | "remix">("ai");
   const [selectedObject, setSelectedObject] = useState<fabric.Object | null>(null);
@@ -339,6 +376,10 @@ export default function Editor() {
       top: Math.min(Math.max(obj.top ?? minTop, minTop), Math.max(minTop, maxTop)),
     });
   }, [getZoneByKey]);
+
+  useEffect(() => {
+    snapEnabledRef.current = snapEnabled;
+  }, [snapEnabled]);
 
   const addTemplateGuideLayer = useCallback(() => {
     if (!fabricRef.current) return;
@@ -508,7 +549,7 @@ export default function Editor() {
       if (meta.zone) {
         constrainObjectToZone(e.target, meta.zone);
       }
-      if (snapEnabled) {
+      if (snapEnabledRef.current) {
         e.target.set({
           left: Math.round((e.target.left ?? 0) / grid) * grid,
           top: Math.round((e.target.top ?? 0) / grid) * grid,
@@ -522,7 +563,7 @@ export default function Editor() {
     });
 
     return () => { canvas.dispose(); fabricRef.current = null; };
-  }, [project?.id, snapEnabled, constrainObjectToZone]);
+  }, [project?.id, constrainObjectToZone]);
 
   // Drawing mode
   useEffect(() => {
@@ -890,10 +931,14 @@ export default function Editor() {
     const active = fabricRef.current.getActiveObject();
     if (active && active.type === "activeSelection") {
       const selection = active as fabric.ActiveSelection;
-      const grouped = new fabric.Group(selection.getObjects());
-      fabricRef.current.remove(selection);
-      fabricRef.current.add(grouped);
+      const items = selection.getObjects();
+      if (items.length === 0) return;
+      fabricRef.current.discardActiveObject();
+      items.forEach((item) => fabricRef.current?.remove(item));
+      const grouped = new fabric.Group(items);
+      grouped.set("data", { role: "manual-group", zone: getObjectMeta(items[0]).zone, layerName: "Grouped Objects" });
       fabricRef.current.setActiveObject(grouped);
+      fabricRef.current.add(grouped);
       fabricRef.current.renderAll();
       syncAvatarTextureFromCanvas();
     }
@@ -992,7 +1037,8 @@ export default function Editor() {
       canvas.backgroundColor = plan.backgroundColor;
 
       canvas.getObjects().forEach((obj) => {
-        if (getObjectMeta(obj).role === "template-guide") {
+        const role = getObjectMeta(obj).role;
+        if (role === "template-guide" || role === "ai-generated") {
           canvas.remove(obj);
         }
       });
@@ -1002,19 +1048,24 @@ export default function Editor() {
       }
 
       for (const module of plan.modules) {
+        const zone = resolveZoneForModule(activeClassicType, module);
         const radius = Math.max(8, 28 * module.scale);
         const shape = module.type === "stripe"
           ? new fabric.Rect({ width: 120 * module.scale, height: 18 * module.scale, fill: module.color, opacity: module.opacity })
           : new fabric.Circle({ radius, fill: module.color, opacity: module.opacity });
+        const left = zone.left + clamp01(module.position.x) * Math.max(8, zone.width - shape.getScaledWidth());
+        const top = zone.top + clamp01(module.position.y) * Math.max(8, zone.height - shape.getScaledHeight());
 
         shape.set({
-          left: 90 + (module.position.x * 460),
-          top: 80 + (module.position.y * 420),
+          left,
+          top,
           angle: module.rotation,
           selectable: true,
           evented: true,
-          data: { role: "ai-generated", moduleId: module.id, layerName: module.label, zone: activeZone },
+          data: { role: "ai-generated", moduleId: module.id, layerName: module.label, zone: zone.key },
+          clipPath: new fabric.Rect({ left: zone.left, top: zone.top, width: zone.width, height: zone.height, absolutePositioned: true }),
         });
+        constrainObjectToZone(shape, zone.key);
         canvas.add(shape);
       }
 
@@ -1041,7 +1092,7 @@ export default function Editor() {
       addTemplateGuideLayer();
       return false;
     }
-  }, [activeClassicType, activeZone, addTemplateGuideLayer, handleUseColors, language, toast]);
+  }, [activeClassicType, addTemplateGuideLayer, constrainObjectToZone, handleUseColors, language, toast]);
 
   const handleDimensionChange = useCallback((next: ClothingDimension) => {
     setDimension(next);
