@@ -31,6 +31,7 @@ type AvatarPreviewProps = {
 
 type Zone = { left: number; top: number; width: number; height: number };
 type ClothingMaps = { shirtFront: ThreeTexture; shirtBack: ThreeTexture; shirtSide: ThreeTexture; pantsFront: ThreeTexture; pantsBack: ThreeTexture; pantsSide: ThreeTexture };
+type FaceMaps = { front: ThreeTexture; back: ThreeTexture; side: ThreeTexture };
 
 const SHIRT_FRONT: Zone = { left: 196, top: 118, width: 128, height: 128 };
 const SHIRT_BACK: Zone = { left: 338, top: 118, width: 128, height: 128 };
@@ -104,30 +105,140 @@ function bodyScaleFromType(bodyType: string) {
   return [1, 1, 1] as const;
 }
 
+function TexturedBlock({
+  size,
+  position,
+  radius = 0.06,
+  frontMap,
+  backMap,
+  sideMap,
+  roughness = 0.65,
+  colorTop = "#0f172a",
+  colorBottom = "#0f172a",
+}: {
+  size: [number, number, number];
+  position: [number, number, number];
+  radius?: number;
+  frontMap: ThreeTexture;
+  backMap: ThreeTexture;
+  sideMap: ThreeTexture;
+  roughness?: number;
+  colorTop?: string;
+  colorBottom?: string;
+}) {
+  return (
+    <RoundedBox args={size} radius={radius} smoothness={6} position={position} castShadow>
+      <meshStandardMaterial attach="material-0" map={sideMap} roughness={roughness} />
+      <meshStandardMaterial attach="material-1" map={sideMap} roughness={roughness} />
+      <meshStandardMaterial attach="material-2" color={colorTop} roughness={0.86} />
+      <meshStandardMaterial attach="material-3" color={colorBottom} roughness={0.86} />
+      <meshStandardMaterial attach="material-4" map={frontMap} roughness={roughness} />
+      <meshStandardMaterial attach="material-5" map={backMap} roughness={roughness} />
+    </RoundedBox>
+  );
+}
+
+function RobloxStyleBody({
+  shirtMaps,
+  pantsMaps,
+  skinColor = "#f2c3a0",
+}: {
+  shirtMaps: FaceMaps;
+  pantsMaps: FaceMaps;
+  skinColor?: string;
+}) {
+  return (
+    <group>
+      <RoundedBox args={[0.48, 0.48, 0.46]} radius={0.09} smoothness={5} position={[0, 1.95, 0]} castShadow>
+        <meshStandardMaterial color={skinColor} roughness={0.56} metalness={0.02} />
+      </RoundedBox>
+      <RoundedBox args={[0.3, 0.22, 0.3]} radius={0.09} smoothness={4} position={[0, 1.64, 0.04]} castShadow>
+        <meshStandardMaterial color={skinColor} roughness={0.62} />
+      </RoundedBox>
+
+      <TexturedBlock
+        size={[0.78, 0.62, 0.44]}
+        radius={0.11}
+        position={[0, 1.41, 0]}
+        frontMap={shirtMaps.front}
+        backMap={shirtMaps.back}
+        sideMap={shirtMaps.side}
+      />
+      <TexturedBlock
+        size={[0.66, 0.42, 0.4]}
+        radius={0.1}
+        position={[0, 0.92, 0]}
+        frontMap={pantsMaps.front}
+        backMap={pantsMaps.back}
+        sideMap={pantsMaps.side}
+        roughness={0.72}
+      />
+
+      <mesh position={[-0.49, 1.54, 0]} castShadow>
+        <boxGeometry args={[0.18, 0.2, 0.22]} />
+        <meshStandardMaterial map={shirtMaps.side} roughness={0.67} />
+      </mesh>
+      <mesh position={[0.49, 1.54, 0]} castShadow>
+        <boxGeometry args={[0.18, 0.2, 0.22]} />
+        <meshStandardMaterial map={shirtMaps.side} roughness={0.67} />
+      </mesh>
+      <TexturedBlock
+        size={[0.26, 0.8, 0.28]}
+        radius={0.08}
+        position={[-0.5, 1.03, 0]}
+        frontMap={shirtMaps.front}
+        backMap={shirtMaps.back}
+        sideMap={shirtMaps.side}
+        roughness={0.69}
+      />
+      <TexturedBlock
+        size={[0.26, 0.8, 0.28]}
+        radius={0.08}
+        position={[0.5, 1.03, 0]}
+        frontMap={shirtMaps.front}
+        backMap={shirtMaps.back}
+        sideMap={shirtMaps.side}
+        roughness={0.69}
+      />
+
+      <TexturedBlock
+        size={[0.3, 0.82, 0.3]}
+        radius={0.08}
+        position={[-0.19, 0.34, 0]}
+        frontMap={pantsMaps.front}
+        backMap={pantsMaps.back}
+        sideMap={pantsMaps.side}
+        roughness={0.73}
+      />
+      <TexturedBlock
+        size={[0.3, 0.82, 0.3]}
+        radius={0.08}
+        position={[0.19, 0.34, 0]}
+        frontMap={pantsMaps.front}
+        backMap={pantsMaps.back}
+        sideMap={pantsMaps.side}
+        roughness={0.73}
+      />
+    </group>
+  );
+}
+
 function PremiumClassicAvatar({ maps, bodyType, view, itemType }: { maps: ClothingMaps; bodyType: string; view: "front" | "back"; itemType: "shirt" | "pants" }) {
   const bodyScale = useMemo(() => bodyScaleFromType(bodyType), [bodyType]);
-  const torsoFront = itemType === "shirt" ? maps.shirtFront : maps.shirtSide;
-  const torsoBack = itemType === "shirt" ? maps.shirtBack : maps.shirtSide;
-  const legFront = itemType === "pants" ? maps.pantsFront : maps.pantsSide;
-  const legBack = itemType === "pants" ? maps.pantsBack : maps.pantsSide;
+  const shirtMaps = useMemo<FaceMaps>(() => ({
+    front: itemType === "shirt" ? maps.shirtFront : maps.shirtSide,
+    back: itemType === "shirt" ? maps.shirtBack : maps.shirtSide,
+    side: maps.shirtSide,
+  }), [itemType, maps.shirtBack, maps.shirtFront, maps.shirtSide]);
+  const pantsMaps = useMemo<FaceMaps>(() => ({
+    front: itemType === "pants" ? maps.pantsFront : maps.pantsSide,
+    back: itemType === "pants" ? maps.pantsBack : maps.pantsSide,
+    side: maps.pantsSide,
+  }), [itemType, maps.pantsBack, maps.pantsFront, maps.pantsSide]);
 
   return (
     <group rotation-y={view === "back" ? Math.PI : 0} scale={bodyScale}>
-      <mesh position={[0, 1.83, 0]} castShadow><sphereGeometry args={[0.23, 28, 28]} /><meshStandardMaterial color="#f2c3a0" roughness={0.72} /></mesh>
-      <RoundedBox args={[0.76, 0.9, 0.42]} radius={0.08} smoothness={4} position={[0, 1.2, 0]} castShadow>
-        <meshStandardMaterial attach="material-0" map={maps.shirtSide} roughness={0.68} />
-        <meshStandardMaterial attach="material-1" map={maps.shirtSide} roughness={0.68} />
-        <meshStandardMaterial attach="material-2" color="#0f172a" roughness={0.82} />
-        <meshStandardMaterial attach="material-3" color="#0f172a" roughness={0.82} />
-        <meshStandardMaterial attach="material-4" map={torsoFront} roughness={0.65} />
-        <meshStandardMaterial attach="material-5" map={torsoBack} roughness={0.65} />
-      </RoundedBox>
-      <RoundedBox args={[0.31, 0.98, 0.33]} radius={0.07} smoothness={4} position={[-0.2, 0.45, 0]} castShadow>
-        <meshStandardMaterial attach="material-4" map={legFront} roughness={0.72} /><meshStandardMaterial attach="material-5" map={legBack} roughness={0.72} />
-      </RoundedBox>
-      <RoundedBox args={[0.31, 0.98, 0.33]} radius={0.07} smoothness={4} position={[0.2, 0.45, 0]} castShadow>
-        <meshStandardMaterial attach="material-4" map={legFront} roughness={0.72} /><meshStandardMaterial attach="material-5" map={legBack} roughness={0.72} />
-      </RoundedBox>
+      <RobloxStyleBody shirtMaps={shirtMaps} pantsMaps={pantsMaps} />
     </group>
   );
 }
@@ -153,20 +264,22 @@ function FashionBuilderAvatar({ view, bodyType, garmentColor, garmentBase, garme
 
   return (
     <group rotation-y={view === "back" ? Math.PI : 0} scale={bodyScale}>
-      <mesh position={[0, 1.84, 0]} castShadow><sphereGeometry args={[0.235, 32, 32]} /><meshStandardMaterial color="#f2c3a0" roughness={0.65} /></mesh>
-      {accessories?.hair !== "none" ? <mesh position={[0, 2.02, 0]} castShadow><sphereGeometry args={[0.26, 24, 24]} /><meshStandardMaterial color="#2d1b0f" roughness={0.9} /></mesh> : null}
+      <RoundedBox args={[0.48, 0.48, 0.46]} radius={0.09} smoothness={5} position={[0, 1.95, 0]} castShadow><meshStandardMaterial color="#f2c3a0" roughness={0.6} /></RoundedBox>
+      {accessories?.hair !== "none" ? <mesh position={[0, 2.1, 0]} castShadow><sphereGeometry args={[0.28, 24, 24]} /><meshStandardMaterial color="#2d1b0f" roughness={0.9} /></mesh> : null}
       {accessories?.hat !== "none" ? <mesh position={[0, 2.18, 0]}><cylinderGeometry args={[0.28, 0.34, 0.14, 24]} /><meshStandardMaterial color="#111827" /></mesh> : null}
-      {accessories?.glasses !== "none" ? <RoundedBox args={[0.34, 0.07, 0.02]} radius={0.01} smoothness={3} position={[0, 1.84, 0.22]}><meshStandardMaterial color="#0f172a" /></RoundedBox> : null}
-      {accessories?.beard !== "none" ? <mesh position={[0, 1.67, 0.2]}><coneGeometry args={[0.08, 0.2, 14]} /><meshStandardMaterial color="#5b4636" /></mesh> : null}
+      {accessories?.glasses !== "none" ? <RoundedBox args={[0.34, 0.07, 0.02]} radius={0.01} smoothness={3} position={[0, 1.95, 0.24]}><meshStandardMaterial color="#0f172a" /></RoundedBox> : null}
+      {accessories?.beard !== "none" ? <mesh position={[0, 1.77, 0.2]}><coneGeometry args={[0.08, 0.2, 14]} /><meshStandardMaterial color="#5b4636" /></mesh> : null}
 
-      <RoundedBox args={torsoArgs as [number, number, number]} radius={0.1} smoothness={6} position={[0, 1.18, 0]} castShadow>
+      <RoundedBox args={torsoArgs as [number, number, number]} radius={0.11} smoothness={6} position={[0, 1.34, 0]} castShadow>
         <meshStandardMaterial color={coatColor} roughness={0.5} metalness={0.12} />
       </RoundedBox>
-      {sportyStripe ? <RoundedBox args={[0.84, 0.08, 0.52]} radius={0.03} smoothness={4} position={[0, 1.03, 0.02]}><meshStandardMaterial color={trimColor} roughness={0.4} /></RoundedBox> : null}
-      <RoundedBox args={bottomArgs as [number, number, number]} radius={0.08} smoothness={4} position={[-0.2, garmentBase === "boxers" || garmentBase === "shorts" ? 0.66 : 0.48, 0]} castShadow><meshStandardMaterial color={lowerColor} roughness={0.72} /></RoundedBox>
-      <RoundedBox args={bottomArgs as [number, number, number]} radius={0.08} smoothness={4} position={[0.2, garmentBase === "boxers" || garmentBase === "shorts" ? 0.66 : 0.48, 0]} castShadow><meshStandardMaterial color={lowerColor} roughness={0.72} /></RoundedBox>
+      {sportyStripe ? <RoundedBox args={[0.84, 0.08, 0.52]} radius={0.03} smoothness={4} position={[0, 1.19, 0.02]}><meshStandardMaterial color={trimColor} roughness={0.4} /></RoundedBox> : null}
+      <RoundedBox args={[0.26, 0.74, 0.28]} radius={0.08} smoothness={4} position={[-0.5, 1.04, 0]} castShadow><meshStandardMaterial color={coatColor} roughness={0.58} /></RoundedBox>
+      <RoundedBox args={[0.26, 0.74, 0.28]} radius={0.08} smoothness={4} position={[0.5, 1.04, 0]} castShadow><meshStandardMaterial color={coatColor} roughness={0.58} /></RoundedBox>
+      <RoundedBox args={bottomArgs as [number, number, number]} radius={0.08} smoothness={4} position={[-0.2, garmentBase === "boxers" || garmentBase === "shorts" ? 0.76 : 0.44, 0]} castShadow><meshStandardMaterial color={lowerColor} roughness={0.72} /></RoundedBox>
+      <RoundedBox args={bottomArgs as [number, number, number]} radius={0.08} smoothness={4} position={[0.2, garmentBase === "boxers" || garmentBase === "shorts" ? 0.76 : 0.44, 0]} castShadow><meshStandardMaterial color={lowerColor} roughness={0.72} /></RoundedBox>
 
-      {accessories?.backpack !== "none" ? <RoundedBox args={[0.54, 0.62, 0.22]} radius={0.06} smoothness={4} position={[0, 1.2, -0.33]}><meshStandardMaterial color="#111827" roughness={0.8} /></RoundedBox> : null}
+      {accessories?.backpack !== "none" ? <RoundedBox args={[0.54, 0.62, 0.22]} radius={0.06} smoothness={4} position={[0, 1.34, -0.33]}><meshStandardMaterial color="#111827" roughness={0.8} /></RoundedBox> : null}
     </group>
   );
 }
@@ -186,15 +299,23 @@ function SceneContent({ maps, previewMode, bodyType, view, itemType, garmentColo
 }) {
   return (
     <>
-      <color attach="background" args={["#070b14"]} />
-      <ambientLight intensity={0.62} />
-      <directionalLight position={[4, 7, 5]} intensity={1.25} castShadow />
-      <pointLight position={[-2, 2.5, -2]} intensity={0.45} color="#818cf8" />
+      <color attach="background" args={["#060913"]} />
+      <hemisphereLight intensity={0.48} color="#dbeafe" groundColor="#0b1222" />
+      <ambientLight intensity={0.38} />
+      <directionalLight
+        position={[5, 6, 5]}
+        intensity={1.45}
+        castShadow
+        shadow-mapSize-width={1024}
+        shadow-mapSize-height={1024}
+      />
+      <pointLight position={[-3, 2.4, -2.5]} intensity={0.34} color="#93c5fd" />
+      <pointLight position={[2, 1.8, -2.2]} intensity={0.24} color="#f5d0fe" />
       <group rotation-y={rotation}>
         {previewMode === "classic_2d" && maps ? <PremiumClassicAvatar maps={maps} bodyType={bodyType} view={view} itemType={itemType} /> : null}
         {previewMode === "fashion_builder" ? <FashionBuilderAvatar view={view} bodyType={bodyType} garmentColor={garmentColor} garmentBase={garmentBase} garmentVariant={garmentVariant} concept={concept} accessories={accessories} /> : null}
       </group>
-      <mesh rotation-x={-Math.PI / 2} position={[0, -0.12, 0]} receiveShadow><circleGeometry args={[2.8, 64]} /><meshStandardMaterial color="#0f172a" roughness={1} /></mesh>
+      <mesh rotation-x={-Math.PI / 2} position={[0, -0.1, 0]} receiveShadow><circleGeometry args={[2.8, 64]} /><meshStandardMaterial color="#0d1324" roughness={0.98} /></mesh>
       <OrbitControls enablePan={false} minDistance={2.3} maxDistance={6.2} target={[0, 1.1, 0]} />
     </>
   );
