@@ -19,6 +19,7 @@ import { normalizeAiResponse, type NormalizedAiResponse } from "@/lib/ai/normali
 import { createCheckoutSession } from "@/lib/billing/billing-client";
 import { uploadToRoblox } from "@/lib/roblox/upload-client";
 import { buildEditorApplyPlan } from "@/lib/ai/editor-apply-plan";
+import type { StylizedOutfitConcept } from "@/lib/ai/stylized-outfit-client";
 
 interface AiConcept {
   title?: string;
@@ -53,7 +54,7 @@ interface ModuleDefinition {
 type StylePreset = "streetwear" | "anime" | "sport" | "cyberpunk" | "minimal";
 type EditorMetaState = { avatar?: { avatarType?: string; bodyType?: string }; creationMode?: string; stylePreset?: StylePreset };
 type FabricObjectMeta = { role?: string; layerName?: string; zone?: string; moduleId?: string };
-type ClothingDimension = "2d" | "3d";
+type AiOutputMode = "classic_2d" | "stylized_outfit";
 type GarmentMaterial = "cotton" | "denim" | "nylon";
 type ZoneKey =
   | "front"
@@ -327,7 +328,8 @@ export default function Editor() {
   const [paymentOpen, setPaymentOpen] = useState(false);
   const [isBuyingCredit, setIsBuyingCredit] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
-  const [dimension, setDimension] = useState<ClothingDimension>("2d");
+  const [aiMode, setAiMode] = useState<AiOutputMode>("classic_2d");
+  const [stylizedConcept, setStylizedConcept] = useState<StylizedOutfitConcept | null>(null);
   const [garmentColor, setGarmentColor] = useState("#2563eb");
   const [garmentMaterial, setGarmentMaterial] = useState<GarmentMaterial>("cotton");
   const [garmentScale, setGarmentScale] = useState(1);
@@ -661,7 +663,7 @@ export default function Editor() {
   const handleExport = async () => {
     const snapshot = buildCanonicalCanvasSnapshot();
     if (!snapshot) return;
-    if (dimension === "3d") {
+    if (aiMode === "stylized_outfit") {
       toast({
         title: "3D export is not yet supported",
         description: "Switch back to Classic 2D mode to export your Roblox template texture.",
@@ -706,7 +708,7 @@ export default function Editor() {
 
   const handleUploadToRoblox = async () => {
     if (!id) return;
-    if (dimension === "3d") {
+    if (aiMode === "stylized_outfit") {
       toast({
         title: "3D upload is not supported",
         description: "Switch back to Classic 2D mode before uploading to Roblox.",
@@ -1094,12 +1096,16 @@ export default function Editor() {
     }
   }, [activeClassicType, addTemplateGuideLayer, constrainObjectToZone, handleUseColors, language, toast]);
 
-  const handleDimensionChange = useCallback((next: ClothingDimension) => {
-    setDimension(next);
-    if (next === "3d") {
+  const handleAiModeChange = useCallback((next: AiOutputMode) => {
+    setAiMode(next);
+    if (next === "classic_2d") {
+      setStylizedConcept(null);
+      return;
+    }
+    if (next === "stylized_outfit") {
       toast({
-        title: "3D mode is preview-only",
-        description: "AI generation, Roblox upload, and export stay in Classic 2D for now.",
+        title: "Stylized Outfit AI",
+        description: "This mode generates concept renders and styled preview, not classic export textures.",
       });
     }
   }, [toast]);
@@ -1209,26 +1215,26 @@ export default function Editor() {
           )}
         </div>
 
-        {/* Center: 2D / 3D mode toggle */}
+        {/* Center: AI output mode toggle */}
         <div className="flex items-center bg-white/5 rounded-lg p-0.5 border border-white/10 shrink-0">
           <button
-            onClick={() => handleDimensionChange("2d")}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${dimension === "2d" ? "bg-indigo-600 text-white shadow" : "text-white/50 hover:text-white"}`}
+            onClick={() => handleAiModeChange("classic_2d")}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${aiMode === "classic_2d" ? "bg-indigo-600 text-white shadow" : "text-white/50 hover:text-white"}`}
           >
             <Shirt className="w-3.5 h-3.5" /> Classic 2D
           </button>
           <button
-            onClick={() => handleDimensionChange("3d")}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${dimension === "3d" ? "bg-indigo-600 text-white shadow" : "text-white/50 hover:text-white"}`}
+            onClick={() => handleAiModeChange("stylized_outfit")}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${aiMode === "stylized_outfit" ? "bg-indigo-600 text-white shadow" : "text-white/50 hover:text-white"}`}
           >
-            <Boxes className="w-3.5 h-3.5" /> 3D Clothing
+            <Boxes className="w-3.5 h-3.5" /> Stylized Outfit AI
           </button>
         </div>
 
         <div className="flex items-center gap-1.5 shrink-0">
           <button
             onClick={() => {
-              if (dimension === "3d") {
+              if (aiMode === "stylized_outfit") {
                 toast({
                   title: "Texture editor is Classic 2D only",
                   description: "Switch to Classic 2D to edit atlas zones.",
@@ -1303,7 +1309,7 @@ export default function Editor() {
             {/* Item type */}
             <div className="space-y-2">
               <p className="text-[10px] font-semibold uppercase tracking-wider text-white/40">Clothing</p>
-              {dimension === "2d" ? (
+              {aiMode === "classic_2d" ? (
                 <div className="grid grid-cols-2 gap-1.5">
                   {[
                     { id: "shirt", label: "👕 Shirt" },
@@ -1349,7 +1355,7 @@ export default function Editor() {
             </div>
 
             {/* 3D garment controls */}
-            {dimension === "3d" && (
+            {aiMode === "stylized_outfit" && (
               <div className="space-y-3 rounded-lg border border-white/10 bg-white/5 p-3">
                 <p className="text-[10px] font-semibold uppercase tracking-wider text-white/40 flex items-center gap-1"><SlidersHorizontal className="w-3 h-3" /> 3D Controls</p>
                 <div className="space-y-1">
@@ -1409,11 +1415,12 @@ export default function Editor() {
             view={previewFacing}
             onViewChange={setPreviewFacing}
             itemType={activeClassicType}
-            dimension={dimension}
+            previewMode={aiMode}
             garmentColor={garmentColor}
             garmentMaterial={garmentMaterial}
             garmentScale={garmentScale}
             studioMode={true}
+            stylizedConcept={stylizedConcept}
           />
         </main>
 
@@ -1427,10 +1434,13 @@ export default function Editor() {
           <div className="flex-1 p-3">
             <AiPanel
               projectType={activeClassicType}
-              dimension={dimension}
-              onDimensionChange={handleDimensionChange}
+              aiMode={aiMode}
+              onModeChange={handleAiModeChange}
               onUseColors={handleUseColors}
               onApplyAssets={applyAiOutfitToCanvas}
+              onStylizedConcept={setStylizedConcept}
+              avatarType={avatarProfile.avatarType}
+              bodyType={avatarProfile.bodyType}
             />
           </div>
 

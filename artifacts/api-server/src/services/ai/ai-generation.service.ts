@@ -2,10 +2,18 @@ import { randomUUID } from "crypto";
 import { z } from "zod";
 import { openai } from "@workspace/integrations-openai-ai-server";
 import { aiGenerationsTable, db } from "@workspace/db";
-import { aiDesignResponseSchema, aiDesignSchema, aiIdeaSchema, type aiGenerateRequestSchema } from "../../lib/ai-contracts";
+import {
+  aiDesignResponseSchema,
+  aiDesignSchema,
+  aiIdeaSchema,
+  stylizedOutfitConceptSchema,
+  stylizedOutfitResponseSchema,
+  type aiGenerateRequestSchema,
+} from "../../lib/ai-contracts";
 import { aiValidationService } from "./ai-validation.service";
 
 type GenerateInput = z.infer<typeof aiGenerateRequestSchema>;
+type StylizedInput = { prompt: string; avatarType?: string; bodyType?: string; style?: string };
 
 function parseStrictJson(content: string): unknown {
   try {
@@ -306,6 +314,39 @@ export class AiGenerationService {
 
   async generateLayout(input: GenerateInput) {
     return aiValidationService.ensureLayout(await this.askModel(this.buildPrompt(input, "layout")));
+  }
+
+  async generateStylizedOutfit(userId: string, input: StylizedInput) {
+    const prompt = [
+      "Return only strict JSON for a stylized Roblox outfit concept render plan.",
+      "Do not output classic shirt template instructions.",
+      `prompt=${input.prompt}`,
+      `avatarType=${input.avatarType ?? "neutral"}`,
+      `bodyType=${input.bodyType ?? "regular"}`,
+      `styleHint=${input.style ?? "stylized"}`,
+      "",
+      "Schema:",
+      "{",
+      '  "title":"string",',
+      '  "theme":"string",',
+      '  "styleTone":"string",',
+      '  "mood":"string",',
+      '  "visualSummary":"string",',
+      '  "colorPalette":["#RRGGBB","#RRGGBB","#RRGGBB"],',
+      '  "materials":["string","string"],',
+      '  "clothingPieces":[{"name":"string","description":"string","material":"string","color":"#RRGGBB"}],',
+      '  "accessories":[{"name":"string","placement":"string","detail":"string","color":"#RRGGBB"}],',
+      '  "trimsAndDetails":["string","string"]',
+      "}",
+    ].join("\n");
+
+    const raw = await this.askModel(prompt);
+    const concept = stylizedOutfitConceptSchema.parse(raw);
+    const generationId = await this.saveGeneration(userId, input.prompt, "stylized_outfit", concept, input.style ?? null);
+    return stylizedOutfitResponseSchema.parse({
+      meta: { generationId, status: "completed", warnings: [] },
+      result: concept,
+    });
   }
 }
 
