@@ -89,6 +89,41 @@ export const aiGenerateRequestSchema = z.object({
   theme: z.string().optional(),
 }).strict();
 
+export const stylizedOutfitPieceSchema = z.object({
+  name: z.string().min(1),
+  description: z.string().min(1),
+  material: z.string().min(1),
+  color: hexColorSchema,
+}).strict();
+
+export const stylizedOutfitAccessorySchema = z.object({
+  name: z.string().min(1),
+  placement: z.string().min(1),
+  detail: z.string().min(1),
+  color: hexColorSchema,
+}).strict();
+
+export const stylizedOutfitConceptSchema = z.object({
+  title: z.string().min(1),
+  theme: z.string().min(1),
+  styleTone: z.string().min(1),
+  mood: z.string().min(1),
+  visualSummary: z.string().min(1),
+  colorPalette: z.array(hexColorSchema).min(3).max(8),
+  materials: z.array(z.string().min(1)).min(2).max(10),
+  clothingPieces: z.array(stylizedOutfitPieceSchema).min(4).max(14),
+  accessories: z.array(stylizedOutfitAccessorySchema).min(1).max(10),
+  trimsAndDetails: z.array(z.string().min(1)).min(2).max(12),
+}).strict();
+
+export const stylizedOutfitGenerateRequestSchema = z.object({
+  prompt: z.string().min(1),
+  avatarType: z.string().optional(),
+  bodyType: z.string().optional(),
+  style: z.string().optional(),
+}).strict();
+
+
 export const aiImproveRequestSchema = z.object({
   instruction: z.string().min(1),
   design: aiDesignSchema,
@@ -109,6 +144,11 @@ export const aiResponseMetaSchema = z.object({
   status: aiLifecycleStatusSchema,
   warnings: z.array(z.string()).default([]),
   deprecated: z.boolean().default(false),
+}).strict();
+
+export const stylizedOutfitResponseSchema = z.object({
+  meta: aiResponseMetaSchema,
+  result: stylizedOutfitConceptSchema,
 }).strict();
 
 export const aiDesignResponseSchema = z.object({

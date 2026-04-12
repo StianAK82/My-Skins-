@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { z } from "zod";
-import { aiGenerateRequestSchema, aiImproveRequestSchema } from "../lib/ai-contracts";
+import { aiGenerateRequestSchema, aiImproveRequestSchema, stylizedOutfitGenerateRequestSchema } from "../lib/ai-contracts";
 import { aiGenerationService } from "../services/ai/ai-generation.service";
 import { aiHistoryService } from "../services/ai/ai-history.service";
 
@@ -149,6 +149,23 @@ router.post("/ai/generate-layout", async (req, res): Promise<void> => {
     if (err instanceof z.ZodError || err instanceof SyntaxError) return schema422(req, res, err);
     req.log.error({ err }, "ai.v2.generate-layout.failed");
     res.status(500).json({ error: "AI layout generation failed" });
+  }
+});
+
+router.post("/ai/generate-stylized-outfit", async (req, res): Promise<void> => {
+  if (!ensureAuthenticated(req, res)) return;
+  const parsed = stylizedOutfitGenerateRequestSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Invalid request", details: parsed.error.flatten() });
+    return;
+  }
+
+  try {
+    res.json(await aiGenerationService.generateStylizedOutfit(getUserId(req), parsed.data));
+  } catch (err) {
+    if (err instanceof z.ZodError || err instanceof SyntaxError) return schema422(req, res, err);
+    req.log.error({ err }, "ai.v2.generate-stylized-outfit.failed");
+    res.status(500).json({ error: "AI stylized outfit generation failed" });
   }
 });
 

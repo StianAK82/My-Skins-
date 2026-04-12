@@ -1,32 +1,37 @@
 import { useEffect, useMemo, useState } from "react";
-import { Sparkles, Loader2, Wand2, RefreshCcw, Check, AlertTriangle, Boxes, Shirt } from "lucide-react";
+import { Sparkles, Loader2, Wand2, RefreshCcw, Check, AlertTriangle, Shirt, Palette } from "lucide-react";
 import { aiGenerateDesign, aiImproveDesign, aiRemixDesign, type AiDesign } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { normalizeAiResponse, type NormalizedAiResponse } from "@/lib/ai/normalize-ai-response";
+import { aiGenerateStylizedOutfit, type StylizedOutfitConcept } from "@/lib/ai/stylized-outfit-client";
 
 const STYLE_PRESETS = ["Streetwear", "Anime", "Sport", "Cyberpunk", "Minimal", "Fantasy", "Luxury", "Cute", "Tactical"] as const;
 
 type EditorTarget = "shirt" | "pants";
-type ClothingDimension = "2d" | "3d";
+type AiOutputMode = "classic_2d" | "stylized_outfit";
 
 interface AiPanelProps {
   projectType: EditorTarget;
-  dimension: ClothingDimension;
-  onDimensionChange: (dimension: ClothingDimension) => void;
+  aiMode: AiOutputMode;
+  onModeChange: (mode: AiOutputMode) => void;
   onUseColors?: (colors: string[]) => void;
   onApplyAssets?: (result: NormalizedAiResponse) => Promise<unknown> | unknown;
+  onStylizedConcept?: (concept: StylizedOutfitConcept) => void;
+  avatarType?: string;
+  bodyType?: string;
 }
 
-export function AiPanel({ projectType, dimension, onDimensionChange, onUseColors, onApplyAssets }: AiPanelProps) {
+export function AiPanel({ projectType, aiMode, onModeChange, onUseColors, onApplyAssets, onStylizedConcept, avatarType, bodyType }: AiPanelProps) {
   const { toast } = useToast();
 
   const [prompt, setPrompt] = useState("");
   const [remixInstruction, setRemixInstruction] = useState("");
   const [selectedStyle, setSelectedStyle] = useState<(typeof STYLE_PRESETS)[number] | "">("");
   const [current, setCurrent] = useState<NormalizedAiResponse | null>(null);
+  const [stylizedConcept, setStylizedConcept] = useState<StylizedOutfitConcept | null>(null);
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -45,17 +50,38 @@ export function AiPanel({ projectType, dimension, onDimensionChange, onUseColors
     if (loading) return;
     if (mode === "generate" && !prompt.trim()) return;
     if ((mode === "improve" || mode === "remix") && !remixInstruction.trim()) return;
-    if ((mode === "improve" || mode === "remix") && !current) {
-      setErrorMessage("Generate a structured design first before improving/remixing.");
-      toast({ title: "Missing source design", description: "Generate first, then improve or remix.", variant: "destructive" });
+
+    if (aiMode === "stylized_outfit") {
+      if (mode !== "generate") {
+        toast({ title: "Stylized mode", description: "Use Generate to create a new outfit concept render plan." });
+        return;
+      }
+      setLoading(true);
+      setErrorMessage(null);
+      try {
+        const response = await aiGenerateStylizedOutfit({
+          prompt: prompt.trim(),
+          avatarType,
+          bodyType,
+          style: selectedStyle || undefined,
+        });
+        setStylizedConcept(response.result);
+        onStylizedConcept?.(response.result);
+        onUseColors?.(response.result.colorPalette);
+        toast({ title: "Stylized outfit concept ready", description: "Avatar preview updated with concept styling." });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "AI request failed";
+        setErrorMessage(message);
+        toast({ title: "Stylized generation failed", description: message, variant: "destructive" });
+      } finally {
+        setLoading(false);
+      }
       return;
     }
 
-    if (dimension === "3d") {
-      toast({
-        title: mode === "generate" ? "3D AI concept mode (beta)" : "3D AI concept refinement (beta)",
-        description: "Launch-ready AI generation/export is currently Classic 2D only. 3D stays preview-only in this build.",
-      });
+    if ((mode === "improve" || mode === "remix") && !current) {
+      setErrorMessage("Generate a structured design first before improving/remixing.");
+      toast({ title: "Missing source design", description: "Generate first, then improve or remix.", variant: "destructive" });
       return;
     }
 
@@ -88,26 +114,26 @@ export function AiPanel({ projectType, dimension, onDimensionChange, onUseColors
       <div className="space-y-2">
         <div className="flex items-center gap-2 text-primary"><Sparkles className="w-4 h-4" /><span className="font-semibold text-sm">Create with AI</span></div>
         <div className="grid grid-cols-2 gap-1">
-          <Button size="sm" variant={dimension === "2d" ? "default" : "outline"} onClick={() => onDimensionChange("2d")} className="gap-1 text-xs">
-            <Shirt className="w-3.5 h-3.5" /> 2D AI Clothing
+          <Button size="sm" variant={aiMode === "classic_2d" ? "default" : "outline"} onClick={() => onModeChange("classic_2d")} className="gap-1 text-xs">
+            <Shirt className="w-3.5 h-3.5" /> Classic 2D Clothing
           </Button>
-          <Button size="sm" variant={dimension === "3d" ? "default" : "outline"} onClick={() => onDimensionChange("3d")} className="gap-1 text-xs">
-            <Boxes className="w-3.5 h-3.5" /> 3D AI Clothing
+          <Button size="sm" variant={aiMode === "stylized_outfit" ? "default" : "outline"} onClick={() => onModeChange("stylized_outfit")} className="gap-1 text-xs">
+            <Palette className="w-3.5 h-3.5" /> Stylized Outfit AI
           </Button>
         </div>
       </div>
 
-      {dimension === "2d" ? (
+      {aiMode === "classic_2d" ? (
         <div className="rounded-md border border-white/10 bg-white/5 px-3 py-2 text-xs text-white/80">
-          AI target is synced to this project: <span className="font-semibold">{projectType === "shirt" ? "Classic Shirt" : "Classic Pants"}</span>
+          <span className="font-semibold">Classic 2D Clothing</span> generates strict Roblox shirt/pants schema output that you can apply, edit, and export.
         </div>
       ) : (
-        <div className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">
-          3D is a concept preview only. Supported launch flows are Classic Shirt and Classic Pants in 2D.
+        <div className="rounded-md border border-indigo-500/30 bg-indigo-500/10 px-3 py-2 text-xs text-indigo-100">
+          <span className="font-semibold">Stylized Outfit AI</span> builds a Roblox-style concept render plan (coat, boots, accessories, trims) for premium preview only.
         </div>
       )}
 
-      <Textarea placeholder={dimension === "3d" ? "Describe a 3D garment concept (materials, decals, fit)" : "Prompt your Roblox wearable concept"} value={prompt} onChange={(e) => setPrompt(e.target.value)} className="resize-none h-20 text-xs" />
+      <Textarea placeholder={aiMode === "stylized_outfit" ? "Try: make pirate clothes with leather coat, boots, hat" : "Prompt your classic Roblox clothing design"} value={prompt} onChange={(e) => setPrompt(e.target.value)} className="resize-none h-20 text-xs" />
 
       <div className="grid grid-cols-3 gap-1">
         {STYLE_PRESETS.map((preset) => (
@@ -126,15 +152,17 @@ export function AiPanel({ projectType, dimension, onDimensionChange, onUseColors
         </Button>
       </div>
 
-      <div className="grid grid-cols-[1fr_auto_auto] gap-1.5">
-        <Textarea placeholder="Improve/remix instruction" value={remixInstruction} onChange={(e) => setRemixInstruction(e.target.value)} className="resize-none h-14 text-xs" />
-        <Button size="sm" variant="secondary" onClick={() => void runAction("remix")} disabled={dimension === "2d" ? (!current || !remixInstruction.trim() || loading) : !remixInstruction.trim()}><Wand2 className="w-3.5 h-3.5" /></Button>
-        <Button size="sm" variant="outline" onClick={() => void runAction("improve")} disabled={dimension === "2d" ? (!current || !remixInstruction.trim() || loading) : !remixInstruction.trim()}>Improve</Button>
-      </div>
+      {aiMode === "classic_2d" && (
+        <div className="grid grid-cols-[1fr_auto_auto] gap-1.5">
+          <Textarea placeholder="Improve/remix instruction" value={remixInstruction} onChange={(e) => setRemixInstruction(e.target.value)} className="resize-none h-14 text-xs" />
+          <Button size="sm" variant="secondary" onClick={() => void runAction("remix")} disabled={!current || !remixInstruction.trim() || loading}><Wand2 className="w-3.5 h-3.5" /></Button>
+          <Button size="sm" variant="outline" onClick={() => void runAction("improve")} disabled={!current || !remixInstruction.trim() || loading}>Improve</Button>
+        </div>
+      )}
 
-      {errorMessage && <div className="rounded-md border border-destructive/40 bg-destructive/10 p-2 text-xs text-destructive flex gap-2 items-start"><AlertTriangle className="w-3.5 h-3.5 mt-0.5" /><div><p className="font-medium">Structured output rejected</p><p>{errorMessage}</p></div></div>}
+      {errorMessage && <div className="rounded-md border border-destructive/40 bg-destructive/10 p-2 text-xs text-destructive flex gap-2 items-start"><AlertTriangle className="w-3.5 h-3.5 mt-0.5" /><div><p className="font-medium">AI output rejected</p><p>{errorMessage}</p></div></div>}
 
-      {current && dimension === "2d" && (
+      {current && aiMode === "classic_2d" && (
         <div className="border rounded-xl p-3 space-y-2">
           <div className="space-y-1">
             <p className="text-xs font-semibold">{current.result.title}</p>
@@ -146,6 +174,15 @@ export function AiPanel({ projectType, dimension, onDimensionChange, onUseColors
             <Button size="sm" variant="outline" onClick={() => onUseColors?.(palette)}><Check className="w-3 h-3 mr-1" />Apply Palette</Button>
             <Button size="sm" onClick={() => onApplyAssets?.(current)}><Sparkles className="w-3 h-3 mr-1" />Apply</Button>
           </div>
+        </div>
+      )}
+
+      {stylizedConcept && aiMode === "stylized_outfit" && (
+        <div className="border rounded-xl p-3 space-y-2 bg-indigo-500/5 border-indigo-500/20">
+          <p className="text-xs font-semibold">{stylizedConcept.title}</p>
+          <p className="text-[11px] text-white/70">{stylizedConcept.theme} · {stylizedConcept.styleTone}</p>
+          <p className="text-[11px] text-muted-foreground">{stylizedConcept.visualSummary}</p>
+          <div className="flex flex-wrap gap-1">{stylizedConcept.colorPalette.map((hex, i) => <Badge key={`${hex}-${i}`} variant="outline" className="text-[10px]">{hex}</Badge>)}</div>
         </div>
       )}
     </div>
