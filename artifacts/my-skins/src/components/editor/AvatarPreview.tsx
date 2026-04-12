@@ -9,9 +9,7 @@ import { RotateCw, ZoomIn, ZoomOut } from "lucide-react";
 import type { StylizedOutfitConcept } from "@/lib/ai/stylized-outfit-client";
 
 type ThreeTexture = InstanceType<typeof CanvasTexture>;
-
-type PreviewMode = "classic_2d" | "stylized_outfit";
-type GarmentMaterial = "cotton" | "denim" | "nylon";
+type PreviewMode = "classic_2d" | "fashion_builder";
 
 type AvatarPreviewProps = {
   textureUrl?: string;
@@ -24,10 +22,11 @@ type AvatarPreviewProps = {
   dimension?: "2d" | "3d";
   previewMode?: PreviewMode;
   garmentColor?: string;
-  garmentMaterial?: GarmentMaterial;
-  garmentScale?: number;
   studioMode?: boolean;
   stylizedConcept?: StylizedOutfitConcept | null;
+  garmentBase?: string;
+  garmentVariant?: string;
+  accessories?: { hair?: string; hat?: string; glasses?: string; beard?: string; backpack?: string };
 };
 
 type Zone = { left: number; top: number; width: number; height: number };
@@ -66,8 +65,6 @@ function buildFallbackAtlas() {
   if (!ctx) return canvas;
   ctx.fillStyle = "#111827";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
-  ctx.strokeStyle = "#334155";
-  [SHIRT_FRONT, SHIRT_BACK, SHIRT_SIDE, PANTS_FRONT, PANTS_BACK, PANTS_SIDE].forEach((zone) => ctx.strokeRect(zone.left, zone.top, zone.width, zone.height));
   return canvas;
 }
 
@@ -116,10 +113,7 @@ function PremiumClassicAvatar({ maps, bodyType, view, itemType }: { maps: Clothi
 
   return (
     <group rotation-y={view === "back" ? Math.PI : 0} scale={bodyScale}>
-      <mesh position={[0, 1.83, 0]} castShadow>
-        <sphereGeometry args={[0.23, 28, 28]} />
-        <meshStandardMaterial color="#f2c3a0" roughness={0.72} />
-      </mesh>
+      <mesh position={[0, 1.83, 0]} castShadow><sphereGeometry args={[0.23, 28, 28]} /><meshStandardMaterial color="#f2c3a0" roughness={0.72} /></mesh>
       <RoundedBox args={[0.76, 0.9, 0.42]} radius={0.08} smoothness={4} position={[0, 1.2, 0]} castShadow>
         <meshStandardMaterial attach="material-0" map={maps.shirtSide} roughness={0.68} />
         <meshStandardMaterial attach="material-1" map={maps.shirtSide} roughness={0.68} />
@@ -128,74 +122,56 @@ function PremiumClassicAvatar({ maps, bodyType, view, itemType }: { maps: Clothi
         <meshStandardMaterial attach="material-4" map={torsoFront} roughness={0.65} />
         <meshStandardMaterial attach="material-5" map={torsoBack} roughness={0.65} />
       </RoundedBox>
-      <RoundedBox args={[0.23, 0.76, 0.24]} radius={0.08} smoothness={4} position={[-0.56, 1.2, 0]} castShadow><meshStandardMaterial color="#e2e8f0" roughness={0.8} /></RoundedBox>
-      <RoundedBox args={[0.23, 0.76, 0.24]} radius={0.08} smoothness={4} position={[0.56, 1.2, 0]} castShadow><meshStandardMaterial color="#e2e8f0" roughness={0.8} /></RoundedBox>
       <RoundedBox args={[0.31, 0.98, 0.33]} radius={0.07} smoothness={4} position={[-0.2, 0.45, 0]} castShadow>
-        <meshStandardMaterial attach="material-0" map={maps.pantsSide} roughness={0.72} />
-        <meshStandardMaterial attach="material-1" map={maps.pantsSide} roughness={0.72} />
-        <meshStandardMaterial attach="material-2" color="#0f172a" roughness={0.85} />
-        <meshStandardMaterial attach="material-3" color="#0f172a" roughness={0.85} />
-        <meshStandardMaterial attach="material-4" map={legFront} roughness={0.72} />
-        <meshStandardMaterial attach="material-5" map={legBack} roughness={0.72} />
+        <meshStandardMaterial attach="material-4" map={legFront} roughness={0.72} /><meshStandardMaterial attach="material-5" map={legBack} roughness={0.72} />
       </RoundedBox>
       <RoundedBox args={[0.31, 0.98, 0.33]} radius={0.07} smoothness={4} position={[0.2, 0.45, 0]} castShadow>
-        <meshStandardMaterial attach="material-0" map={maps.pantsSide} roughness={0.72} />
-        <meshStandardMaterial attach="material-1" map={maps.pantsSide} roughness={0.72} />
-        <meshStandardMaterial attach="material-2" color="#0f172a" roughness={0.85} />
-        <meshStandardMaterial attach="material-3" color="#0f172a" roughness={0.85} />
-        <meshStandardMaterial attach="material-4" map={legFront} roughness={0.72} />
-        <meshStandardMaterial attach="material-5" map={legBack} roughness={0.72} />
+        <meshStandardMaterial attach="material-4" map={legFront} roughness={0.72} /><meshStandardMaterial attach="material-5" map={legBack} roughness={0.72} />
       </RoundedBox>
-      <RoundedBox args={[0.33, 0.13, 0.43]} radius={0.05} smoothness={4} position={[-0.2, -0.06, 0.05]}><meshStandardMaterial color="#020617" roughness={0.88} /></RoundedBox>
-      <RoundedBox args={[0.33, 0.13, 0.43]} radius={0.05} smoothness={4} position={[0.2, -0.06, 0.05]}><meshStandardMaterial color="#020617" roughness={0.88} /></RoundedBox>
     </group>
   );
 }
 
-function StylizedOutfitAvatar({ view, bodyType, garmentColor, concept }: { view: "front" | "back"; bodyType: string; garmentColor: string; concept?: StylizedOutfitConcept | null }) {
+function FashionBuilderAvatar({ view, bodyType, garmentColor, garmentBase, garmentVariant, concept, accessories }: {
+  view: "front" | "back";
+  bodyType: string;
+  garmentColor: string;
+  garmentBase: string;
+  garmentVariant: string;
+  concept?: StylizedOutfitConcept | null;
+  accessories?: AvatarPreviewProps["accessories"];
+}) {
   const bodyScale = useMemo(() => bodyScaleFromType(bodyType), [bodyType]);
   const palette = concept?.colorPalette?.length ? concept.colorPalette : [garmentColor, "#0f172a", "#fde68a", "#334155"];
   const coatColor = palette[0] ?? garmentColor;
-  const accentColor = palette[2] ?? "#fbbf24";
-  const trimColor = palette[3] ?? "#1f2937";
+  const trimColor = palette[2] ?? "#fbbf24";
+  const lowerColor = palette[1] ?? "#1e293b";
+
+  const torsoArgs = garmentBase === "hoodie" ? [0.92, 1.02, 0.55] : garmentBase === "jacket" ? [0.88, 0.96, 0.52] : [0.8, 0.9, 0.46];
+  const bottomArgs = garmentBase === "boxers" || garmentBase === "shorts" ? [0.34, 0.56, 0.36] : [0.31, 0.98, 0.33];
+  const sportyStripe = garmentVariant.includes("sport") || garmentVariant.includes("streetwear");
 
   return (
     <group rotation-y={view === "back" ? Math.PI : 0} scale={bodyScale}>
-      <mesh position={[0, 1.84, 0]} castShadow>
-        <sphereGeometry args={[0.235, 32, 32]} />
-        <meshStandardMaterial color="#f2c3a0" roughness={0.65} />
-      </mesh>
-      <RoundedBox args={[0.69, 0.82, 0.35]} radius={0.09} smoothness={5} position={[0, 1.2, 0]} castShadow>
-        <meshStandardMaterial color="#cbd5e1" roughness={0.85} />
+      <mesh position={[0, 1.84, 0]} castShadow><sphereGeometry args={[0.235, 32, 32]} /><meshStandardMaterial color="#f2c3a0" roughness={0.65} /></mesh>
+      {accessories?.hair !== "none" ? <mesh position={[0, 2.02, 0]} castShadow><sphereGeometry args={[0.26, 24, 24]} /><meshStandardMaterial color="#2d1b0f" roughness={0.9} /></mesh> : null}
+      {accessories?.hat !== "none" ? <mesh position={[0, 2.18, 0]}><cylinderGeometry args={[0.28, 0.34, 0.14, 24]} /><meshStandardMaterial color="#111827" /></mesh> : null}
+      {accessories?.glasses !== "none" ? <RoundedBox args={[0.34, 0.07, 0.02]} radius={0.01} smoothness={3} position={[0, 1.84, 0.22]}><meshStandardMaterial color="#0f172a" /></RoundedBox> : null}
+      {accessories?.beard !== "none" ? <mesh position={[0, 1.67, 0.2]}><coneGeometry args={[0.08, 0.2, 14]} /><meshStandardMaterial color="#5b4636" /></mesh> : null}
+
+      <RoundedBox args={torsoArgs as [number, number, number]} radius={0.1} smoothness={6} position={[0, 1.18, 0]} castShadow>
+        <meshStandardMaterial color={coatColor} roughness={0.5} metalness={0.12} />
       </RoundedBox>
-      <RoundedBox args={[0.84, 1.03, 0.5]} radius={0.1} smoothness={6} position={[0, 1.18, 0]} castShadow>
-        <meshStandardMaterial color={coatColor} roughness={0.48} metalness={0.12} />
-      </RoundedBox>
-      <RoundedBox args={[0.16, 0.95, 0.08]} radius={0.03} smoothness={4} position={[0, 1.18, 0.26]}>
-        <meshStandardMaterial color={accentColor} roughness={0.35} metalness={0.35} />
-      </RoundedBox>
-      <RoundedBox args={[0.95, 0.08, 0.52]} radius={0.03} smoothness={4} position={[0, 0.98, 0.02]}>
-        <meshStandardMaterial color={trimColor} roughness={0.4} metalness={0.3} />
-      </RoundedBox>
-      <RoundedBox args={[0.3, 0.88, 0.3]} radius={0.08} smoothness={4} position={[-0.2, 0.48, 0]} castShadow><meshStandardMaterial color={palette[1] ?? "#1e293b"} roughness={0.7} /></RoundedBox>
-      <RoundedBox args={[0.3, 0.88, 0.3]} radius={0.08} smoothness={4} position={[0.2, 0.48, 0]} castShadow><meshStandardMaterial color={palette[1] ?? "#1e293b"} roughness={0.7} /></RoundedBox>
-      <RoundedBox args={[0.36, 0.22, 0.44]} radius={0.06} smoothness={4} position={[-0.2, -0.06, 0.05]}><meshStandardMaterial color="#1f2937" roughness={0.92} /></RoundedBox>
-      <RoundedBox args={[0.36, 0.22, 0.44]} radius={0.06} smoothness={4} position={[0.2, -0.06, 0.05]}><meshStandardMaterial color="#1f2937" roughness={0.92} /></RoundedBox>
-      <RoundedBox args={[0.24, 0.82, 0.24]} radius={0.08} smoothness={4} position={[-0.62, 1.16, 0]} castShadow><meshStandardMaterial color={coatColor} roughness={0.52} /></RoundedBox>
-      <RoundedBox args={[0.24, 0.82, 0.24]} radius={0.08} smoothness={4} position={[0.62, 1.16, 0]} castShadow><meshStandardMaterial color={coatColor} roughness={0.52} /></RoundedBox>
-      <mesh position={[0, 2.07, 0]} castShadow>
-        <cylinderGeometry args={[0.26, 0.33, 0.18, 28]} />
-        <meshStandardMaterial color={trimColor} roughness={0.5} metalness={0.18} />
-      </mesh>
-      <mesh position={[0, 2.14, 0]} rotation-x={Math.PI / 2}>
-        <torusGeometry args={[0.33, 0.05, 16, 40]} />
-        <meshStandardMaterial color={accentColor} roughness={0.4} metalness={0.4} />
-      </mesh>
+      {sportyStripe ? <RoundedBox args={[0.84, 0.08, 0.52]} radius={0.03} smoothness={4} position={[0, 1.03, 0.02]}><meshStandardMaterial color={trimColor} roughness={0.4} /></RoundedBox> : null}
+      <RoundedBox args={bottomArgs as [number, number, number]} radius={0.08} smoothness={4} position={[-0.2, garmentBase === "boxers" || garmentBase === "shorts" ? 0.66 : 0.48, 0]} castShadow><meshStandardMaterial color={lowerColor} roughness={0.72} /></RoundedBox>
+      <RoundedBox args={bottomArgs as [number, number, number]} radius={0.08} smoothness={4} position={[0.2, garmentBase === "boxers" || garmentBase === "shorts" ? 0.66 : 0.48, 0]} castShadow><meshStandardMaterial color={lowerColor} roughness={0.72} /></RoundedBox>
+
+      {accessories?.backpack !== "none" ? <RoundedBox args={[0.54, 0.62, 0.22]} radius={0.06} smoothness={4} position={[0, 1.2, -0.33]}><meshStandardMaterial color="#111827" roughness={0.8} /></RoundedBox> : null}
     </group>
   );
 }
 
-function SceneContent({ maps, previewMode, bodyType, view, itemType, garmentColor, rotation, concept }: {
+function SceneContent({ maps, previewMode, bodyType, view, itemType, garmentColor, rotation, concept, garmentBase, garmentVariant, accessories }: {
   maps: ClothingMaps | null;
   previewMode: PreviewMode;
   bodyType: string;
@@ -204,41 +180,28 @@ function SceneContent({ maps, previewMode, bodyType, view, itemType, garmentColo
   garmentColor: string;
   rotation: number;
   concept?: StylizedOutfitConcept | null;
+  garmentBase: string;
+  garmentVariant: string;
+  accessories?: AvatarPreviewProps["accessories"];
 }) {
   return (
     <>
       <color attach="background" args={["#070b14"]} />
       <ambientLight intensity={0.62} />
-      <directionalLight position={[4, 7, 5]} intensity={1.25} castShadow shadow-mapSize-width={1024} shadow-mapSize-height={1024} />
+      <directionalLight position={[4, 7, 5]} intensity={1.25} castShadow />
       <pointLight position={[-2, 2.5, -2]} intensity={0.45} color="#818cf8" />
       <group rotation-y={rotation}>
         {previewMode === "classic_2d" && maps ? <PremiumClassicAvatar maps={maps} bodyType={bodyType} view={view} itemType={itemType} /> : null}
-        {previewMode === "stylized_outfit" ? <StylizedOutfitAvatar view={view} bodyType={bodyType} garmentColor={garmentColor} concept={concept} /> : null}
+        {previewMode === "fashion_builder" ? <FashionBuilderAvatar view={view} bodyType={bodyType} garmentColor={garmentColor} garmentBase={garmentBase} garmentVariant={garmentVariant} concept={concept} accessories={accessories} /> : null}
       </group>
-      <mesh rotation-x={-Math.PI / 2} position={[0, -0.12, 0]} receiveShadow>
-        <circleGeometry args={[2.8, 64]} />
-        <meshStandardMaterial color="#0f172a" roughness={1} />
-      </mesh>
+      <mesh rotation-x={-Math.PI / 2} position={[0, -0.12, 0]} receiveShadow><circleGeometry args={[2.8, 64]} /><meshStandardMaterial color="#0f172a" roughness={1} /></mesh>
       <OrbitControls enablePan={false} minDistance={2.3} maxDistance={6.2} target={[0, 1.1, 0]} />
     </>
   );
 }
 
-export function AvatarPreview({
-  textureUrl,
-  className,
-  avatarType = "neutral",
-  bodyType = "regular",
-  view: controlledView,
-  onViewChange,
-  itemType = "shirt",
-  dimension,
-  previewMode,
-  garmentColor = "#2563eb",
-  studioMode = false,
-  stylizedConcept,
-}: AvatarPreviewProps) {
-  const resolvedMode: PreviewMode = previewMode ?? (dimension === "3d" ? "stylized_outfit" : "classic_2d");
+export function AvatarPreview({ textureUrl, className, avatarType = "neutral", bodyType = "regular", view: controlledView, onViewChange, itemType = "shirt", dimension, previewMode, garmentColor = "#2563eb", studioMode = false, stylizedConcept, garmentBase = "shirt", garmentVariant = "standard", accessories }: AvatarPreviewProps) {
+  const resolvedMode: PreviewMode = previewMode ?? (dimension === "3d" ? "fashion_builder" : "classic_2d");
   const [internalView, setInternalView] = useState<"front" | "back">("front");
   const [zoom, setZoom] = useState(3.8);
   const [rotation, setRotation] = useState(0);
@@ -250,37 +213,16 @@ export function AvatarPreview({
     onViewChange?.(next);
   };
 
-  const subtitle = resolvedMode === "classic_2d" ? "Classic 2D Texture Preview" : "Stylized Outfit Concept Preview";
+  const subtitle = resolvedMode === "classic_2d" ? "Classic 2D Texture Preview" : "Fashion Builder 3D Preview";
 
   const scene = (
     <Canvas shadows camera={{ position: [0, 1.25, zoom], fov: 40 }} className="w-full h-full">
-      <SceneContent
-        maps={maps}
-        previewMode={resolvedMode}
-        bodyType={bodyType}
-        view={view}
-        itemType={itemType}
-        garmentColor={garmentColor}
-        rotation={rotation}
-        concept={stylizedConcept}
-      />
+      <SceneContent maps={maps} previewMode={resolvedMode} bodyType={bodyType} view={view} itemType={itemType} garmentColor={garmentColor} rotation={rotation} concept={stylizedConcept} garmentBase={garmentBase} garmentVariant={garmentVariant} accessories={accessories} />
     </Canvas>
   );
 
   if (studioMode) {
-    return (
-      <div className="relative w-full h-full">
-        {scene}
-        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-2 bg-black/60 backdrop-blur rounded-full px-4 py-2 border border-white/10">
-          <button onClick={() => setView("front")} className={`text-xs px-3 py-1 rounded-full ${view === "front" ? "bg-white/20 text-white" : "text-white/50 hover:text-white"}`}>Front</button>
-          <button onClick={() => setView("back")} className={`text-xs px-3 py-1 rounded-full ${view === "back" ? "bg-white/20 text-white" : "text-white/50 hover:text-white"}`}>Back</button>
-          <button onClick={() => setRotation((p) => p + 0.3)} className="text-white/60 hover:text-white p-1" title="Rotate"><RotateCw className="w-3.5 h-3.5" /></button>
-          <button onClick={() => setZoom((p) => Math.min(6, p + 0.4))} className="text-white/60 hover:text-white p-1" title="Zoom out"><ZoomOut className="w-3.5 h-3.5" /></button>
-          <button onClick={() => setZoom((p) => Math.max(2.2, p - 0.4))} className="text-white/60 hover:text-white p-1" title="Zoom in"><ZoomIn className="w-3.5 h-3.5" /></button>
-        </div>
-        <div className="absolute top-4 left-4 text-[10px] uppercase tracking-widest text-white/35 font-medium">{avatarType} · {bodyType} · {subtitle}</div>
-      </div>
-    );
+    return <div className="relative w-full h-full">{scene}<div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-2 bg-black/60 backdrop-blur rounded-full px-4 py-2 border border-white/10"><button onClick={() => setView("front")} className={`text-xs px-3 py-1 rounded-full ${view === "front" ? "bg-white/20 text-white" : "text-white/50 hover:text-white"}`}>Front</button><button onClick={() => setView("back")} className={`text-xs px-3 py-1 rounded-full ${view === "back" ? "bg-white/20 text-white" : "text-white/50 hover:text-white"}`}>Back</button><button onClick={() => setRotation((p) => p + 0.3)} className="text-white/60 hover:text-white p-1" title="Rotate"><RotateCw className="w-3.5 h-3.5" /></button><button onClick={() => setZoom((p) => Math.min(6, p + 0.4))} className="text-white/60 hover:text-white p-1" title="Zoom out"><ZoomOut className="w-3.5 h-3.5" /></button><button onClick={() => setZoom((p) => Math.max(2.2, p - 0.4))} className="text-white/60 hover:text-white p-1" title="Zoom in"><ZoomIn className="w-3.5 h-3.5" /></button></div><div className="absolute top-4 left-4 text-[10px] uppercase tracking-widest text-white/35 font-medium">{avatarType} · {bodyType} · {subtitle}</div></div>;
   }
 
   return (

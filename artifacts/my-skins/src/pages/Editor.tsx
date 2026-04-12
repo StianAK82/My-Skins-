@@ -54,8 +54,39 @@ interface ModuleDefinition {
 type StylePreset = "streetwear" | "anime" | "sport" | "cyberpunk" | "minimal";
 type EditorMetaState = { avatar?: { avatarType?: string; bodyType?: string }; creationMode?: string; stylePreset?: StylePreset };
 type FabricObjectMeta = { role?: string; layerName?: string; zone?: string; moduleId?: string };
-type AiOutputMode = "classic_2d" | "stylized_outfit";
+type AiOutputMode = "classic_2d" | "fashion_concept";
+type ClothingMode = "classic2d" | "fashionBuilder";
 type GarmentMaterial = "cotton" | "denim" | "nylon";
+type GarmentCategory = "tops" | "bottoms" | "outerwear" | "accessories";
+
+type FashionBuilderState = {
+  creationMode: "manual" | "ai";
+  clothingMode: ClothingMode;
+  garmentCategory: GarmentCategory;
+  garmentBase: string;
+  garmentVariant: string;
+  selectedZone: string;
+  material: {
+    baseColor: string;
+    secondaryColor: string;
+    trimColor: string;
+    gradient: boolean;
+    patternId: string;
+    patternScale: number;
+    patternRepeat: number;
+    patternRotation: number;
+    fabricAppearance: GarmentMaterial;
+  };
+  avatar: {
+    avatarType: string;
+    bodyType: string;
+    hair: string;
+    hat: string;
+    glasses: string;
+    beard: string;
+    backpack: string;
+  };
+};
 type ZoneKey =
   | "front"
   | "back"
@@ -78,6 +109,13 @@ const MODULE_LIBRARY: ModuleDefinition[] = [
   { id: "mod-speed-lines", name: "Speed Lines", category: "Effects", shape: "stripe", color: "#14b8a6" },
   { id: "mod-backpack", name: "Backpack Mark", category: "Accessories", shape: "rect", color: "#10b981" },
   { id: "mod-chain", name: "Chain Accent", category: "Accessories", shape: "stripe", color: "#cbd5e1" },
+  { id: "mod-pirate", name: "Pirate Skull", category: "Skull/Pirate", shape: "circle", color: "#f8fafc" },
+  { id: "mod-badge", name: "Sport Badge", category: "Sport Details", shape: "rect", color: "#22c55e" },
+  { id: "mod-zip", name: "Zipper Line", category: "Trims", shape: "stripe", color: "#94a3b8" },
+  { id: "mod-pocket-2", name: "Pocket Shape", category: "Pocket Shapes", shape: "rect", color: "#475569" },
+  { id: "mod-anime", name: "Anime Symbol", category: "Anime Symbols", shape: "circle", color: "#f472b6" },
+  { id: "mod-flame-2", name: "Flame Patch", category: "Flames", shape: "circle", color: "#fb7185" },
+  { id: "mod-star-2", name: "Street Star", category: "Streetwear Graphics", shape: "circle", color: "#38bdf8" },
 ];
 const STYLE_PRESET_VALUES: StylePreset[] = ["streetwear", "anime", "sport", "cyberpunk", "minimal"];
 
@@ -103,6 +141,46 @@ const TEMPLATE_ZONES: Record<"shirt" | "pants", Record<ZoneKey, TemplateZone>> =
     right_leg_back: { key: "right_leg_back", label: "Right Leg Back", left: 441, top: 288, width: 128, height: 192 },
   },
 };
+
+const GARMENT_BASES: Record<GarmentCategory, Array<{ id: string; label: string }>> = {
+  tops: [{ id: "shirt", label: "Shirt" }, { id: "tshirt", label: "T-Shirt" }, { id: "uniform_top", label: "Uniform Top" }, { id: "vest", label: "Vest" }],
+  bottoms: [{ id: "pants", label: "Pants" }, { id: "shorts", label: "Shorts" }, { id: "boxers", label: "Boxers" }],
+  outerwear: [{ id: "hoodie", label: "Hoodie" }, { id: "jacket", label: "Jacket" }],
+  accessories: [{ id: "trim_pack", label: "Trim Pack" }, { id: "graphic_pack", label: "Graphics" }],
+};
+
+const GARMENT_VARIANTS: Record<string, Array<{ id: string; label: string }>> = {
+  boxers: [{ id: "fitted_boxers", label: "Fitted Boxers" }, { id: "simple_boxer", label: "Simple Boxer Silhouette" }],
+  shorts: [{ id: "loose_shorts", label: "Loose Shorts" }, { id: "sporty_shorts", label: "Sporty Shorts" }, { id: "streetwear_shorts", label: "Streetwear Shorts" }],
+  hoodie: [{ id: "oversized_hoodie", label: "Oversized" }, { id: "zip_hoodie", label: "Zip Hoodie" }],
+  jacket: [{ id: "bomber_jacket", label: "Bomber" }, { id: "cropped_jacket", label: "Cropped" }],
+  shirt: [{ id: "classic_shirt", label: "Classic" }, { id: "fitted_shirt", label: "Fitted" }],
+  pants: [{ id: "straight_pants", label: "Straight" }, { id: "cargo_pants", label: "Cargo" }],
+};
+
+const FASHION_ZONES: Record<string, Array<{ key: string; label: string }>> = {
+  shirt: [{ key: "front", label: "Front" }, { key: "back", label: "Back" }, { key: "left_sleeve", label: "Left Sleeve" }, { key: "right_sleeve", label: "Right Sleeve" }, { key: "collar_trim", label: "Collar/Trim" }],
+  tshirt: [{ key: "front", label: "Front" }, { key: "back", label: "Back" }, { key: "left_sleeve", label: "Left Sleeve" }, { key: "right_sleeve", label: "Right Sleeve" }],
+  pants: [{ key: "front", label: "Front" }, { key: "back", label: "Back" }, { key: "left_side", label: "Left Side" }, { key: "right_side", label: "Right Side" }, { key: "waistband", label: "Waistband" }, { key: "leg_openings", label: "Leg Openings" }],
+  shorts: [{ key: "front", label: "Front" }, { key: "back", label: "Back" }, { key: "left_side", label: "Left Side" }, { key: "right_side", label: "Right Side" }, { key: "waistband", label: "Waistband" }, { key: "leg_openings", label: "Leg Openings" }],
+  boxers: [{ key: "front", label: "Front" }, { key: "back", label: "Back" }, { key: "left_side", label: "Left Side" }, { key: "right_side", label: "Right Side" }, { key: "waistband", label: "Waistband" }, { key: "leg_openings", label: "Leg Openings" }],
+  hoodie: [{ key: "front", label: "Front" }, { key: "back", label: "Back" }, { key: "left_sleeve", label: "Left Sleeve" }, { key: "right_sleeve", label: "Right Sleeve" }, { key: "hood", label: "Hood" }, { key: "trim", label: "Trim" }],
+  jacket: [{ key: "front", label: "Front" }, { key: "back", label: "Back" }, { key: "left_sleeve", label: "Left Sleeve" }, { key: "right_sleeve", label: "Right Sleeve" }, { key: "zipper", label: "Zipper" }],
+};
+
+const PATTERN_LIBRARY = [
+  { id: "solid", category: "solid", color: "#334155" },
+  { id: "stripes", category: "stripes", color: "#f8fafc" },
+  { id: "camo", category: "camo", color: "#4d7c0f" },
+  { id: "flame", category: "flame", color: "#fb7185" },
+  { id: "anime", category: "anime-inspired", color: "#f472b6" },
+  { id: "luxury", category: "luxury", color: "#eab308" },
+  { id: "sport", category: "sport", color: "#22c55e" },
+  { id: "cyberpunk", category: "cyberpunk", color: "#22d3ee" },
+  { id: "floral", category: "floral", color: "#a78bfa" },
+  { id: "skull", category: "skull/pirate", color: "#e2e8f0" },
+  { id: "tactical", category: "tactical", color: "#6b7280" },
+];
 
 function parseAiConcept(canvasData: string | null | undefined): AiConcept | null {
   if (!canvasData) return null;
@@ -329,7 +407,8 @@ export default function Editor() {
   const [isBuyingCredit, setIsBuyingCredit] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [aiMode, setAiMode] = useState<AiOutputMode>("classic_2d");
-  const [stylizedConcept, setStylizedConcept] = useState<StylizedOutfitConcept | null>(null);
+  const [fashionConcept, setFashionConcept] = useState<StylizedOutfitConcept | null>(null);
+  const [clothingMode, setClothingMode] = useState<ClothingMode>("classic2d");
   const [garmentColor, setGarmentColor] = useState("#2563eb");
   const [garmentMaterial, setGarmentMaterial] = useState<GarmentMaterial>("cotton");
   const [garmentScale, setGarmentScale] = useState(1);
@@ -340,6 +419,34 @@ export default function Editor() {
   const [draggingModuleId, setDraggingModuleId] = useState<string | null>(null);
   const [previewFacing, setPreviewFacing] = useState<"front" | "back">("front");
   const [activeZone, setActiveZone] = useState<ZoneKey>("front");
+  const [fashionState, setFashionState] = useState<FashionBuilderState>({
+    creationMode: "manual",
+    clothingMode: "classic2d",
+    garmentCategory: "tops",
+    garmentBase: "shirt",
+    garmentVariant: "classic_shirt",
+    selectedZone: "front",
+    material: {
+      baseColor: "#2563eb",
+      secondaryColor: "#111827",
+      trimColor: "#e2e8f0",
+      gradient: false,
+      patternId: "solid",
+      patternScale: 1,
+      patternRepeat: 1,
+      patternRotation: 0,
+      fabricAppearance: "cotton",
+    },
+    avatar: {
+      avatarType: "neutral",
+      bodyType: "regular",
+      hair: "short",
+      hat: "none",
+      glasses: "none",
+      beard: "none",
+      backpack: "none",
+    },
+  });
 
   const { data: project, isLoading } = useGetProject(id);
   const { data: me, refetch: refetchMe } = useGetMe();
@@ -493,7 +600,13 @@ export default function Editor() {
       try {
         const parsed = JSON.parse(project.canvasData);
         // Strip non-Fabric meta fields before loading
-        const { __aiConcept: _a, __itemLabel: _b, __originalPrompt: _c, ...fabricJson } = parsed as Record<string, unknown>;
+        const { __aiConcept: _a, __itemLabel: _b, __originalPrompt: _c, __fashionBuilderState: savedFashionState, __clothingMode: savedClothingMode, ...fabricJson } = parsed as Record<string, unknown>;
+        if (savedFashionState && typeof savedFashionState === "object") {
+          setFashionState((savedFashionState as FashionBuilderState));
+        }
+        if (savedClothingMode === "classic2d" || savedClothingMode === "fashionBuilder") {
+          setClothingMode(savedClothingMode as ClothingMode);
+        }
         if (fabricJson.objects && Array.isArray(fabricJson.objects)) {
           canvas.loadFromJSON(fabricJson).then(() => {
             addTemplateGuideLayer();
@@ -642,10 +755,12 @@ export default function Editor() {
     if (!fabricRef.current) return null;
     const canvasJSON = fabricRef.current.toJSON();
     if (aiConcept) (canvasJSON as Record<string, unknown>).__aiConcept = aiConcept;
+    (canvasJSON as Record<string, unknown>).__fashionBuilderState = fashionState;
+    (canvasJSON as Record<string, unknown>).__clothingMode = clothingMode;
     const canvasData = JSON.stringify(canvasJSON);
     const textureDataUrl = fabricRef.current.toDataURL({ format: "png", multiplier: 1, quality: 0.92 });
     return { canvasData, textureDataUrl };
-  }, [aiConcept]);
+  }, [aiConcept, fashionState, clothingMode]);
 
   const handleSave = async () => {
     const snapshot = buildCanonicalCanvasSnapshot();
@@ -663,7 +778,7 @@ export default function Editor() {
   const handleExport = async () => {
     const snapshot = buildCanonicalCanvasSnapshot();
     if (!snapshot) return;
-    if (aiMode === "stylized_outfit") {
+    if (clothingMode === "fashionBuilder") {
       toast({
         title: "3D export is not yet supported",
         description: "Switch back to Classic 2D mode to export your Roblox template texture.",
@@ -708,7 +823,7 @@ export default function Editor() {
 
   const handleUploadToRoblox = async () => {
     if (!id) return;
-    if (aiMode === "stylized_outfit") {
+    if (clothingMode === "fashionBuilder") {
       toast({
         title: "3D upload is not supported",
         description: "Switch back to Classic 2D mode before uploading to Roblox.",
@@ -928,6 +1043,46 @@ export default function Editor() {
     syncAvatarTextureFromCanvas();
   };
 
+
+  const applyPatternToActiveZone = () => {
+    if (!fabricRef.current) return;
+    const zone = getZoneByKey(activeZone);
+    if (!zone) return;
+    const pattern = fashionState.material.patternId;
+    const base = new fabric.Rect({
+      left: zone.left,
+      top: zone.top,
+      width: zone.width,
+      height: zone.height,
+      fill: fashionState.material.baseColor,
+      opacity: 0.95,
+      data: { role: "pattern-base", zone: zone.key, layerName: `${zone.label} ${pattern}` },
+    });
+    fabricRef.current.add(base);
+    if (pattern === "stripes" || pattern === "sport" || pattern === "cyberpunk") {
+      for (let i = 0; i < 5; i += 1) {
+        const stripe = new fabric.Rect({
+          left: zone.left,
+          top: zone.top + i * (zone.height / 5),
+          width: zone.width,
+          height: Math.max(4, (zone.height / 12) * fashionState.material.patternScale),
+          fill: fashionState.material.trimColor,
+          opacity: 0.6,
+          angle: fashionState.material.patternRotation,
+          data: { role: "pattern-overlay", zone: zone.key, layerName: `${zone.label} Pattern` },
+          clipPath: new fabric.Rect({ left: zone.left, top: zone.top, width: zone.width, height: zone.height, absolutePositioned: true }),
+        });
+        fabricRef.current.add(stripe);
+      }
+    }
+    if (pattern === "flame" || pattern === "anime" || pattern === "skull") {
+      const emblem = new fabric.Circle({ left: zone.left + zone.width * 0.5 - 20, top: zone.top + zone.height * 0.35, radius: 20 * fashionState.material.patternScale, fill: fashionState.material.secondaryColor, opacity: 0.65, data: { role: "pattern-overlay", zone: zone.key, layerName: `${zone.label} Emblem` } });
+      fabricRef.current.add(emblem);
+    }
+    fabricRef.current.renderAll();
+    syncAvatarTextureFromCanvas();
+  };
+
   const groupSelection = () => {
     if (!fabricRef.current) return;
     const active = fabricRef.current.getActiveObject();
@@ -1098,14 +1253,15 @@ export default function Editor() {
 
   const handleAiModeChange = useCallback((next: AiOutputMode) => {
     setAiMode(next);
+    setClothingMode(next === "classic_2d" ? "classic2d" : "fashionBuilder");
     if (next === "classic_2d") {
-      setStylizedConcept(null);
+      setFashionConcept(null);
       return;
     }
-    if (next === "stylized_outfit") {
+    if (next === "fashion_concept") {
       toast({
-        title: "Stylized Outfit AI",
-        description: "This mode generates concept renders and styled preview, not classic export textures.",
+        title: "Fashion Concept AI",
+        description: "Generates recommendations for Fashion Builder (preview-first) mode.",
       });
     }
   }, [toast]);
@@ -1215,28 +1371,28 @@ export default function Editor() {
           )}
         </div>
 
-        {/* Center: AI output mode toggle */}
+        {/* Center: Creator mode toggle */}
         <div className="flex items-center bg-white/5 rounded-lg p-0.5 border border-white/10 shrink-0">
           <button
-            onClick={() => handleAiModeChange("classic_2d")}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${aiMode === "classic_2d" ? "bg-indigo-600 text-white shadow" : "text-white/50 hover:text-white"}`}
+            onClick={() => { setClothingMode("classic2d"); setAiMode("classic_2d"); }}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${clothingMode === "classic2d" ? "bg-indigo-600 text-white shadow" : "text-white/50 hover:text-white"}`}
           >
-            <Shirt className="w-3.5 h-3.5" /> Classic 2D
+            <Shirt className="w-3.5 h-3.5" /> Classic 2D Clothing
           </button>
           <button
-            onClick={() => handleAiModeChange("stylized_outfit")}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${aiMode === "stylized_outfit" ? "bg-indigo-600 text-white shadow" : "text-white/50 hover:text-white"}`}
+            onClick={() => { setClothingMode("fashionBuilder"); setAiMode("fashion_concept"); }}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${clothingMode === "fashionBuilder" ? "bg-indigo-600 text-white shadow" : "text-white/50 hover:text-white"}`}
           >
-            <Boxes className="w-3.5 h-3.5" /> Stylized Outfit AI
+            <Boxes className="w-3.5 h-3.5" /> Fashion Builder
           </button>
         </div>
 
         <div className="flex items-center gap-1.5 shrink-0">
           <button
             onClick={() => {
-              if (aiMode === "stylized_outfit") {
+              if (clothingMode === "fashionBuilder") {
                 toast({
-                  title: "Texture editor is Classic 2D only",
+                  title: "Classic atlas editor is Classic 2D only",
                   description: "Switch to Classic 2D to edit atlas zones.",
                 });
                 return;
@@ -1281,7 +1437,7 @@ export default function Editor() {
                 {[{ id: "neutral", label: "Neutral" }, { id: "feminine", label: "Female" }, { id: "masculine", label: "Male" }, { id: "stylized", label: "Stylized" }].map((a) => (
                   <button
                     key={a.id}
-                    onClick={() => setAvatarProfile((p) => ({ ...p, avatarType: a.id }))}
+                    onClick={() => { setAvatarProfile((p) => ({ ...p, avatarType: a.id })); setFashionState((prev) => ({ ...prev, avatar: { ...prev.avatar, avatarType: a.id } })); }}
                     className={`text-[11px] py-1.5 px-2 rounded-md border transition-all ${avatarProfile.avatarType === a.id ? "bg-indigo-600/80 border-indigo-500 text-white" : "border-white/10 text-white/50 hover:text-white hover:border-white/20"}`}
                   >
                     {a.label}
@@ -1297,7 +1453,7 @@ export default function Editor() {
                 {["Slim", "Regular", "Athletic"].map((b) => (
                   <button
                     key={b}
-                    onClick={() => setAvatarProfile((p) => ({ ...p, bodyType: b.toLowerCase() }))}
+                    onClick={() => { setAvatarProfile((p) => ({ ...p, bodyType: b.toLowerCase() })); setFashionState((prev) => ({ ...prev, avatar: { ...prev.avatar, bodyType: b.toLowerCase() } })); }}
                     className={`text-[11px] py-1.5 rounded-md border transition-all ${avatarProfile.bodyType === b.toLowerCase() ? "bg-indigo-600/80 border-indigo-500 text-white" : "border-white/10 text-white/50 hover:text-white hover:border-white/20"}`}
                   >
                     {b}
@@ -1306,39 +1462,57 @@ export default function Editor() {
               </div>
             </div>
 
-            {/* Item type */}
+            {/* Avatar accessories */}
+            <div className="space-y-2">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-white/40">Accessories</p>
+              <div className="grid grid-cols-2 gap-1">
+                {["none", "short", "long"].map((hair) => <button key={hair} onClick={() => setFashionState((prev) => ({ ...prev, avatar: { ...prev.avatar, hair } }))} className={`text-[10px] py-1 rounded border ${fashionState.avatar.hair === hair ? "bg-indigo-600/80 border-indigo-500 text-white" : "border-white/10 text-white/50"}`}>Hair: {hair}</button>)}
+                {["none", "cap", "beanie"].map((hat) => <button key={hat} onClick={() => setFashionState((prev) => ({ ...prev, avatar: { ...prev.avatar, hat } }))} className={`text-[10px] py-1 rounded border ${fashionState.avatar.hat === hat ? "bg-indigo-600/80 border-indigo-500 text-white" : "border-white/10 text-white/50"}`}>Hat: {hat}</button>)}
+              </div>
+              <div className="grid grid-cols-3 gap-1">
+                {["none", "shades"].map((glasses) => <button key={glasses} onClick={() => setFashionState((prev) => ({ ...prev, avatar: { ...prev.avatar, glasses } }))} className={`text-[10px] py-1 rounded border ${fashionState.avatar.glasses === glasses ? "bg-indigo-600/80 border-indigo-500 text-white" : "border-white/10 text-white/50"}`}>Glasses</button>)}
+                {["none", "short"].map((beard) => <button key={beard} onClick={() => setFashionState((prev) => ({ ...prev, avatar: { ...prev.avatar, beard } }))} className={`text-[10px] py-1 rounded border ${fashionState.avatar.beard === beard ? "bg-indigo-600/80 border-indigo-500 text-white" : "border-white/10 text-white/50"}`}>Beard</button>)}
+                {["none", "sport"].map((backpack) => <button key={backpack} onClick={() => setFashionState((prev) => ({ ...prev, avatar: { ...prev.avatar, backpack } }))} className={`text-[10px] py-1 rounded border ${fashionState.avatar.backpack === backpack ? "bg-indigo-600/80 border-indigo-500 text-white" : "border-white/10 text-white/50"}`}>Backpack</button>)}
+              </div>
+            </div>
+
+            {/* Clothing mode specific controls */}
             <div className="space-y-2">
               <p className="text-[10px] font-semibold uppercase tracking-wider text-white/40">Clothing</p>
-              {aiMode === "classic_2d" ? (
+              {clothingMode === "classic2d" ? (
                 <div className="grid grid-cols-2 gap-1.5">
-                  {[
-                    { id: "shirt", label: "👕 Shirt" },
-                    { id: "pants", label: "👖 Pants" },
-                  ].map((item) => (
-                    <button
-                      key={item.id}
-                      disabled
-                      className={`text-[11px] py-2 rounded-md border transition-all ${activeClassicType === item.id ? "bg-indigo-600/80 border-indigo-500 text-white" : "border-white/10 text-white/35"}`}
-                    >
-                      {item.label}
-                    </button>
+                  {[{ id: "shirt", label: "👕 Shirt" }, { id: "pants", label: "👖 Pants" }].map((item) => (
+                    <button key={item.id} disabled className={`text-[11px] py-2 rounded-md border transition-all ${activeClassicType === item.id ? "bg-indigo-600/80 border-indigo-500 text-white" : "border-white/10 text-white/35"}`}>{item.label}</button>
                   ))}
                 </div>
               ) : (
-                <div className="grid grid-cols-2 gap-1.5">
-                  {["Hoodie", "Jacket", "T-Shirt", "Suit"].map((g) => (
-                    <button
-                      key={g}
-                      className="text-[11px] py-2 rounded-md border border-white/10 text-white/50 hover:text-white hover:border-white/20 transition-all"
-                    >
-                      {g}
-                    </button>
-                  ))}
+                <div className="space-y-2 rounded-lg border border-indigo-500/20 bg-indigo-500/5 p-2.5">
+                  <p className="text-[10px] text-indigo-200/80">Fashion Builder pipeline (preview-first)</p>
+                  <div className="grid grid-cols-2 gap-1">
+                    {(["tops", "bottoms", "outerwear", "accessories"] as GarmentCategory[]).map((category) => (
+                      <button key={category} onClick={() => setFashionState((prev) => ({ ...prev, garmentCategory: category, garmentBase: GARMENT_BASES[category][0].id, garmentVariant: GARMENT_VARIANTS[GARMENT_BASES[category][0].id]?.[0]?.id ?? "standard", selectedZone: FASHION_ZONES[GARMENT_BASES[category][0].id]?.[0]?.key ?? "front" }))} className={`text-[10px] py-1.5 capitalize rounded-md border ${fashionState.garmentCategory === category ? "bg-indigo-600/80 border-indigo-500 text-white" : "border-white/10 text-white/50"}`}>{category}</button>
+                    ))}
+                  </div>
+                  <div className="grid grid-cols-2 gap-1">
+                    {GARMENT_BASES[fashionState.garmentCategory].map((base) => (
+                      <button key={base.id} onClick={() => setFashionState((prev) => ({ ...prev, garmentBase: base.id, garmentVariant: GARMENT_VARIANTS[base.id]?.[0]?.id ?? "standard", selectedZone: FASHION_ZONES[base.id]?.[0]?.key ?? "front" }))} className={`text-[10px] py-1.5 rounded-md border ${fashionState.garmentBase === base.id ? "bg-indigo-600/80 border-indigo-500 text-white" : "border-white/10 text-white/50"}`}>{base.label}</button>
+                    ))}
+                  </div>
+                  <div className="grid grid-cols-1 gap-1">
+                    {(GARMENT_VARIANTS[fashionState.garmentBase] ?? [{ id: "standard", label: "Standard" }]).map((variant) => (
+                      <button key={variant.id} onClick={() => setFashionState((prev) => ({ ...prev, garmentVariant: variant.id }))} className={`text-[10px] py-1.5 rounded-md border ${fashionState.garmentVariant === variant.id ? "bg-indigo-600/80 border-indigo-500 text-white" : "border-white/10 text-white/50"}`}>{variant.label}</button>
+                    ))}
+                  </div>
+                  <select value={fashionState.selectedZone} onChange={(e) => setFashionState((prev) => ({ ...prev, selectedZone: e.target.value }))} className="w-full rounded bg-black/20 border border-white/10 text-[10px] py-1.5 px-1.5">
+                    {(FASHION_ZONES[fashionState.garmentBase] ?? FASHION_ZONES.shirt).map((zone) => (
+                      <option key={zone.key} value={zone.key}>{zone.label}</option>
+                    ))}
+                  </select>
                 </div>
               )}
             </div>
 
-            {/* Style presets */}
+{/* Style presets */}
             <div className="space-y-2">
               <p className="text-[10px] font-semibold uppercase tracking-wider text-white/40">Style</p>
               <div className="grid grid-cols-2 gap-1.5">
@@ -1355,13 +1529,13 @@ export default function Editor() {
             </div>
 
             {/* 3D garment controls */}
-            {aiMode === "stylized_outfit" && (
+            {clothingMode === "fashionBuilder" && (
               <div className="space-y-3 rounded-lg border border-white/10 bg-white/5 p-3">
                 <p className="text-[10px] font-semibold uppercase tracking-wider text-white/40 flex items-center gap-1"><SlidersHorizontal className="w-3 h-3" /> 3D Controls</p>
                 <div className="space-y-1">
                   <label className="text-[10px] text-white/40">Color</label>
                   <div className="flex items-center gap-2">
-                    <input type="color" value={garmentColor} onChange={(e) => setGarmentColor(e.target.value)} className="w-8 h-8 rounded border border-white/20 bg-transparent cursor-pointer" />
+                    <input type="color" value={garmentColor} onChange={(e) => { setGarmentColor(e.target.value); setFashionState((prev) => ({ ...prev, material: { ...prev.material, baseColor: e.target.value } })); }} className="w-8 h-8 rounded border border-white/20 bg-transparent cursor-pointer" />
                     <span className="text-xs font-mono text-white/60">{garmentColor}</span>
                   </div>
                 </div>
@@ -1369,7 +1543,7 @@ export default function Editor() {
                   <label className="text-[10px] text-white/40">Material</label>
                   <div className="grid grid-cols-3 gap-1">
                     {(["cotton", "denim", "nylon"] as const).map((m) => (
-                      <button key={m} onClick={() => setGarmentMaterial(m)} className={`text-[10px] py-1 rounded border transition-all ${garmentMaterial === m ? "bg-indigo-600/80 border-indigo-500 text-white" : "border-white/10 text-white/40 hover:text-white"}`}>{m}</button>
+                      <button key={m} onClick={() => { setGarmentMaterial(m); setFashionState((prev) => ({ ...prev, material: { ...prev.material, fabricAppearance: m } })); }} className={`text-[10px] py-1 rounded border transition-all ${garmentMaterial === m ? "bg-indigo-600/80 border-indigo-500 text-white" : "border-white/10 text-white/40 hover:text-white"}`}>{m}</button>
                     ))}
                   </div>
                 </div>
@@ -1377,6 +1551,24 @@ export default function Editor() {
                   <label className="text-[10px] text-white/40">Fit {garmentScale.toFixed(2)}x</label>
                   <input type="range" min={0.85} max={1.2} step={0.01} value={garmentScale} onChange={(e) => setGarmentScale(parseFloat(e.target.value))} className="w-full" />
                 </div>
+              </div>
+            )}
+
+            {/* Pattern / material library */}
+            {clothingMode === "fashionBuilder" && (
+              <div className="space-y-2 rounded-lg border border-white/10 bg-white/5 p-3">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-white/40">Patterns</p>
+                <div className="grid grid-cols-3 gap-1">
+                  {PATTERN_LIBRARY.map((p) => (
+                    <button key={p.id} onClick={() => setFashionState((prev) => ({ ...prev, material: { ...prev.material, patternId: p.id } }))} className={`text-[9px] rounded border p-1 ${fashionState.material.patternId === p.id ? "border-indigo-400 text-white" : "border-white/10 text-white/50"}`}>
+                      <div className="h-4 rounded mb-1" style={{ backgroundColor: p.color }} />{p.category}
+                    </button>
+                  ))}
+                </div>
+                <label className="text-[10px] text-white/40">Pattern Scale {fashionState.material.patternScale.toFixed(1)}</label>
+                <input type="range" min={0.5} max={3} step={0.1} value={fashionState.material.patternScale} onChange={(e) => setFashionState((prev) => ({ ...prev, material: { ...prev.material, patternScale: parseFloat(e.target.value) } }))} className="w-full" />
+                <label className="text-[10px] text-white/40">Pattern Rotation {fashionState.material.patternRotation}°</label>
+                <input type="range" min={0} max={360} step={5} value={fashionState.material.patternRotation} onChange={(e) => setFashionState((prev) => ({ ...prev, material: { ...prev.material, patternRotation: parseFloat(e.target.value) } }))} className="w-full" />
               </div>
             )}
 
@@ -1415,12 +1607,14 @@ export default function Editor() {
             view={previewFacing}
             onViewChange={setPreviewFacing}
             itemType={activeClassicType}
-            previewMode={aiMode}
+            previewMode={clothingMode === "classic2d" ? "classic_2d" : "fashion_builder"}
             garmentColor={garmentColor}
-            garmentMaterial={garmentMaterial}
-            garmentScale={garmentScale}
+            
             studioMode={true}
-            stylizedConcept={stylizedConcept}
+            stylizedConcept={fashionConcept}
+            garmentBase={fashionState.garmentBase}
+            garmentVariant={fashionState.garmentVariant}
+            accessories={fashionState.avatar}
           />
         </main>
 
@@ -1438,7 +1632,8 @@ export default function Editor() {
               onModeChange={handleAiModeChange}
               onUseColors={handleUseColors}
               onApplyAssets={applyAiOutfitToCanvas}
-              onStylizedConcept={setStylizedConcept}
+              onFashionConcept={setFashionConcept}
+              clothingMode={clothingMode}
               avatarType={avatarProfile.avatarType}
               bodyType={avatarProfile.bodyType}
             />
@@ -1485,7 +1680,13 @@ export default function Editor() {
           </span>
 
           <button onClick={() => { setEraserMode(false); setDrawingMode((p) => !p); }} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs border transition-all shrink-0 ${drawingMode && !eraserMode ? "bg-indigo-600 border-indigo-500 text-white" : "border-white/10 text-white/50 hover:text-white"}`}>
-            <PenTool className="w-3.5 h-3.5" /> Draw
+            <PenTool className="w-3.5 h-3.5" /> Brush
+          </button>
+          <button onClick={() => { setEraserMode(false); setBrushSize(2); setDrawingMode(true); }} className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs border border-white/10 text-white/50 hover:text-white transition-all shrink-0">
+            <PenTool className="w-3 h-3" /> Pencil
+          </button>
+          <button onClick={applyPatternToActiveZone} className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs border border-white/10 text-white/50 hover:text-white transition-all shrink-0">
+            <LayoutTemplate className="w-3.5 h-3.5" /> Pattern
           </button>
           <button
             onClick={() => { setEraserMode((prev) => !prev); setDrawingMode(true); }}
