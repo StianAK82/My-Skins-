@@ -34,6 +34,10 @@ function getOverlayImage(layer: DesignLayer, options?: RenderOptions): CanvasIma
   return null;
 }
 
+function getOverlaySource(layer: DesignLayer) {
+  return getLayerOverlayImage(layer);
+}
+
 function drawText(ctx: CanvasRenderingContext2D, layer: DesignLayer) {
   if (!layer.text) return;
   ctx.save();
@@ -97,12 +101,27 @@ function withZoneTransform(ctx: CanvasRenderingContext2D, zone: ZoneRect, layer:
 }
 
 function getOverlaySize(zone: ZoneRect, layer: DesignLayer) {
-  const widthRatio = layer.type === "accessoryLayer" ? 0.65 : layer.type === "moduleLayer" ? 0.75 : 0.9;
-  const heightRatio = layer.type === "moduleLayer" ? 0.38 : layer.type === "accessoryLayer" ? 0.65 : 0.9;
-  return {
-    width: zone.width * widthRatio,
-    height: zone.height * heightRatio,
-  };
+  const widthRatio = layer.type === "accessoryLayer" ? 0.7 : layer.type === "moduleLayer" ? 0.82 : 0.95;
+  const heightRatio = layer.type === "moduleLayer" ? 0.62 : layer.type === "accessoryLayer" ? 0.7 : 0.95;
+  return { width: zone.width * widthRatio, height: zone.height * heightRatio };
+}
+
+function getSourceSize(source: CanvasImageSource | null) {
+  if (!source) return null;
+  const width = "width" in source ? Number(source.width) : 0;
+  const height = "height" in source ? Number(source.height) : 0;
+  if (!width || !height) return null;
+  return { width, height };
+}
+
+function fitSourceIntoBox(sourceSize: { width: number; height: number } | null, box: { width: number; height: number }) {
+  if (!sourceSize) return box;
+  const sourceRatio = sourceSize.width / sourceSize.height;
+  const boxRatio = box.width / box.height;
+  if (sourceRatio > boxRatio) {
+    return { width: box.width, height: box.width / sourceRatio };
+  }
+  return { width: box.height * sourceRatio, height: box.height };
 }
 
 function drawFallbackAssetShape(ctx: CanvasRenderingContext2D, layer: DesignLayer, width: number, height: number) {
@@ -153,31 +172,37 @@ function drawFallbackAssetShape(ctx: CanvasRenderingContext2D, layer: DesignLaye
 
 function drawPatternOverlay(ctx: CanvasRenderingContext2D, zone: ZoneRect, layer: DesignLayer, options?: RenderOptions) {
   const patternImage = getOverlayImage(layer, options);
-  const baseTile = Math.max(8, Math.round(Math.min(zone.width, zone.height) / 5));
-  const tileSize = Math.max(8, Math.round(baseTile * layer.transform.scale));
-  const offsetX = ((layer.transform.x % tileSize) + tileSize) % tileSize;
-  const offsetY = ((layer.transform.y % tileSize) + tileSize) % tileSize;
+  const fallbackTileSize = Math.max(12, Math.round(Math.min(zone.width, zone.height) / 4));
+  const sourceSize = getSourceSize(patternImage);
+  const baseTile = sourceSize ? Math.max(12, Math.round(Math.min(sourceSize.width, sourceSize.height))) : fallbackTileSize;
+  const tileSize = Math.max(8, Math.round(baseTile * Math.max(layer.transform.scale, 0.1)));
+  const centerX = zone.left + zone.width / 2 + layer.transform.x;
+  const centerY = zone.top + zone.height / 2 + layer.transform.y;
+  const drawRadius = Math.ceil(Math.sqrt(zone.width * zone.width + zone.height * zone.height) / 2) + tileSize * 2;
 
   withZoneClip(ctx, zone, () => {
     ctx.globalAlpha = layer.transform.opacity;
+    ctx.translate(centerX, centerY);
+    ctx.rotate((layer.transform.rotation * Math.PI) / 180);
     if (patternImage) {
-      ctx.translate(zone.left + offsetX, zone.top + offsetY);
-      const repeatPattern = ctx.createPattern(patternImage, "repeat");
-      if (repeatPattern) {
-        ctx.fillStyle = repeatPattern;
-        ctx.fillRect(-tileSize, -tileSize, zone.width + tileSize * 2, zone.height + tileSize * 2);
-        return;
+      const offsetX = ((layer.transform.x % tileSize) + tileSize) % tileSize;
+      const offsetY = ((layer.transform.y % tileSize) + tileSize) % tileSize;
+      for (let y = -drawRadius + offsetY; y <= drawRadius; y += tileSize) {
+        for (let x = -drawRadius + offsetX; x <= drawRadius; x += tileSize) {
+          ctx.drawImage(patternImage, x - tileSize / 2, y - tileSize / 2, tileSize, tileSize);
+        }
       }
+      return;
     }
 
     const tint = layer.color ?? "#cbd5e1";
-    for (let y = zone.top - tileSize + offsetY; y <= zone.top + zone.height + tileSize; y += tileSize) {
-      for (let x = zone.left - tileSize + offsetX; x <= zone.left + zone.width + tileSize; x += tileSize) {
+    for (let y = -drawRadius; y <= drawRadius; y += tileSize) {
+      for (let x = -drawRadius; x <= drawRadius; x += tileSize) {
         ctx.fillStyle = tint;
+        ctx.fillRect(x - tileSize / 2, y - tileSize / 2, tileSize * 0.5, tileSize * 0.5);
         ctx.fillRect(x, y, tileSize * 0.5, tileSize * 0.5);
-        ctx.fillRect(x + tileSize * 0.5, y + tileSize * 0.5, tileSize * 0.5, tileSize * 0.5);
         ctx.fillStyle = "rgba(15,23,42,0.2)";
-        ctx.fillRect(x + tileSize * 0.2, y + tileSize * 0.2, tileSize * 0.6, tileSize * 0.1);
+        ctx.fillRect(x - tileSize * 0.3, y - tileSize * 0.3, tileSize * 0.6, tileSize * 0.1);
       }
     }
   });
@@ -193,7 +218,9 @@ function drawOverlayLayer(ctx: CanvasRenderingContext2D, state: DesignState, lay
   }
 
   const source = getOverlayImage(layer, options);
-  const { width, height } = getOverlaySize(zone, layer);
+  const sourceRequested = Boolean(getOverlaySource(layer));
+  const baseSize = getOverlaySize(zone, layer);
+  const { width, height } = fitSourceIntoBox(getSourceSize(source), baseSize);
 
   withZoneTransform(ctx, zone, layer, () => {
     if (source) {
@@ -201,8 +228,39 @@ function drawOverlayLayer(ctx: CanvasRenderingContext2D, state: DesignState, lay
       return;
     }
 
+    if (sourceRequested) return;
     drawFallbackAssetShape(ctx, layer, width, height);
   });
+}
+
+export function preloadOverlayImages(state: DesignState) {
+  const imageLayers = state.layers
+    .map((layer) => getOverlaySource(layer))
+    .filter((src): src is string => Boolean(src));
+
+  return Promise.all(imageLayers.map((src) => {
+    const cached = overlayImageCache.get(src);
+    if (cached?.status === "loaded") return Promise.resolve();
+    if (cached?.status === "error") return Promise.resolve();
+    return new Promise<void>((resolve) => {
+      if (typeof Image === "undefined") {
+        resolve();
+        return;
+      }
+      const image = new Image();
+      image.decoding = "async";
+      overlayImageCache.set(src, { status: "loading", image: null });
+      image.onload = () => {
+        overlayImageCache.set(src, { status: "loaded", image });
+        resolve();
+      };
+      image.onerror = () => {
+        overlayImageCache.set(src, { status: "error", image: null });
+        resolve();
+      };
+      image.src = src;
+    });
+  }));
 }
 
 export function renderDesignToCanvas(state: DesignState, canvas: HTMLCanvasElement, options?: RenderOptions): string {
