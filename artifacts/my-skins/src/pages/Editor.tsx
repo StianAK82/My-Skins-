@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type PointerEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent } from "react";
 import { Link, useParams } from "wouter";
 import { ArrowLeft, Copy, Download, Layers, Lock, MoveDown, MoveUp, Sparkles, Trash2, Unlock, Wand2 } from "lucide-react";
 import { aiGenerateDesign } from "@workspace/api-client-react";
@@ -41,6 +41,7 @@ export default function Editor() {
   const [aiStyle, setAiStyle] = useState("Streetwear");
   const [aiError, setAiError] = useState<string>("");
   const [aiLoading, setAiLoading] = useState(false);
+  const [imageRenderNonce, setImageRenderNonce] = useState(0);
 
   const {
     state,
@@ -67,14 +68,18 @@ export default function Editor() {
   const zones = useMemo(() => getZonesForTemplate(state.template), [state.template]);
   const templateAssets = useMemo(() => getAssetsForTemplate(state.template), [state.template]);
 
+  const handleOverlayImageReady = useCallback(() => {
+    setImageRenderNonce((current) => current + 1);
+  }, []);
+
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const idHandle = window.setTimeout(() => {
-      setPreviewTexture(renderDesignToCanvas(state, canvas));
+      setPreviewTexture(renderDesignToCanvas(state, canvas, { onOverlayImageReady: handleOverlayImageReady }));
     }, 20);
     return () => window.clearTimeout(idHandle);
-  }, [state]);
+  }, [handleOverlayImageReady, imageRenderNonce, state]);
 
   const onPointerDraw = (event: PointerEvent<HTMLCanvasElement>) => {
     if (state.activeTool !== "draw") return;
