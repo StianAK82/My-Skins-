@@ -132,6 +132,34 @@ test("AI schema enforces garment zone validity and required content by layer typ
     zones: { front: "focus" },
     layers: [{ name: "Headline", type: "textLayer", zone: "front", transform: { scale: 1 } }],
   }));
+
+  assert.throws(() => classicTextureAiSchema.parse({
+    model: "ClassicTextureAI.v2",
+    garmentType: "shirt",
+    style: "Neo",
+    palette: ["#111111", "#22d3ee"],
+    zones: { front: "focus" },
+    layers: [{ name: "Invalid allover", type: "moduleLayer", zone: "front", placementIntent: "allover", assetCategory: "module", assetId: "module_pocket" }],
+  }));
+});
+
+test("AI parser applies structured placement anchor and bounds layer transform", () => {
+  const parsedLayers = parseClassicTextureAi({
+    model: "ClassicTextureAI.v2",
+    garmentType: "pants",
+    style: "Neo",
+    palette: ["#111111", "#22d3ee"],
+    zones: { left_leg_front: "focus", right_leg_front: "support" },
+    layers: [
+      { name: "Leg stripe", type: "moduleLayer", zone: "left_leg_front", assetId: "module_side_stripe", anchor: "top_left", relativeScale: 0.4, transform: { x: -999, y: -999, rotation: 280 } },
+    ],
+  });
+
+  assert.equal(parsedLayers.length, 1);
+  assert.equal(parsedLayers[0]?.transform.x, -64);
+  assert.equal(parsedLayers[0]?.transform.y, -96);
+  assert.equal(parsedLayers[0]?.transform.scale, 0.4);
+  assert.equal(parsedLayers[0]?.transform.rotation, 280);
 });
 
 test("AI apply flow is deterministic: preview cleared and appended order preserved", () => {

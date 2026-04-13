@@ -287,3 +287,37 @@ test("export operations are deterministic for representative layered designs", (
   assert.equal(first, second);
   assert.deepEqual(canvasA.context.ops, canvasB.context.ops);
 });
+
+test("renderer uses category-driven overlay sizing for trim assets to match export/editor framing", () => {
+  const previousImage = globalThis.Image;
+  class LoadedImage {
+    onload: null | (() => void) = null;
+    onerror: null | (() => void) = null;
+    decoding = "";
+    width = 192;
+    height = 48;
+    set src(_value: string) {
+      if (this.onload) this.onload();
+    }
+  }
+  globalThis.Image = LoadedImage as unknown as typeof Image;
+
+  try {
+    const state: DesignState = {
+      ...baseState,
+      layers: [
+        { id: "trim", name: "Trim", type: "moduleLayer", zone: "front", assetCategory: "trim", assetId: "trim_gold", transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, visible: true, locked: false } },
+      ],
+    };
+    renderDesignToCanvas(state, new FakeCanvas() as unknown as HTMLCanvasElement);
+    const second = new FakeCanvas();
+    renderDesignToCanvas(state, second as unknown as HTMLCanvasElement);
+
+    const drawOp = second.context.ops.find((op) => op.name === "drawImage");
+    assert.ok(drawOp);
+    const [, , , width, height] = drawOp?.args ?? [];
+    assert.equal(Number(width) > Number(height), true);
+  } finally {
+    globalThis.Image = previousImage;
+  }
+});
