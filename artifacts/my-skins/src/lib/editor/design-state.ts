@@ -72,6 +72,10 @@ type DesignStore = {
 
 function uid(prefix: string) { return `${prefix}_${Math.random().toString(36).slice(2, 10)}`; }
 
+function defaultZoneForTemplate(template: TemplateType) {
+  return template === "pants" ? "left_leg_front" : "front";
+}
+
 export const designStateSchema = z.object({
   version: z.literal(3),
   template: z.enum(["shirt", "pants"]),
@@ -113,13 +117,16 @@ export const designStateSchema = z.object({
 export const useDesignStore = create<DesignStore>((set) => ({
   state: initialState,
   setTool: (tool) => set((s) => ({ state: { ...s.state, activeTool: tool } })),
-  setTemplate: (template) => set((s) => ({ state: { ...s.state, template } })),
+  setTemplate: (template) => set((s) => ({ state: { ...s.state, template, activeZone: defaultZoneForTemplate(template) } })),
   setZone: (zone) => set((s) => ({ state: { ...s.state, activeZone: zone } })),
   setPreviewMode: (mode) => set((s) => ({ state: { ...s.state, preview: { ...s.state.preview, mode, split: mode === "split" } } })),
   setBodyType: (bodyType) => set((s) => ({ state: { ...s.state, preview: { ...s.state.preview, bodyType } } })),
   setView: (view) => set((s) => ({ state: { ...s.state, preview: { ...s.state.preview, view } } })),
   setPaintSwatch: (hex) => set((s) => ({ state: { ...s.state, paintSwatch: hex } })),
-  addLayer: (layer) => set((s) => ({ state: { ...s.state, layers: [...s.state.layers, { ...layer, id: layer.id ?? uid("layer"), transform: { ...defaultTransform(), ...layer.transform } }] } })),
+  addLayer: (layer) => set((s) => {
+    const newLayer = { ...layer, id: layer.id ?? uid("layer"), transform: { ...defaultTransform(), ...layer.transform } };
+    return { state: { ...s.state, layers: [...s.state.layers, newLayer], selectedLayerId: newLayer.id } };
+  }),
   patchLayer: (id, patch) => set((s) => ({ state: { ...s.state, layers: s.state.layers.map((layer) => (layer.id === id ? { ...layer, ...patch } : layer)) } })),
   reorderLayer: (id, direction) => set((s) => {
     const index = s.state.layers.findIndex((layer) => layer.id === id);
@@ -133,12 +140,23 @@ export const useDesignStore = create<DesignStore>((set) => ({
   duplicateLayer: (id) => set((s) => {
     const layer = s.state.layers.find((candidate) => candidate.id === id);
     if (!layer) return s;
-    return { state: { ...s.state, layers: [...s.state.layers, { ...layer, id: uid("layer"), name: `${layer.name} copy` }] } };
+    const copy = { ...layer, id: uid("layer"), name: `${layer.name} copy` };
+    return { state: { ...s.state, layers: [...s.state.layers, copy], selectedLayerId: copy.id } };
   }),
   deleteLayer: (id) => set((s) => ({ state: { ...s.state, layers: s.state.layers.filter((layer) => layer.id !== id), selectedLayerId: s.state.selectedLayerId === id ? null : s.state.selectedLayerId } })),
   selectLayer: (id) => set((s) => ({ state: { ...s.state, selectedLayerId: id } })),
   addBrushPoint: (layerId, point) => set((s) => ({ state: { ...s.state, layers: s.state.layers.map((layer) => layer.id === layerId ? { ...layer, points: [...(layer.points ?? []), point] } : layer) } })),
   setAiPlanPreview: (layers) => set((s) => ({ state: { ...s.state, aiPlanPreview: layers } })),
-  applyAiPlan: () => set((s) => ({ state: { ...s.state, layers: [...s.state.layers, ...s.state.aiPlanPreview.map((layer) => ({ ...layer, id: uid("layer") }))], aiPlanPreview: [] } })),
+  applyAiPlan: () => set((s) => {
+    const appliedLayers = s.state.aiPlanPreview.map((layer) => ({ ...layer, id: uid("layer") }));
+    return {
+      state: {
+        ...s.state,
+        layers: [...s.state.layers, ...appliedLayers],
+        selectedLayerId: appliedLayers.at(-1)?.id ?? s.state.selectedLayerId,
+        aiPlanPreview: [],
+      },
+    };
+  }),
   loadSnapshot: (snapshot) => set(() => ({ state: snapshot })),
 }));

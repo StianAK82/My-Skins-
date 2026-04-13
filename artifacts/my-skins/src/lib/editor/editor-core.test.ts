@@ -73,3 +73,16 @@ test("AI schema rejects invalid payload and accepts strict structured plan", () 
   assert.equal(parsedLayers[0]?.type, "moduleLayer");
   assert.equal(parsedLayers[0]?.transform.scale, 1.2);
 });
+
+
+test("store defaults improve flow: template zone and new layer selection", () => {
+  const store = useDesignStore.getState();
+  store.loadSnapshot({ ...baseState, template: "shirt", activeZone: "front", layers: [], selectedLayerId: null });
+
+  store.setTemplate("pants");
+  assert.equal(useDesignStore.getState().state.activeZone, "left_leg_front");
+
+  store.addLayer({ name: "New Layer", type: "paintLayerSet", zone: "left_leg_front", color: "#333333" });
+  const latest = useDesignStore.getState().state.layers.at(-1);
+  assert.equal(useDesignStore.getState().state.selectedLayerId, latest?.id ?? null);
+});

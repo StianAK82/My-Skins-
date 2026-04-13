@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent } from "react";
 import { Link, useParams } from "wouter";
-import { ArrowLeft, Copy, Download, Layers, Lock, MoveDown, MoveUp, Sparkles, Trash2, Unlock, Wand2 } from "lucide-react";
+import { ArrowLeft, Copy, Download, Eye, Layers, Lock, MoveDown, MoveUp, Sparkles, Trash2, Unlock, Wand2 } from "lucide-react";
 import { aiGenerateDesign } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,14 +12,14 @@ import { parseDesignState, serializeDesignState } from "@/lib/editor/persistence
 import { getAssetsForTemplate, makeLayerFromAsset, type AssetCategory } from "@/lib/editor/assets";
 import { TEMPLATE_SIZE, getZonesForTemplate } from "@/lib/editor/templates";
 
-const TOOLS: Array<{ key: ToolType; label: string }> = [
-  { key: "templates", label: "Templates" },
-  { key: "media", label: "Modules" },
-  { key: "accessories", label: "Accessories" },
-  { key: "text", label: "Text" },
-  { key: "draw", label: "Draw" },
-  { key: "aiMedia", label: "AI Studio" },
-  { key: "uploads", label: "Uploads" },
+const TOOLS: Array<{ key: ToolType; label: string; hint: string }> = [
+  { key: "templates", label: "Templates", hint: "Choose your clothing base" },
+  { key: "media", label: "Modules", hint: "Insert graphics and trims" },
+  { key: "accessories", label: "Accessories", hint: "Add accessory overlays" },
+  { key: "text", label: "Text", hint: "Place editable text" },
+  { key: "draw", label: "Draw", hint: "Paint directly on canvas" },
+  { key: "aiMedia", label: "AI Studio", hint: "Generate guided design cards" },
+  { key: "uploads", label: "Uploads", hint: "Use your own image overlays" },
 ];
 
 const SWATCHES = ["#ef4444", "#3b82f6", "#f59e0b", "#10b981", "#a855f7", "#f8fafc", "#111827"];
@@ -42,6 +42,7 @@ export default function Editor() {
   const [aiError, setAiError] = useState<string>("");
   const [aiLoading, setAiLoading] = useState(false);
   const [imageRenderNonce, setImageRenderNonce] = useState(0);
+  const [saveStatus, setSaveStatus] = useState<string>("");
 
   const {
     state,
@@ -67,6 +68,9 @@ export default function Editor() {
   const selectedLayer = state.layers.find((layer) => layer.id === state.selectedLayerId) ?? null;
   const zones = useMemo(() => getZonesForTemplate(state.template), [state.template]);
   const templateAssets = useMemo(() => getAssetsForTemplate(state.template), [state.template]);
+  const hasLayers = state.layers.length > 0;
+  const storageKey = `design:${id}`;
+  const hasSavedVersion = typeof window !== "undefined" && Boolean(localStorage.getItem(storageKey));
 
   const handleOverlayImageReady = useCallback(() => {
     setImageRenderNonce((current) => current + 1);
@@ -74,12 +78,13 @@ export default function Editor() {
 
   const handleExportPng = useCallback(async () => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    if (!canvas || !hasLayers) return;
     await preloadOverlayImages(state);
     const nextTexture = renderDesignToCanvas(state, canvas, { onOverlayImageReady: handleOverlayImageReady });
     setPreviewTexture(nextTexture);
     downloadPng(nextTexture, `${state.template}.png`);
-  }, [handleOverlayImageReady, state]);
+    setSaveStatus("Exported PNG from current design state.");
+  }, [handleOverlayImageReady, hasLayers, state]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -101,12 +106,19 @@ export default function Editor() {
     addBrushPoint(drawActiveLayer, { x, y, size: 8, opacity: 0.6, softness: 0.6, erase: event.shiftKey });
   };
 
-  const saveDesign = () => localStorage.setItem(`design:${id}`, serializeDesignState(state));
+  const saveDesign = () => {
+    localStorage.setItem(storageKey, serializeDesignState(state));
+    setSaveStatus("Saved locally. You can reload this from this device.");
+  };
 
   const loadDesign = () => {
-    const raw = localStorage.getItem(`design:${id}`);
-    if (!raw) return;
+    const raw = localStorage.getItem(storageKey);
+    if (!raw) {
+      setSaveStatus("No saved version found yet. Make a change and click Save first.");
+      return;
+    }
     loadSnapshot(parseDesignState(raw));
+    setSaveStatus("Loaded saved design snapshot.");
   };
 
   const generateAiPlan = async () => {
@@ -157,10 +169,12 @@ export default function Editor() {
   };
 
   const activeCategory = (state.activeTool === "accessories" ? "accessory" : state.activeTool === "media" ? "module" : "pattern") as AssetCategory;
+  const libraryAssets = templateAssets.filter((asset) => activeCategory === "pattern" ? asset.category !== "hair" : asset.category === activeCategory || (activeCategory === "module" && asset.category === "graphic"));
+  const activeToolMeta = TOOLS.find((tool) => tool.key === state.activeTool);
 
   return (
     <div className="h-screen bg-slate-950 text-slate-100 p-4">
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           <Button variant="outline" asChild><Link href="/projects"><ArrowLeft className="mr-2 h-4 w-4" />Projects</Link></Button>
           <h1 className="text-lg font-semibold">My Skins Studio — Project {id}</h1>
@@ -168,11 +182,16 @@ export default function Editor() {
         <div className="flex items-center gap-2">
           <Button variant="secondary" onClick={saveDesign}>Save</Button>
           <Button variant="secondary" onClick={loadDesign}>Load</Button>
-          <Button onClick={() => void handleExportPng()}><Download className="mr-2 h-4 w-4" />Export PNG</Button>
+          <Button onClick={() => void handleExportPng()} disabled={!hasLayers}><Download className="mr-2 h-4 w-4" />Export PNG</Button>
         </div>
       </div>
 
-      <div className="grid grid-cols-[260px_1fr_340px] gap-4 h-[calc(100vh-88px)]">
+      <div className="mb-4 rounded-xl border border-slate-800 bg-slate-900/70 px-3 py-2 text-xs text-slate-300 flex items-center justify-between gap-3">
+        <p>Flow: Template → Build with assets/AI/tools → Check preview → Save → Export.</p>
+        <p className="text-slate-400">{saveStatus || (hasSavedVersion ? "Saved version available for quick reload." : "No saved version yet for this project.")}</p>
+      </div>
+
+      <div className="grid grid-cols-[280px_1fr_360px] gap-4 h-[calc(100vh-132px)]">
         <aside className="rounded-xl border border-slate-800 bg-slate-900 p-3 overflow-auto">
           <h2 className="font-medium mb-2">Studio Tools</h2>
           <div className="grid grid-cols-2 gap-2">
@@ -180,9 +199,10 @@ export default function Editor() {
               <Button key={tool.key} variant={state.activeTool === tool.key ? "default" : "outline"} className="justify-start text-xs" onClick={() => setTool(tool.key)}>{tool.label}</Button>
             ))}
           </div>
+          <p className="text-xs text-slate-400 mt-2">{activeToolMeta?.hint}</p>
 
           <div className="mt-4 space-y-2">
-            <p className="text-xs uppercase text-slate-400">Start from Template</p>
+            <p className="text-xs uppercase text-slate-400">1) Start from Template</p>
             <div className="grid grid-cols-2 gap-2">
               <Button variant={state.template === "shirt" ? "default" : "outline"} onClick={() => setTemplate("shirt")}>Classic Shirt</Button>
               <Button variant={state.template === "pants" ? "default" : "outline"} onClick={() => setTemplate("pants")}>Classic Pants</Button>
@@ -190,7 +210,7 @@ export default function Editor() {
           </div>
 
           <div className="mt-4 space-y-2">
-            <p className="text-xs uppercase text-slate-400">Styles</p>
+            <p className="text-xs uppercase text-slate-400">2) Style Direction</p>
             <div className="grid grid-cols-2 gap-1">
               {STYLE_PRESETS.map((style) => (
                 <Button key={style} variant={aiStyle === style ? "default" : "outline"} size="sm" onClick={() => setAiStyle(style)}>{style}</Button>
@@ -199,32 +219,34 @@ export default function Editor() {
           </div>
 
           <div className="mt-4 space-y-2">
-            <p className="text-xs uppercase text-slate-400">Colors</p>
+            <p className="text-xs uppercase text-slate-400">Quick Colors</p>
             <div className="grid grid-cols-4 gap-2">
               {SWATCHES.map((swatch) => (
-                <button key={swatch} className="h-8 rounded border border-slate-700" style={{ backgroundColor: swatch }} onClick={() => setPaintSwatch(swatch)} />
+                <button key={swatch} className="h-8 rounded border border-slate-700" style={{ backgroundColor: swatch }} onClick={() => setPaintSwatch(swatch)} aria-label={`Set swatch ${swatch}`} />
               ))}
             </div>
           </div>
 
           <div className="mt-4 space-y-2">
             <p className="text-xs uppercase text-slate-400">Manual Build</p>
-            <Button className="w-full" onClick={() => addLayer({ name: "Base Paint", type: "paintLayerSet", zone: state.activeZone, color: state.paintSwatch })}>+ Fill Zone</Button>
-            <Button className="w-full" onClick={() => addLayer({ name: "Label Text", type: "textLayer", zone: state.activeZone, text: "MY SKINS", color: state.paintSwatch, fontSize: 30, transform: { x: 220, y: 210 } })}>+ Add Text</Button>
+            <Button className="w-full" onClick={() => addLayer({ name: "Base Fill", type: "paintLayerSet", zone: state.activeZone, color: state.paintSwatch })}>+ Fill Active Zone</Button>
+            <Button className="w-full" onClick={() => addLayer({ name: "Text Label", type: "textLayer", zone: state.activeZone, text: "MY SKINS", color: state.paintSwatch, fontSize: 30, transform: { x: 220, y: 210 } })}>+ Add Text</Button>
             <Button className="w-full" onClick={() => {
-              addLayer({ name: "Brush Layer", type: "brushLayer", zone: state.activeZone, color: state.paintSwatch, points: [] });
+              addLayer({ name: "Brush Strokes", type: "brushLayer", zone: state.activeZone, color: state.paintSwatch, points: [] });
               const latest = useDesignStore.getState().state.layers.at(-1);
               setDrawActiveLayer(latest?.id ?? null);
             }}>+ Brush Layer</Button>
           </div>
 
           <div className="mt-4 space-y-2">
-            <p className="text-xs uppercase text-slate-400">Asset Library</p>
-            <div className="space-y-1 max-h-64 overflow-auto">
-              {templateAssets.filter((asset) => activeCategory === "pattern" ? asset.category !== "hair" : asset.category === activeCategory || (activeCategory === "module" && asset.category === "graphic")).map((asset) => (
-                <Button key={asset.id} variant="outline" className="w-full justify-start" onClick={() => insertAsset(asset.id)}>{asset.name}</Button>
-              ))}
-            </div>
+            <p className="text-xs uppercase text-slate-400">3) Asset Library</p>
+            {libraryAssets.length > 0 ? (
+              <div className="space-y-1 max-h-64 overflow-auto">
+                {libraryAssets.map((asset) => (
+                  <Button key={asset.id} variant="outline" className="w-full justify-start" onClick={() => insertAsset(asset.id)}>{asset.name}</Button>
+                ))}
+              </div>
+            ) : <p className="text-xs text-slate-400 rounded border border-dashed border-slate-700 p-2">No assets for this tool/template combo yet. Switch template or tool type.</p>}
           </div>
         </aside>
 
@@ -232,6 +254,7 @@ export default function Editor() {
           <div className={`grid gap-3 ${state.preview.mode === "split" ? "grid-cols-2" : "grid-cols-1"}`}>
             {(state.preview.mode === "2d" || state.preview.mode === "split") && (
               <div className="rounded-lg border border-slate-800 bg-slate-950 p-2 relative">
+                {!hasLayers ? <div className="absolute inset-3 z-10 rounded border border-dashed border-slate-700 bg-slate-900/80 p-3 text-xs text-slate-300">No layers yet. Start with <strong>Fill Active Zone</strong>, add an asset, or generate AI cards.</div> : null}
                 <canvas
                   ref={canvasRef}
                   width={TEMPLATE_SIZE.width}
@@ -254,8 +277,9 @@ export default function Editor() {
               </div>
             )}
             {(state.preview.mode === "3d" || state.preview.mode === "split") && (
-              <div className="rounded-lg border border-slate-800 bg-slate-950 p-2">
+              <div className="rounded-lg border border-slate-800 bg-slate-950 p-2 relative">
                 <AvatarPreview textureUrl={previewTexture} view={state.preview.view} bodyType={state.preview.bodyType === "girl" ? "slim" : state.preview.bodyType === "boy" ? "athletic" : "classic"} itemType={state.template} studioMode />
+                <div className="absolute top-3 left-3 rounded bg-slate-900/70 border border-slate-700 px-2 py-1 text-[11px] text-slate-300 flex items-center gap-1"><Eye className="h-3 w-3" />Drag to orbit, buttons to zoom/rotate.</div>
               </div>
             )}
           </div>
@@ -278,40 +302,43 @@ export default function Editor() {
                   </div>
                 ))}
               </div>
-            ) : <p className="text-xs text-slate-400 mt-2">Generate structured output and review cards before applying.</p>}
+            ) : <p className="text-xs text-slate-400 mt-2">No AI cards yet. Generate first, review cards, then apply.</p>}
           </div>
         </main>
 
         <aside className="rounded-xl border border-slate-800 bg-slate-900 p-3 overflow-auto">
           <h2 className="font-medium mb-2 flex items-center gap-2"><Layers className="h-4 w-4" />Layers</h2>
-          <div className="space-y-2">
-            {state.layers.map((layer) => (
-              <div key={layer.id} className={`rounded border p-2 ${state.selectedLayerId === layer.id ? "border-cyan-400" : "border-slate-700"}`}>
-                <button className="w-full text-left text-sm font-medium" onClick={() => { selectLayer(layer.id); setZone(layer.zone); }}>{layer.name}</button>
-                <p className="text-xs text-slate-400">{layer.type} · {layer.zone}</p>
-                <div className="flex gap-1 mt-2">
-                  <Button size="icon" variant="ghost" onClick={() => reorderLayer(layer.id, "up")}><MoveUp className="h-3 w-3" /></Button>
-                  <Button size="icon" variant="ghost" onClick={() => reorderLayer(layer.id, "down")}><MoveDown className="h-3 w-3" /></Button>
-                  <Button size="icon" variant="ghost" onClick={() => duplicateLayer(layer.id)}><Copy className="h-3 w-3" /></Button>
-                  <Button size="icon" variant="ghost" onClick={() => patchLayer(layer.id, { transform: { ...layer.transform, locked: !layer.transform.locked } })}>{layer.transform.locked ? <Lock className="h-3 w-3" /> : <Unlock className="h-3 w-3" />}</Button>
-                  <Button size="icon" variant="ghost" onClick={() => deleteLayer(layer.id)}><Trash2 className="h-3 w-3" /></Button>
+          {hasLayers ? (
+            <div className="space-y-2">
+              {state.layers.map((layer, index) => (
+                <div key={layer.id} className={`rounded border p-2 ${state.selectedLayerId === layer.id ? "border-cyan-400 bg-cyan-500/10" : "border-slate-700"}`}>
+                  <button className="w-full text-left text-sm font-medium" onClick={() => { selectLayer(layer.id); setZone(layer.zone); }}>{layer.name}</button>
+                  <p className="text-xs text-slate-400">{layer.type} · {layer.zone}{layer.transform.locked ? " · locked" : ""}</p>
+                  <div className="flex gap-1 mt-2">
+                    <Button size="icon" variant="ghost" onClick={() => reorderLayer(layer.id, "up")} disabled={index === state.layers.length - 1}><MoveUp className="h-3 w-3" /></Button>
+                    <Button size="icon" variant="ghost" onClick={() => reorderLayer(layer.id, "down")} disabled={index === 0}><MoveDown className="h-3 w-3" /></Button>
+                    <Button size="icon" variant="ghost" onClick={() => duplicateLayer(layer.id)}><Copy className="h-3 w-3" /></Button>
+                    <Button size="icon" variant="ghost" onClick={() => patchLayer(layer.id, { transform: { ...layer.transform, locked: !layer.transform.locked } })}>{layer.transform.locked ? <Lock className="h-3 w-3" /> : <Unlock className="h-3 w-3" />}</Button>
+                    <Button size="icon" variant="ghost" onClick={() => deleteLayer(layer.id)}><Trash2 className="h-3 w-3" /></Button>
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          ) : <p className="text-xs text-slate-400 rounded border border-dashed border-slate-700 p-2">No layers added yet. Add one from Manual Build or Asset Library to unlock editing and export.</p>}
 
           <h2 className="font-medium mt-4 mb-2">Properties</h2>
           {selectedLayer ? (
             <div className="space-y-2 text-xs">
+              <label className="text-slate-400">Layer Name</label>
               <Input value={selectedLayer.name} onChange={(event) => patchLayer(selectedLayer.id, { name: event.target.value })} />
-              <label>Opacity</label>
+              <label className="text-slate-400">Opacity (0-1)</label>
               <Input type="number" value={selectedLayer.transform.opacity} min={0} max={1} step={0.1} onChange={(event) => patchLayer(selectedLayer.id, { transform: { ...selectedLayer.transform, opacity: Number(event.target.value) } })} />
-              <label>Scale</label>
+              <label className="text-slate-400">Scale</label>
               <Input type="number" value={selectedLayer.transform.scale} min={0.1} max={4} step={0.1} onChange={(event) => patchLayer(selectedLayer.id, { transform: { ...selectedLayer.transform, scale: Number(event.target.value) } })} />
-              <label>Rotate</label>
+              <label className="text-slate-400">Rotation</label>
               <Input type="number" value={selectedLayer.transform.rotation} min={-360} max={360} step={5} onChange={(event) => patchLayer(selectedLayer.id, { transform: { ...selectedLayer.transform, rotation: Number(event.target.value) } })} />
             </div>
-          ) : <p className="text-sm text-slate-400">Select a layer to edit.</p>}
+          ) : <p className="text-sm text-slate-400 rounded border border-dashed border-slate-700 p-2">No layer selected. Click a layer card to edit transform and appearance.</p>}
 
           <div className="mt-4 space-y-2">
             <p className="text-xs uppercase text-slate-400">Preview Studio</p>
@@ -321,14 +348,15 @@ export default function Editor() {
               <Button variant={state.preview.mode === "split" ? "default" : "outline"} onClick={() => setPreviewMode("split")}>Split</Button>
             </div>
             <div className="grid grid-cols-3 gap-2">
-              <Button variant="outline" onClick={() => setBodyType("blocky")}>Blocky</Button>
-              <Button variant="outline" onClick={() => setBodyType("boy")}>Boy</Button>
-              <Button variant="outline" onClick={() => setBodyType("girl")}>Girl</Button>
+              <Button variant={state.preview.bodyType === "blocky" ? "default" : "outline"} onClick={() => setBodyType("blocky")}>Blocky</Button>
+              <Button variant={state.preview.bodyType === "boy" ? "default" : "outline"} onClick={() => setBodyType("boy")}>Boy</Button>
+              <Button variant={state.preview.bodyType === "girl" ? "default" : "outline"} onClick={() => setBodyType("girl")}>Girl</Button>
             </div>
             <div className="grid grid-cols-2 gap-2">
-              <Button variant="outline" onClick={() => setView("front")}>Front</Button>
-              <Button variant="outline" onClick={() => setView("back")}>Back</Button>
+              <Button variant={state.preview.view === "front" ? "default" : "outline"} onClick={() => setView("front")}>Front</Button>
+              <Button variant={state.preview.view === "back" ? "default" : "outline"} onClick={() => setView("back")}>Back</Button>
             </div>
+            <p className="text-xs text-slate-400">Export captures this exact design state and layer stack.</p>
           </div>
         </aside>
       </div>
