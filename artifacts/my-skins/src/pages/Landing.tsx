@@ -58,9 +58,9 @@ export default function Landing() {
     if (user && !isLoading) {
       setLocation("/dashboard");
     }
-  }, [user, isLoading, setLocation]);
+  }, [user, isLoading]); // intentionally omit setLocation — it's stable
 
-  if (isLoading) return null;
+  if (isLoading || user) return null;
 
   const isNo = language === "no";
 
