@@ -1,19 +1,21 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { parseDesignState, serializeDesignState } from "./persistence.ts";
-import { useDesignStore } from "./design-state.ts";
+import { defaultAvatarState, useDesignStore } from "./design-state.ts";
 import { getZonesForTemplate, snapLayerToZone } from "./templates.ts";
 import { classicTextureAiSchema, parseClassicTextureAi } from "./ai-schema.ts";
 
 const baseState = {
-  version: 3 as const,
+  version: 4 as const,
   template: "shirt" as const,
   activeTool: "templates" as const,
   activeZone: "front",
   selectedLayerId: null,
   paintSwatch: "#ffffff",
   preview: { split: true, mode: "split" as const, bodyType: "blocky" as const, view: "front" as const },
+  avatar: defaultAvatarState(),
   aiPlanPreview: [],
+  aiAvatarPreview: null,
   layers: [
     {
       id: "l1",
@@ -40,7 +42,7 @@ test("v2 persistence migration upgrades version and defaults aiPlanPreview", () 
   });
 
   const migrated = parseDesignState(v2);
-  assert.equal(migrated.version, 3);
+  assert.equal(migrated.version, 4);
   assert.deepEqual(migrated.aiPlanPreview, []);
 });
 
@@ -96,10 +98,10 @@ test("template zone snap keeps in-bounds coordinates unchanged", () => {
 });
 
 test("AI schema rejects invalid payload and accepts strict structured plan", () => {
-  assert.throws(() => classicTextureAiSchema.parse({ model: "ClassicTextureAI.v2", garmentType: "shirt", palette: ["#xyz"], style: "Neo", zones: {}, layers: [] }));
+  assert.throws(() => classicTextureAiSchema.parse({ model: "ClassicTextureAI.v3", garmentType: "shirt", palette: ["#xyz"], style: "Neo", zones: {}, layers: [] }));
 
   const valid = classicTextureAiSchema.parse({
-    model: "ClassicTextureAI.v2",
+    model: "ClassicTextureAI.v3",
     garmentType: "shirt",
     style: "Neo",
     palette: ["#111111", "#22d3ee"],
@@ -116,7 +118,7 @@ test("AI schema rejects invalid payload and accepts strict structured plan", () 
 
 test("AI schema enforces garment zone validity and required content by layer type", () => {
   assert.throws(() => classicTextureAiSchema.parse({
-    model: "ClassicTextureAI.v2",
+    model: "ClassicTextureAI.v3",
     garmentType: "pants",
     style: "Utility",
     palette: ["#111111", "#22d3ee"],
@@ -125,7 +127,7 @@ test("AI schema enforces garment zone validity and required content by layer typ
   }));
 
   assert.throws(() => classicTextureAiSchema.parse({
-    model: "ClassicTextureAI.v2",
+    model: "ClassicTextureAI.v3",
     garmentType: "shirt",
     style: "Neo",
     palette: ["#111111", "#22d3ee"],
@@ -134,7 +136,7 @@ test("AI schema enforces garment zone validity and required content by layer typ
   }));
 
   assert.throws(() => classicTextureAiSchema.parse({
-    model: "ClassicTextureAI.v2",
+    model: "ClassicTextureAI.v3",
     garmentType: "shirt",
     style: "Neo",
     palette: ["#111111", "#22d3ee"],
@@ -145,7 +147,7 @@ test("AI schema enforces garment zone validity and required content by layer typ
 
 test("AI parser applies structured placement anchor and bounds layer transform", () => {
   const parsedLayers = parseClassicTextureAi({
-    model: "ClassicTextureAI.v2",
+    model: "ClassicTextureAI.v3",
     garmentType: "pants",
     style: "Neo",
     palette: ["#111111", "#22d3ee"],
@@ -169,11 +171,13 @@ test("AI apply flow is deterministic: preview cleared and appended order preserv
     layers: [
       { id: "existing", name: "Existing", type: "paintLayerSet", zone: "front", color: "#000000", transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, visible: true, locked: false } },
     ],
-    aiPlanPreview: [],
+    avatar: defaultAvatarState(),
+  aiPlanPreview: [],
+  aiAvatarPreview: null,
   });
 
   const aiLayers = parseClassicTextureAi({
-    model: "ClassicTextureAI.v2",
+    model: "ClassicTextureAI.v3",
     garmentType: "shirt",
     style: "Neo",
     palette: ["#111111", "#22d3ee"],
@@ -195,7 +199,7 @@ test("AI apply flow is deterministic: preview cleared and appended order preserv
 
 test("store defaults improve flow: template zone and new layer selection", () => {
   const store = useDesignStore.getState();
-  store.loadSnapshot({ ...baseState, template: "shirt", activeZone: "front", layers: [], selectedLayerId: null });
+  store.loadSnapshot({ ...baseState, template: "shirt", activeZone: "front", layers: [], selectedLayerId: null, aiAvatarPreview: null });
 
   store.setTemplate("pants");
   assert.equal(useDesignStore.getState().state.activeZone, "left_leg_front");
@@ -203,4 +207,16 @@ test("store defaults improve flow: template zone and new layer selection", () =>
   store.addLayer({ name: "New Layer", type: "paintLayerSet", zone: "left_leg_front", color: "#333333" });
   const latest = useDesignStore.getState().state.layers.at(-1);
   assert.equal(useDesignStore.getState().state.selectedLayerId, latest?.id ?? null);
+});
+
+
+test("AI avatar preview patch applies into canonical avatar state", () => {
+  const store = useDesignStore.getState();
+  store.loadSnapshot({ ...baseState, aiPlanPreview: [], aiAvatarPreview: null });
+  store.setAiAvatarPreview({ pose: "hero", slots: { aura: { assetId: "aura_neon_ring", scale: 1, visible: true, color: "#22d3ee", offset: { x: 0, y: 0, z: 0 }, rotation: { x: 0, y: 0, z: 0 } } } });
+  store.applyAiPlan();
+  const state = useDesignStore.getState().state;
+  assert.equal(state.avatar.pose, "hero");
+  assert.equal(state.avatar.slots.aura?.assetId, "aura_neon_ring");
+  assert.equal(state.aiAvatarPreview, null);
 });

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import type { DesignState } from "./design-state.ts";
+import { defaultAvatarState, type DesignState } from "./design-state.ts";
 import { preloadOverlayImages, renderDesignToCanvas } from "./renderer.ts";
 
 type Op = { name: string; args?: unknown[] };
@@ -57,14 +57,16 @@ class FakeCanvas {
 }
 
 const baseState: DesignState = {
-  version: 3,
+  version: 4,
   template: "shirt",
   activeTool: "templates",
   activeZone: "front",
   selectedLayerId: null,
   paintSwatch: "#ffffff",
   preview: { split: true, mode: "split", bodyType: "blocky", view: "front" },
+  avatar: defaultAvatarState(),
   aiPlanPreview: [],
+  aiAvatarPreview: null,
   layers: [],
 };
 
