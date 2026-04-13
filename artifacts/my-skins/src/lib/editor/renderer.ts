@@ -1,5 +1,5 @@
-import type { DesignLayer, DesignState } from "./design-state";
-import { TEMPLATE_SIZE, TEMPLATE_ZONES } from "./templates";
+import type { DesignLayer, DesignState } from "./design-state.ts";
+import { TEMPLATE_SIZE, TEMPLATE_ZONES } from "./templates.ts";
 
 function drawText(ctx: CanvasRenderingContext2D, layer: DesignLayer) {
   if (!layer.text) return;
@@ -43,6 +43,28 @@ function drawZoneColor(ctx: CanvasRenderingContext2D, state: DesignState, layer:
   ctx.restore();
 }
 
+function drawModule(ctx: CanvasRenderingContext2D, state: DesignState, layer: DesignLayer) {
+  const zone = TEMPLATE_ZONES[state.template][layer.zone];
+  if (!zone) return;
+  const cx = zone.left + (layer.transform.x || zone.width / 2);
+  const cy = zone.top + (layer.transform.y || zone.height / 2);
+  const width = 42 * layer.transform.scale;
+  const height = 28 * layer.transform.scale;
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(zone.left, zone.top, zone.width, zone.height);
+  ctx.clip();
+  ctx.globalAlpha = layer.transform.opacity;
+  ctx.translate(cx, cy);
+  ctx.rotate((layer.transform.rotation * Math.PI) / 180);
+  ctx.fillStyle = layer.color ?? "#f8fafc";
+  ctx.strokeStyle = "rgba(15,23,42,0.85)";
+  ctx.lineWidth = 2;
+  ctx.fillRect(-width / 2, -height / 2, width, height);
+  ctx.strokeRect(-width / 2, -height / 2, width, height);
+  ctx.restore();
+}
+
 export function renderDesignToCanvas(state: DesignState, canvas: HTMLCanvasElement): string {
   canvas.width = TEMPLATE_SIZE.width;
   canvas.height = TEMPLATE_SIZE.height;
@@ -63,12 +85,19 @@ export function renderDesignToCanvas(state: DesignState, canvas: HTMLCanvasEleme
       if (!zone) return;
       ctx.save();
       ctx.globalAlpha = layer.transform.opacity;
+      ctx.beginPath();
+      ctx.rect(zone.left, zone.top, zone.width, zone.height);
+      ctx.clip();
+      ctx.translate(zone.left + zone.width / 2 + layer.transform.x, zone.top + zone.height / 2 + layer.transform.y);
+      ctx.rotate((layer.transform.rotation * Math.PI) / 180);
+      ctx.scale(layer.transform.scale, layer.transform.scale);
       ctx.fillStyle = layer.color ?? "#f8fafc";
-      ctx.fillRect(zone.left, zone.top, zone.width, zone.height);
+      ctx.fillRect(-zone.width / 2, -zone.height / 2, zone.width, zone.height);
       ctx.strokeStyle = "rgba(15,23,42,0.8)";
-      ctx.strokeRect(zone.left + 3, zone.top + 3, zone.width - 6, zone.height - 6);
+      ctx.strokeRect(-zone.width / 2 + 3, -zone.height / 2 + 3, zone.width - 6, zone.height - 6);
       ctx.restore();
     }
+    if (layer.type === "moduleLayer") drawModule(ctx, state, layer);
   });
 
   return canvas.toDataURL("image/png");
