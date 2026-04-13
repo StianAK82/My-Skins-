@@ -13,13 +13,34 @@ export type StudioAsset = {
   overlayImage?: string;
 };
 
+export type AvatarMeshType =
+  | "box"
+  | "face_decal"
+  | "hair_layered"
+  | "hair_bob"
+  | "hair_twintail"
+  | "hat_cap"
+  | "hat_beanie"
+  | "hat_horns"
+  | "neck_chain"
+  | "neck_scarf"
+  | "shoulder_pet"
+  | "shoulder_armor"
+  | "back_pack"
+  | "back_sword"
+  | "footwear_sneaker"
+  | "footwear_boot"
+  | "aura_ring"
+  | "aura_flame"
+  | "aura_pixels";
+
 export type AvatarAsset = {
   id: string;
   name: string;
   category: AvatarAssetCategory;
   slot: AvatarCosmeticSlot;
   color: string;
-  mesh: "box" | "sphere" | "cone" | "ring" | "aura" | "visor";
+  mesh: AvatarMeshType;
 };
 
 const svgData = (svg: string) => `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
@@ -51,18 +72,38 @@ export const STUDIO_ASSETS: StudioAsset[] = [
 ];
 
 export const AVATAR_ASSETS: AvatarAsset[] = [
-  { id: "face_confident", name: "Confident Face", category: "face", slot: "face", color: "#111827", mesh: "visor" },
-  { id: "face_smiley", name: "Smiley Face", category: "face", slot: "face", color: "#1f2937", mesh: "visor" },
-  { id: "hair_spiky_ember", name: "Spiky Ember Hair", category: "hair", slot: "hair", color: "#3b2a1d", mesh: "cone" },
-  { id: "hair_wavy_midnight", name: "Wavy Midnight Hair", category: "hair", slot: "hair", color: "#111827", mesh: "sphere" },
-  { id: "hat_street_cap", name: "Street Cap", category: "hat", slot: "hat", color: "#0f172a", mesh: "ring" },
-  { id: "neck_chain_gold", name: "Gold Chain", category: "neck", slot: "neck", color: "#facc15", mesh: "ring" },
-  { id: "shoulder_orb_left", name: "Left Shoulder Orb", category: "shoulder", slot: "leftShoulder", color: "#60a5fa", mesh: "sphere" },
-  { id: "shoulder_orb_right", name: "Right Shoulder Orb", category: "shoulder", slot: "rightShoulder", color: "#60a5fa", mesh: "sphere" },
-  { id: "back_jetpack_mini", name: "Mini Jetpack", category: "back", slot: "back", color: "#334155", mesh: "box" },
-  { id: "footwear_runner_black", name: "Runner Black", category: "footwear", slot: "leftFootwear", color: "#111111", mesh: "box" },
-  { id: "footwear_runner_black_right", name: "Runner Black (Right)", category: "footwear", slot: "rightFootwear", color: "#111111", mesh: "box" },
-  { id: "aura_neon_ring", name: "Neon Aura", category: "aura", slot: "aura", color: "#22d3ee", mesh: "aura" },
+  { id: "face_confident", name: "Confident Face", category: "face", slot: "face", color: "#111827", mesh: "face_decal" },
+  { id: "face_smiley", name: "Smiley Face", category: "face", slot: "face", color: "#1f2937", mesh: "face_decal" },
+  { id: "face_stoic", name: "Stoic Face", category: "face", slot: "face", color: "#0f172a", mesh: "face_decal" },
+  { id: "face_anime_glint", name: "Anime Glint Face", category: "face", slot: "face", color: "#111827", mesh: "face_decal" },
+
+  { id: "hair_spiky_ember", name: "Spiky Ember Hair", category: "hair", slot: "hair", color: "#3b2a1d", mesh: "hair_layered" },
+  { id: "hair_wavy_midnight", name: "Wavy Midnight Hair", category: "hair", slot: "hair", color: "#111827", mesh: "hair_bob" },
+  { id: "hair_twin_tail_pop", name: "Twin Tail Pop", category: "hair", slot: "hair", color: "#1f2937", mesh: "hair_twintail" },
+
+  { id: "hat_street_cap", name: "Street Cap", category: "hat", slot: "hat", color: "#0f172a", mesh: "hat_cap" },
+  { id: "hat_beanie_soft", name: "Soft Beanie", category: "hat", slot: "hat", color: "#334155", mesh: "hat_beanie" },
+  { id: "hat_cyber_horns", name: "Cyber Horns", category: "hat", slot: "hat", color: "#38bdf8", mesh: "hat_horns" },
+
+  { id: "neck_chain_gold", name: "Gold Chain", category: "neck", slot: "neck", color: "#facc15", mesh: "neck_chain" },
+  { id: "neck_scarf_neo", name: "Neo Scarf", category: "neck", slot: "neck", color: "#22c55e", mesh: "neck_scarf" },
+
+  { id: "shoulder_orb_left", name: "Left Shoulder Pet", category: "shoulder", slot: "leftShoulder", color: "#60a5fa", mesh: "shoulder_pet" },
+  { id: "shoulder_orb_right", name: "Right Shoulder Pet", category: "shoulder", slot: "rightShoulder", color: "#60a5fa", mesh: "shoulder_pet" },
+  { id: "shoulder_guard_left", name: "Left Shoulder Guard", category: "shoulder", slot: "leftShoulder", color: "#94a3b8", mesh: "shoulder_armor" },
+  { id: "shoulder_guard_right", name: "Right Shoulder Guard", category: "shoulder", slot: "rightShoulder", color: "#94a3b8", mesh: "shoulder_armor" },
+
+  { id: "back_jetpack_mini", name: "Mini Jetpack", category: "back", slot: "back", color: "#334155", mesh: "back_pack" },
+  { id: "back_blade_rig", name: "Blade Rig", category: "back", slot: "back", color: "#64748b", mesh: "back_sword" },
+
+  { id: "footwear_runner_black", name: "Runner Black", category: "footwear", slot: "leftFootwear", color: "#111111", mesh: "footwear_sneaker" },
+  { id: "footwear_runner_black_right", name: "Runner Black (Right)", category: "footwear", slot: "rightFootwear", color: "#111111", mesh: "footwear_sneaker" },
+  { id: "footwear_tech_boot_l", name: "Tech Boot (Left)", category: "footwear", slot: "leftFootwear", color: "#1e293b", mesh: "footwear_boot" },
+  { id: "footwear_tech_boot_r", name: "Tech Boot (Right)", category: "footwear", slot: "rightFootwear", color: "#1e293b", mesh: "footwear_boot" },
+
+  { id: "aura_neon_ring", name: "Neon Aura", category: "aura", slot: "aura", color: "#22d3ee", mesh: "aura_ring" },
+  { id: "aura_flame_orbit", name: "Flame Orbit", category: "aura", slot: "aura", color: "#f97316", mesh: "aura_flame" },
+  { id: "aura_pixel_spark", name: "Pixel Spark", category: "aura", slot: "aura", color: "#a855f7", mesh: "aura_pixels" },
 ];
 
 const STUDIO_ASSET_MAP = new Map(STUDIO_ASSETS.map((asset) => [asset.id, asset] as const));
