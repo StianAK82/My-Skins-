@@ -32,6 +32,51 @@ function downloadPng(dataUrl: string, filename: string) {
   a.click();
 }
 
+function clamp(value: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, value));
+}
+
+function mapAiModuleToLayer(module: {
+  id: string;
+  type: string;
+  label: string;
+  color: string;
+  position: { x: number; y: number };
+  scale: number;
+  rotation: number;
+  opacity: number;
+}, template: "shirt" | "pants") {
+  const boundedX = clamp(module.position.x, 0, 1);
+  const boundedY = clamp(module.position.y, 0, 1);
+  const isPattern = module.type.toLowerCase().includes("pattern");
+  const isAccessory = module.type.toLowerCase().includes("accessory") || module.type.toLowerCase().includes("hair");
+  const isTrim = module.type.toLowerCase().includes("trim");
+  const zone = template === "shirt"
+    ? boundedX < 0.18 ? "left_sleeve" : boundedX > 0.82 ? "right_sleeve" : boundedY > 0.72 ? "back" : "front"
+    : boundedX >= 0.5 ? "right_leg_front" : "left_leg_front";
+  const halfWidth = template === "shirt" ? 64 : 34;
+  const halfHeight = template === "shirt" ? 64 : 96;
+  const layerType: "accessoryLayer" | "moduleLayer" = isAccessory ? "accessoryLayer" : "moduleLayer";
+  return {
+    name: module.label,
+    type: layerType,
+    zone,
+    placementIntent: isPattern ? "allover" : boundedY < 0.3 ? "hero" : "supporting",
+    anchor: boundedY < 0.25 ? "top" : boundedY > 0.75 ? "bottom" : "center",
+    relativeScale: clamp(module.scale, 0.2, isPattern ? 0.95 : 1.25),
+    color: module.color,
+    assetId: module.id,
+    assetCategory: isPattern ? "pattern" : isAccessory ? "accessory" : isTrim ? "trim" : "module",
+    transform: {
+      x: clamp((boundedX - 0.5) * halfWidth * 2, -halfWidth, halfWidth),
+      y: clamp((boundedY - 0.5) * halfHeight * 2, -halfHeight, halfHeight),
+      scale: clamp(module.scale, 0.2, 1.6),
+      rotation: clamp(module.rotation, -180, 180),
+      opacity: clamp(module.opacity, 0.2, 1),
+    },
+  };
+}
+
 export default function Editor() {
   const { id = "local" } = useParams<{ id?: string }>();
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -133,23 +178,7 @@ export default function Editor() {
         style: response.result.style,
         palette: response.result.colorPalette,
         zones: response.result.placement,
-        layers: response.result.modules.map((module) => ({
-          name: module.label,
-          type: "moduleLayer" as const,
-          zone: state.template === "shirt"
-            ? module.position.x > 0.68 ? "back" : module.position.x < 0.2 ? "left_sleeve" : "front"
-            : module.position.x > 0.5 ? "right_leg_front" : "left_leg_front",
-          color: module.color,
-          assetId: module.id,
-          assetCategory: module.type,
-          transform: {
-            x: (module.position.x - 0.5) * 72,
-            y: (module.position.y - 0.5) * 72,
-            scale: module.scale,
-            rotation: module.rotation,
-            opacity: module.opacity,
-          },
-        })),
+        layers: response.result.modules.map((module) => mapAiModuleToLayer(module, state.template)),
       };
       const parsed = classicTextureAiSchema.parse(payload);
       setAiPlanPreview(parseClassicTextureAi(parsed));
@@ -290,6 +319,7 @@ export default function Editor() {
               <p className="text-sm font-medium">AI Suggestion Cards</p>
               <Button size="sm" variant="secondary" onClick={() => void generateAiPlan()} disabled={aiLoading || !aiPrompt.trim()}>{aiLoading ? "Generating..." : "Generate"}</Button>
               <Button size="sm" onClick={applyAiPlan} disabled={state.aiPlanPreview.length === 0}><Wand2 className="h-3 w-3 mr-1" />Apply to Design</Button>
+              <p className="text-[11px] text-slate-400">{state.aiPlanPreview.length > 0 ? `Reviewing ${state.aiPlanPreview.length} card(s) before apply.` : "Generate cards, review placement, then apply."}</p>
             </div>
             <Input value={aiPrompt} onChange={(event) => setAiPrompt(event.target.value)} placeholder="Describe your Roblox clothing design..." />
             {aiError ? <p className="text-xs text-red-400 mt-2">{aiError}</p> : null}
@@ -311,7 +341,7 @@ export default function Editor() {
           {hasLayers ? (
             <div className="space-y-2">
               {state.layers.map((layer, index) => (
-                <div key={layer.id} className={`rounded border p-2 ${state.selectedLayerId === layer.id ? "border-cyan-400 bg-cyan-500/10" : "border-slate-700"}`}>
+                <div key={layer.id} className={`rounded border p-2 ${state.selectedLayerId === layer.id ? "border-cyan-400 bg-cyan-500/10 shadow-[0_0_0_1px_rgba(34,211,238,0.3)]" : "border-slate-700"}`}>
                   <button className="w-full text-left text-sm font-medium" onClick={() => { selectLayer(layer.id); setZone(layer.zone); }}>{layer.name}</button>
                   <p className="text-xs text-slate-400">{layer.type} · {layer.zone}{layer.transform.locked ? " · locked" : ""}</p>
                   <div className="flex gap-1 mt-2">

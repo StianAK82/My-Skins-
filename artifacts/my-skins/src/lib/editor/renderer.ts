@@ -101,6 +101,11 @@ function withZoneTransform(ctx: CanvasRenderingContext2D, zone: ZoneRect, layer:
 }
 
 function getOverlaySize(zone: ZoneRect, layer: DesignLayer) {
+  const category = layer.assetCategory ?? "graphic";
+  if (category === "trim") return { width: zone.width * 0.96, height: zone.height * 0.24 };
+  if (category === "patch") return { width: zone.width * 0.34, height: zone.height * 0.34 };
+  if (category === "accessory" || category === "hair") return { width: zone.width * 0.7, height: zone.height * 0.68 };
+  if (category === "module") return { width: zone.width * 0.82, height: zone.height * 0.62 };
   const widthRatio = layer.type === "accessoryLayer" ? 0.7 : layer.type === "moduleLayer" ? 0.82 : 0.95;
   const heightRatio = layer.type === "moduleLayer" ? 0.62 : layer.type === "accessoryLayer" ? 0.7 : 0.95;
   return { width: zone.width * widthRatio, height: zone.height * heightRatio };
@@ -224,7 +229,9 @@ function drawOverlayLayer(ctx: CanvasRenderingContext2D, state: DesignState, lay
 
   withZoneTransform(ctx, zone, layer, () => {
     if (source) {
+      ctx.filter = layer.color && layer.assetCategory !== "pattern" ? `drop-shadow(0 0 0 ${layer.color})` : "none";
       ctx.drawImage(source, -width / 2, -height / 2, width, height);
+      ctx.filter = "none";
       return;
     }
 
