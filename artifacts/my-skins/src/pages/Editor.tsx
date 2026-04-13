@@ -10,6 +10,7 @@ import { useDesignStore, type ToolType } from "@/lib/editor/design-state";
 import { preloadOverlayImages, renderDesignToCanvas } from "@/lib/editor/renderer";
 import { parseDesignState, serializeDesignState } from "@/lib/editor/persistence";
 import { getAssetsForTemplate, getAvatarAssetsForSlot, makeLayerFromAsset, type AssetCategory } from "@/lib/editor/assets";
+import { buildAiAvatarLook } from "@/lib/editor/avatar-look";
 import { TEMPLATE_SIZE, getZonesForTemplate } from "@/lib/editor/templates";
 
 const TOOLS: Array<{ key: ToolType; label: string; hint: string }> = [
@@ -34,31 +35,6 @@ function downloadPng(dataUrl: string, filename: string) {
 
 function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
-}
-
-function buildAiAvatarLook(style: string, palette: string[]) {
-  const lower = style.toLowerCase();
-  const sporty = lower.includes("sport") || lower.includes("street");
-  const tactical = lower.includes("tactical");
-  return {
-    modelVariant: tactical ? "heroic" : sporty ? "proportioned_r15" : "classic_blocky",
-    presentation: sporty ? "androgynous" : "neutral",
-    skinTone: "#f1c27d",
-    pose: sporty ? "walk" : tactical ? "hero" : "idle",
-    scalePreset: tactical ? "stocky" : sporty ? "slender" : "standard",
-    bodyScale: { height: sporty ? 1.06 : 1, width: tactical ? 1.12 : 1, head: 1, legs: sporty ? 1.08 : 1 },
-    slots: {
-      face: { assetId: "face_confident", color: "#111827", scale: 1, offset: { x: 0, y: 0, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, visible: true },
-      hair: { assetId: sporty ? "hair_spiky_ember" : "hair_wavy_midnight", color: palette[1] ?? "#111827", scale: 1, offset: { x: 0, y: 0.06, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, visible: true },
-      neck: tactical ? { assetId: "neck_chain_gold", color: palette[0] ?? "#facc15", scale: 1, offset: { x: 0, y: 0, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, visible: true } : null,
-      leftShoulder: tactical ? { assetId: "shoulder_orb_left", scale: 0.9, offset: { x: 0, y: 0, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, visible: true } : null,
-      rightShoulder: tactical ? { assetId: "shoulder_orb_right", scale: 0.9, offset: { x: 0, y: 0, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, visible: true } : null,
-      back: tactical ? { assetId: "back_jetpack_mini", color: "#334155", scale: 1, offset: { x: 0, y: 0, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, visible: true } : null,
-      leftFootwear: { assetId: "footwear_runner_black", scale: 1, offset: { x: 0, y: 0, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, visible: true },
-      rightFootwear: { assetId: "footwear_runner_black_right", scale: 1, offset: { x: 0, y: 0, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, visible: true },
-      aura: sporty ? { assetId: "aura_neon_ring", color: palette[0] ?? "#22d3ee", scale: 1, offset: { x: 0, y: 0, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, visible: true } : null,
-    },
-  };
 }
 
 function mapAiModuleToLayer(module: {

@@ -80,7 +80,7 @@ export const defaultAvatarState = (): AvatarState => ({
     rightShoulder: null,
     back: null,
     leftFootwear: { assetId: "footwear_runner_black", scale: 1, visible: true, offset: { x: 0, y: 0, z: 0 }, rotation: { x: 0, y: 0, z: 0 } },
-    rightFootwear: { assetId: "footwear_runner_black", scale: 1, visible: true, offset: { x: 0, y: 0, z: 0 }, rotation: { x: 0, y: 0, z: 0 } },
+    rightFootwear: { assetId: "footwear_runner_black_right", scale: 1, visible: true, offset: { x: 0, y: 0, z: 0 }, rotation: { x: 0, y: 0, z: 0 } },
     aura: null,
   },
 });
