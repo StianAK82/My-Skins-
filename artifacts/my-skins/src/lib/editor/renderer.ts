@@ -1,7 +1,10 @@
+import { getLayerOverlayImage } from "./assets.ts";
 import type { DesignLayer, DesignState } from "./design-state.ts";
 import { TEMPLATE_SIZE, TEMPLATE_ZONES, type ZoneRect } from "./templates.ts";
 
 type ImageCacheEntry = { status: "loading" | "loaded" | "error"; image: CanvasImageSource | null };
+
+type RenderOptions = { onOverlayImageReady?: () => void };
 
 const overlayImageCache = new Map<string, ImageCacheEntry>();
 
@@ -9,23 +12,25 @@ function isPatternLayer(layer: DesignLayer) {
   return layer.assetCategory === "pattern";
 }
 
-function getOverlayImage(layer: DesignLayer): CanvasImageSource | null {
-  if (!layer.image) return null;
-  const cached = overlayImageCache.get(layer.image);
+function getOverlayImage(layer: DesignLayer, options?: RenderOptions): CanvasImageSource | null {
+  const src = getLayerOverlayImage(layer);
+  if (!src) return null;
+  const cached = overlayImageCache.get(src);
   if (cached?.status === "loaded" && cached.image) return cached.image;
   if (cached?.status === "loading" || cached?.status === "error") return null;
   if (typeof Image === "undefined") return null;
 
   const image = new Image();
   image.decoding = "async";
-  overlayImageCache.set(layer.image, { status: "loading", image: null });
+  overlayImageCache.set(src, { status: "loading", image: null });
   image.onload = () => {
-    overlayImageCache.set(layer.image!, { status: "loaded", image });
+    overlayImageCache.set(src, { status: "loaded", image });
+    options?.onOverlayImageReady?.();
   };
   image.onerror = () => {
-    overlayImageCache.set(layer.image!, { status: "error", image: null });
+    overlayImageCache.set(src, { status: "error", image: null });
   };
-  image.src = layer.image;
+  image.src = src;
   return null;
 }
 
@@ -70,57 +75,37 @@ function drawZoneColor(ctx: CanvasRenderingContext2D, state: DesignState, layer:
   ctx.restore();
 }
 
-function withZoneTransform(ctx: CanvasRenderingContext2D, zone: ZoneRect, layer: DesignLayer, draw: () => void) {
-  const centerX = zone.left + zone.width / 2 + layer.transform.x;
-  const centerY = zone.top + zone.height / 2 + layer.transform.y;
+function withZoneClip(ctx: CanvasRenderingContext2D, zone: ZoneRect, draw: () => void) {
   ctx.save();
   ctx.beginPath();
   ctx.rect(zone.left, zone.top, zone.width, zone.height);
   ctx.clip();
-  ctx.globalAlpha = layer.transform.opacity;
-  ctx.translate(centerX, centerY);
-  ctx.rotate((layer.transform.rotation * Math.PI) / 180);
-  ctx.scale(layer.transform.scale, layer.transform.scale);
   draw();
   ctx.restore();
 }
 
-function drawPatternTile(ctx: CanvasRenderingContext2D, layer: DesignLayer, x: number, y: number, size: number) {
-  const variant = layer.assetId ?? "pattern_generic";
-  const tint = layer.color ?? "#cbd5e1";
-  if (variant.includes("houndstooth")) {
-    ctx.fillStyle = tint;
-    ctx.fillRect(x, y, size * 0.55, size * 0.55);
-    ctx.fillRect(x + size * 0.45, y + size * 0.45, size * 0.55, size * 0.55);
-    ctx.fillStyle = "rgba(15,23,42,0.35)";
-    ctx.fillRect(x + size * 0.2, y + size * 0.6, size * 0.2, size * 0.2);
-    return;
-  }
-
-  ctx.fillStyle = tint;
-  ctx.fillRect(x, y, size * 0.5, size * 0.5);
-  ctx.fillRect(x + size * 0.5, y + size * 0.5, size * 0.5, size * 0.5);
-  ctx.fillStyle = "rgba(15,23,42,0.2)";
-  ctx.fillRect(x + size * 0.2, y + size * 0.2, size * 0.6, size * 0.1);
-}
-
-function drawPatternOverlay(ctx: CanvasRenderingContext2D, zone: ZoneRect, layer: DesignLayer) {
-  withZoneTransform(ctx, zone, layer, () => {
-    const tileSize = Math.max(8, 18);
-    const startX = -zone.width / 2;
-    const startY = -zone.height / 2;
-    const anchorX = layer.transform.x % tileSize;
-    const anchorY = layer.transform.y % tileSize;
-
-    for (let y = startY - tileSize + anchorY; y <= zone.height / 2 + tileSize; y += tileSize) {
-      for (let x = startX - tileSize + anchorX; x <= zone.width / 2 + tileSize; x += tileSize) {
-        drawPatternTile(ctx, layer, x, y, tileSize);
-      }
-    }
+function withZoneTransform(ctx: CanvasRenderingContext2D, zone: ZoneRect, layer: DesignLayer, draw: () => void) {
+  const centerX = zone.left + zone.width / 2 + layer.transform.x;
+  const centerY = zone.top + zone.height / 2 + layer.transform.y;
+  withZoneClip(ctx, zone, () => {
+    ctx.globalAlpha = layer.transform.opacity;
+    ctx.translate(centerX, centerY);
+    ctx.rotate((layer.transform.rotation * Math.PI) / 180);
+    ctx.scale(layer.transform.scale, layer.transform.scale);
+    draw();
   });
 }
 
-function drawAssetShape(ctx: CanvasRenderingContext2D, layer: DesignLayer, width: number, height: number) {
+function getOverlaySize(zone: ZoneRect, layer: DesignLayer) {
+  const widthRatio = layer.type === "accessoryLayer" ? 0.65 : layer.type === "moduleLayer" ? 0.75 : 0.9;
+  const heightRatio = layer.type === "moduleLayer" ? 0.38 : layer.type === "accessoryLayer" ? 0.65 : 0.9;
+  return {
+    width: zone.width * widthRatio,
+    height: zone.height * heightRatio,
+  };
+}
+
+function drawFallbackAssetShape(ctx: CanvasRenderingContext2D, layer: DesignLayer, width: number, height: number) {
   const tint = layer.color ?? "#e2e8f0";
   const category = layer.assetCategory ?? "graphic";
   ctx.fillStyle = tint;
@@ -166,33 +151,61 @@ function drawAssetShape(ctx: CanvasRenderingContext2D, layer: DesignLayer, width
   ctx.stroke();
 }
 
-function drawOverlayLayer(ctx: CanvasRenderingContext2D, state: DesignState, layer: DesignLayer) {
+function drawPatternOverlay(ctx: CanvasRenderingContext2D, zone: ZoneRect, layer: DesignLayer, options?: RenderOptions) {
+  const patternImage = getOverlayImage(layer, options);
+  const baseTile = Math.max(8, Math.round(Math.min(zone.width, zone.height) / 5));
+  const tileSize = Math.max(8, Math.round(baseTile * layer.transform.scale));
+  const offsetX = ((layer.transform.x % tileSize) + tileSize) % tileSize;
+  const offsetY = ((layer.transform.y % tileSize) + tileSize) % tileSize;
+
+  withZoneClip(ctx, zone, () => {
+    ctx.globalAlpha = layer.transform.opacity;
+    if (patternImage) {
+      ctx.translate(zone.left + offsetX, zone.top + offsetY);
+      const repeatPattern = ctx.createPattern(patternImage, "repeat");
+      if (repeatPattern) {
+        ctx.fillStyle = repeatPattern;
+        ctx.fillRect(-tileSize, -tileSize, zone.width + tileSize * 2, zone.height + tileSize * 2);
+        return;
+      }
+    }
+
+    const tint = layer.color ?? "#cbd5e1";
+    for (let y = zone.top - tileSize + offsetY; y <= zone.top + zone.height + tileSize; y += tileSize) {
+      for (let x = zone.left - tileSize + offsetX; x <= zone.left + zone.width + tileSize; x += tileSize) {
+        ctx.fillStyle = tint;
+        ctx.fillRect(x, y, tileSize * 0.5, tileSize * 0.5);
+        ctx.fillRect(x + tileSize * 0.5, y + tileSize * 0.5, tileSize * 0.5, tileSize * 0.5);
+        ctx.fillStyle = "rgba(15,23,42,0.2)";
+        ctx.fillRect(x + tileSize * 0.2, y + tileSize * 0.2, tileSize * 0.6, tileSize * 0.1);
+      }
+    }
+  });
+}
+
+function drawOverlayLayer(ctx: CanvasRenderingContext2D, state: DesignState, layer: DesignLayer, options?: RenderOptions) {
   const zone = TEMPLATE_ZONES[state.template][layer.zone];
   if (!zone) return;
 
   if (isPatternLayer(layer)) {
-    drawPatternOverlay(ctx, zone, layer);
+    drawPatternOverlay(ctx, zone, layer, options);
     return;
   }
 
-  const source = getOverlayImage(layer);
-  const widthRatio = layer.type === "accessoryLayer" ? 0.65 : layer.type === "moduleLayer" ? 0.75 : 0.9;
-  const heightRatio = layer.type === "moduleLayer" ? 0.38 : layer.type === "accessoryLayer" ? 0.65 : 0.9;
+  const source = getOverlayImage(layer, options);
+  const { width, height } = getOverlaySize(zone, layer);
 
   withZoneTransform(ctx, zone, layer, () => {
-    const drawWidth = zone.width * widthRatio;
-    const drawHeight = zone.height * heightRatio;
-
     if (source) {
-      ctx.drawImage(source, -drawWidth / 2, -drawHeight / 2, drawWidth, drawHeight);
+      ctx.drawImage(source, -width / 2, -height / 2, width, height);
       return;
     }
 
-    drawAssetShape(ctx, layer, drawWidth, drawHeight);
+    drawFallbackAssetShape(ctx, layer, width, height);
   });
 }
 
-export function renderDesignToCanvas(state: DesignState, canvas: HTMLCanvasElement): string {
+export function renderDesignToCanvas(state: DesignState, canvas: HTMLCanvasElement, options?: RenderOptions): string {
   canvas.width = TEMPLATE_SIZE.width;
   canvas.height = TEMPLATE_SIZE.height;
   const ctx = canvas.getContext("2d");
@@ -208,7 +221,7 @@ export function renderDesignToCanvas(state: DesignState, canvas: HTMLCanvasEleme
     if (layer.type === "textLayer") drawText(ctx, layer);
     if (layer.type === "brushLayer") drawBrush(ctx, layer);
     if (layer.type === "imageLayer" || layer.type === "accessoryLayer" || layer.type === "moduleLayer") {
-      drawOverlayLayer(ctx, state, layer);
+      drawOverlayLayer(ctx, state, layer, options);
     }
   });
 

@@ -9,23 +9,50 @@ export type StudioAsset = {
   defaultColor: string;
   supportedTemplates: TemplateType[];
   preferredZone: string;
+  overlayImage?: string;
 };
 
+const svgData = (svg: string) => `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+
+const OVERLAY_IMAGES = {
+  pattern_houndstooth: svgData('<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 48 48"><rect width="48" height="48" fill="#e2e8f0"/><path d="M0 0h24v24H0zM24 24h24v24H24z" fill="#1e293b"/><path d="M10 16h8v16h-8zM30 32h8v16h-8z" fill="#0f172a"/></svg>'),
+  graphic_dragon: svgData('<svg xmlns="http://www.w3.org/2000/svg" width="192" height="128" viewBox="0 0 192 128"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#fb923c"/><stop offset="1" stop-color="#ea580c"/></linearGradient></defs><path d="M20 92c44-4 44-60 84-64 24-2 40 10 52 24-24-4-30 10-34 20 8-2 16-2 24 0-18 12-42 14-66 18-16 4-36 14-60 2z" fill="url(#g)"/><circle cx="118" cy="54" r="5" fill="#0f172a"/></svg>'),
+  graphic_skull: svgData('<svg xmlns="http://www.w3.org/2000/svg" width="140" height="140" viewBox="0 0 140 140"><g fill="#e2e8f0" stroke="#0f172a" stroke-width="6"><circle cx="70" cy="52" r="36"/><rect x="44" y="76" width="52" height="36" rx="10"/></g><circle cx="56" cy="52" r="8" fill="#0f172a"/><circle cx="84" cy="52" r="8" fill="#0f172a"/><rect x="62" y="86" width="16" height="14" fill="#0f172a"/></svg>'),
+  trim_neon: svgData('<svg xmlns="http://www.w3.org/2000/svg" width="192" height="48" viewBox="0 0 192 48"><rect width="192" height="48" rx="20" fill="#22d3ee"/><rect x="8" y="14" width="176" height="20" rx="10" fill="#67e8f9"/></svg>'),
+  trim_gold: svgData('<svg xmlns="http://www.w3.org/2000/svg" width="192" height="48" viewBox="0 0 192 48"><rect width="192" height="48" rx="20" fill="#f59e0b"/><rect x="8" y="14" width="176" height="20" rx="10" fill="#fcd34d"/></svg>'),
+  patch_team: svgData('<svg xmlns="http://www.w3.org/2000/svg" width="120" height="120" viewBox="0 0 120 120"><rect x="10" y="10" width="100" height="100" rx="20" fill="#3b82f6" stroke="#1d4ed8" stroke-width="8"/><path d="M60 28l10 22 24 2-18 16 6 24-22-12-22 12 6-24-18-16 24-2z" fill="#dbeafe"/></svg>'),
+  accessory_chain: svgData('<svg xmlns="http://www.w3.org/2000/svg" width="160" height="160" viewBox="0 0 160 160"><g fill="none" stroke="#fde047" stroke-width="12"><circle cx="60" cy="76" r="24"/><circle cx="98" cy="84" r="24"/></g></svg>'),
+  module_side_stripe: svgData('<svg xmlns="http://www.w3.org/2000/svg" width="72" height="196" viewBox="0 0 72 196"><rect width="72" height="196" fill="#a855f7"/><rect x="28" width="16" height="196" fill="#e9d5ff"/></svg>'),
+  module_pocket: svgData('<svg xmlns="http://www.w3.org/2000/svg" width="120" height="120" viewBox="0 0 120 120"><path d="M18 18h84v72c0 12-10 22-22 22H40c-12 0-22-10-22-22z" fill="#334155" stroke="#94a3b8" stroke-width="6"/></svg>'),
+  hair_preview_spiky: svgData('<svg xmlns="http://www.w3.org/2000/svg" width="160" height="160" viewBox="0 0 160 160"><path d="M20 92c4-30 20-42 36-54l8 18 14-26 16 22 18-16 14 34 14-8 0 50z" fill="#4b2e1f"/></svg>'),
+} as const;
+
 export const STUDIO_ASSETS: StudioAsset[] = [
-  { id: "pattern_houndstooth", name: "Houndstooth Pattern", category: "pattern", defaultColor: "#cbd5e1", supportedTemplates: ["shirt", "pants"], preferredZone: "front" },
-  { id: "graphic_dragon", name: "Dragon Graphic", category: "graphic", defaultColor: "#f97316", supportedTemplates: ["shirt"], preferredZone: "front" },
-  { id: "graphic_skull", name: "Skull Symbol", category: "graphic", defaultColor: "#e2e8f0", supportedTemplates: ["shirt", "pants"], preferredZone: "front" },
-  { id: "trim_neon", name: "Neon Trim", category: "trim", defaultColor: "#22d3ee", supportedTemplates: ["shirt", "pants"], preferredZone: "left_sleeve" },
-  { id: "trim_gold", name: "Gold Trim", category: "trim", defaultColor: "#f59e0b", supportedTemplates: ["shirt", "pants"], preferredZone: "right_sleeve" },
-  { id: "patch_team", name: "Team Patch", category: "patch", defaultColor: "#3b82f6", supportedTemplates: ["shirt"], preferredZone: "back" },
-  { id: "accessory_chain", name: "Chain Accessory", category: "accessory", defaultColor: "#fde047", supportedTemplates: ["shirt"], preferredZone: "front" },
-  { id: "module_side_stripe", name: "Side Stripe Module", category: "module", defaultColor: "#a855f7", supportedTemplates: ["pants"], preferredZone: "left_leg_front" },
-  { id: "module_pocket", name: "Pocket Module", category: "module", defaultColor: "#334155", supportedTemplates: ["pants"], preferredZone: "right_leg_front" },
-  { id: "hair_preview_spiky", name: "Spiky Hair Preview", category: "hair", defaultColor: "#4b2e1f", supportedTemplates: ["shirt", "pants"], preferredZone: "front" },
+  { id: "pattern_houndstooth", name: "Houndstooth Pattern", category: "pattern", defaultColor: "#cbd5e1", supportedTemplates: ["shirt", "pants"], preferredZone: "front", overlayImage: OVERLAY_IMAGES.pattern_houndstooth },
+  { id: "graphic_dragon", name: "Dragon Graphic", category: "graphic", defaultColor: "#f97316", supportedTemplates: ["shirt"], preferredZone: "front", overlayImage: OVERLAY_IMAGES.graphic_dragon },
+  { id: "graphic_skull", name: "Skull Symbol", category: "graphic", defaultColor: "#e2e8f0", supportedTemplates: ["shirt", "pants"], preferredZone: "front", overlayImage: OVERLAY_IMAGES.graphic_skull },
+  { id: "trim_neon", name: "Neon Trim", category: "trim", defaultColor: "#22d3ee", supportedTemplates: ["shirt", "pants"], preferredZone: "left_sleeve", overlayImage: OVERLAY_IMAGES.trim_neon },
+  { id: "trim_gold", name: "Gold Trim", category: "trim", defaultColor: "#f59e0b", supportedTemplates: ["shirt", "pants"], preferredZone: "right_sleeve", overlayImage: OVERLAY_IMAGES.trim_gold },
+  { id: "patch_team", name: "Team Patch", category: "patch", defaultColor: "#3b82f6", supportedTemplates: ["shirt"], preferredZone: "back", overlayImage: OVERLAY_IMAGES.patch_team },
+  { id: "accessory_chain", name: "Chain Accessory", category: "accessory", defaultColor: "#fde047", supportedTemplates: ["shirt"], preferredZone: "front", overlayImage: OVERLAY_IMAGES.accessory_chain },
+  { id: "module_side_stripe", name: "Side Stripe Module", category: "module", defaultColor: "#a855f7", supportedTemplates: ["pants"], preferredZone: "left_leg_front", overlayImage: OVERLAY_IMAGES.module_side_stripe },
+  { id: "module_pocket", name: "Pocket Module", category: "module", defaultColor: "#334155", supportedTemplates: ["pants"], preferredZone: "right_leg_front", overlayImage: OVERLAY_IMAGES.module_pocket },
+  { id: "hair_preview_spiky", name: "Spiky Hair Preview", category: "hair", defaultColor: "#4b2e1f", supportedTemplates: ["shirt", "pants"], preferredZone: "front", overlayImage: OVERLAY_IMAGES.hair_preview_spiky },
 ];
+
+const STUDIO_ASSET_MAP = new Map(STUDIO_ASSETS.map((asset) => [asset.id, asset] as const));
 
 export function getAssetsForTemplate(template: TemplateType) {
   return STUDIO_ASSETS.filter((asset) => asset.supportedTemplates.includes(template));
+}
+
+export function getAssetById(assetId?: string) {
+  return assetId ? STUDIO_ASSET_MAP.get(assetId) : undefined;
+}
+
+export function getLayerOverlayImage(layer: Pick<DesignLayer, "assetId" | "image">) {
+  if (layer.image) return layer.image;
+  return getAssetById(layer.assetId)?.overlayImage;
 }
 
 export function makeLayerFromAsset(asset: StudioAsset, activeZone: string): Omit<DesignLayer, "id" | "transform"> & { transform: Partial<DesignLayer["transform"]> } {
@@ -36,6 +63,7 @@ export function makeLayerFromAsset(asset: StudioAsset, activeZone: string): Omit
     assetId: asset.id,
     assetCategory: asset.category,
     color: asset.defaultColor,
+    image: asset.overlayImage,
     transform: {
       x: 0,
       y: 0,
