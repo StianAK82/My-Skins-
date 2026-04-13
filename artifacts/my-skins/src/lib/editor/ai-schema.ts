@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { DesignLayer } from "./design-state.ts";
+import { TEMPLATE_ZONES } from "./templates.ts";
 
 const hexColor = z.string().regex(/^#[0-9A-Fa-f]{6}$/);
 
@@ -28,7 +29,35 @@ export const classicTextureAiSchema = z.object({
   palette: z.array(hexColor).min(2).max(8),
   zones: z.record(z.string().min(1)),
   layers: z.array(aiLayerSchema).min(1),
-}).strict();
+}).strict().superRefine((payload, ctx) => {
+  const templateZones = TEMPLATE_ZONES[payload.garmentType];
+  payload.layers.forEach((layer, index) => {
+    if (!templateZones[layer.zone]) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["layers", index, "zone"],
+        message: `Zone "${layer.zone}" is invalid for garment "${payload.garmentType}"`,
+      });
+    }
+
+    if (layer.type === "textLayer" && !layer.text) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["layers", index, "text"],
+        message: "textLayer requires text",
+      });
+    }
+
+    const requiresImageSource = layer.type === "imageLayer" || layer.type === "moduleLayer" || layer.type === "accessoryLayer";
+    if (requiresImageSource && !layer.image && !layer.assetId) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["layers", index, "image"],
+        message: `${layer.type} requires either image or assetId`,
+      });
+    }
+  });
+});
 
 export const aiMediaSchema = z.object({
   model: z.literal("AIMedia"),

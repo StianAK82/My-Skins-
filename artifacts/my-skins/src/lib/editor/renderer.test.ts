@@ -267,3 +267,23 @@ test("preloadOverlayImages resolves overlay sources before export render", async
     globalThis.Image = previousImage;
   }
 });
+
+test("export operations are deterministic for representative layered designs", () => {
+  const canvasA = new FakeCanvas();
+  const canvasB = new FakeCanvas();
+  const state: DesignState = {
+    ...baseState,
+    layers: [
+      { id: "paint", name: "Paint", type: "paintLayerSet", zone: "front", color: "#334155", transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 0.7, visible: true, locked: false } },
+      { id: "text", name: "Text", type: "textLayer", zone: "front", text: "BETA", color: "#ffffff", fontSize: 20, transform: { x: 240, y: 170, scale: 1, rotation: 0, opacity: 1, visible: true, locked: false } },
+      { id: "brush", name: "Brush", type: "brushLayer", zone: "front", color: "#22d3ee", points: [{ x: 220, y: 170, size: 10, opacity: 0.8, softness: 0.7 }], transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, visible: true, locked: false } },
+      { id: "overlay", name: "Overlay", type: "moduleLayer", zone: "front", assetCategory: "module", color: "#0f172a", transform: { x: 5, y: -2, scale: 1, rotation: 0, opacity: 1, visible: true, locked: false } },
+      { id: "hidden", name: "Hidden", type: "paintLayerSet", zone: "back", color: "#ef4444", transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, visible: false, locked: false } },
+    ],
+  };
+
+  const first = renderDesignToCanvas(state, canvasA as unknown as HTMLCanvasElement);
+  const second = renderDesignToCanvas(state, canvasB as unknown as HTMLCanvasElement);
+  assert.equal(first, second);
+  assert.deepEqual(canvasA.context.ops, canvasB.context.ops);
+});
