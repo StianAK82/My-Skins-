@@ -1,4 +1,4 @@
-import type { TemplateType } from "./design-state";
+import type { TemplateType } from "./design-state.ts";
 
 export type ZoneRect = { key: string; label: string; left: number; top: number; width: number; height: number };
 export const TEMPLATE_SIZE = { width: 585, height: 559 };

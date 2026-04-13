@@ -100,8 +100,8 @@ function useClothingMaps(textureUrl?: string) {
 }
 
 function bodyScaleFromType(bodyType: string) {
-  if (bodyType === "slim") return [0.93, 1.02, 0.9] as const;
-  if (bodyType === "athletic") return [1.07, 1.03, 1.04] as const;
+  if (bodyType === "slim") return [0.9, 1.04, 0.88] as const;
+  if (bodyType === "athletic") return [1.1, 1.06, 1.08] as const;
   return [1, 1, 1] as const;
 }
 
@@ -150,27 +150,27 @@ function RobloxStyleBody({
   return (
     <group>
       {/* Head */}
-      <RoundedBox args={[0.5, 0.5, 0.48]} radius={0.04} smoothness={4} position={[0, 1.96, 0]} castShadow>
+      <RoundedBox args={[0.56, 0.56, 0.52]} radius={0.08} smoothness={6} position={[0, 2.02, 0]} castShadow>
         <meshStandardMaterial color={skinColor} roughness={0.55} metalness={0.02} />
       </RoundedBox>
       {/* Face — darker front face to suggest face detail */}
-      <mesh position={[0, 1.96, 0.245]}>
-        <planeGeometry args={[0.38, 0.38]} />
+      <mesh position={[0, 2.02, 0.266]}>
+        <planeGeometry args={[0.4, 0.4]} />
         <meshStandardMaterial color={skinColor} roughness={0.5} />
       </mesh>
       {/* Eyes */}
-      <mesh position={[-0.1, 2.0, 0.248]}><planeGeometry args={[0.07, 0.07]} /><meshStandardMaterial color="#1a1a2e" /></mesh>
-      <mesh position={[0.1, 2.0, 0.248]}><planeGeometry args={[0.07, 0.07]} /><meshStandardMaterial color="#1a1a2e" /></mesh>
+      <mesh position={[-0.11, 2.05, 0.27]}><planeGeometry args={[0.07, 0.07]} /><meshStandardMaterial color="#1a1a2e" /></mesh>
+      <mesh position={[0.11, 2.05, 0.27]}><planeGeometry args={[0.07, 0.07]} /><meshStandardMaterial color="#1a1a2e" /></mesh>
 
       {/* Neck */}
-      <RoundedBox args={[0.22, 0.18, 0.22]} radius={0.04} smoothness={3} position={[0, 1.66, 0]} castShadow>
+      <RoundedBox args={[0.22, 0.2, 0.22]} radius={0.05} smoothness={4} position={[0, 1.7, 0]} castShadow>
         <meshStandardMaterial color={skinColor} roughness={0.6} />
       </RoundedBox>
 
       {/* Torso */}
       <TexturedBlock
-        size={[0.82, 0.68, 0.46]}
-        radius={0.06}
+        size={[0.88, 0.78, 0.52]}
+        radius={0.1}
         position={[0, 1.38, 0]}
         frontMap={shirtMaps.front}
         backMap={shirtMaps.back}
@@ -179,9 +179,9 @@ function RobloxStyleBody({
 
       {/* Hip / waistband */}
       <TexturedBlock
-        size={[0.7, 0.38, 0.42]}
+        size={[0.76, 0.42, 0.46]}
         radius={0.06}
-        position={[0, 0.94, 0]}
+        position={[0, 0.9, 0]}
         frontMap={pantsMaps.front}
         backMap={pantsMaps.back}
         sideMap={pantsMaps.side}
@@ -189,29 +189,29 @@ function RobloxStyleBody({
       />
 
       {/* Shoulders (shirt sleeves) */}
-      <mesh position={[-0.52, 1.56, 0]} castShadow>
-        <boxGeometry args={[0.22, 0.22, 0.24]} />
+      <mesh position={[-0.56, 1.56, 0]} castShadow>
+        <boxGeometry args={[0.24, 0.24, 0.26]} />
         <meshStandardMaterial map={shirtMaps.side} roughness={0.67} />
       </mesh>
-      <mesh position={[0.52, 1.56, 0]} castShadow>
-        <boxGeometry args={[0.22, 0.22, 0.24]} />
+      <mesh position={[0.56, 1.56, 0]} castShadow>
+        <boxGeometry args={[0.24, 0.24, 0.26]} />
         <meshStandardMaterial map={shirtMaps.side} roughness={0.67} />
       </mesh>
 
       {/* Upper arms */}
       <TexturedBlock
-        size={[0.26, 0.52, 0.26]}
+        size={[0.28, 0.54, 0.28]}
         radius={0.06}
-        position={[-0.53, 1.22, 0]}
+        position={[-0.56, 1.2, 0]}
         frontMap={shirtMaps.front}
         backMap={shirtMaps.back}
         sideMap={shirtMaps.side}
         roughness={0.69}
       />
       <TexturedBlock
-        size={[0.26, 0.52, 0.26]}
+        size={[0.28, 0.54, 0.28]}
         radius={0.06}
-        position={[0.53, 1.22, 0]}
+        position={[0.56, 1.2, 0]}
         frontMap={shirtMaps.front}
         backMap={shirtMaps.back}
         sideMap={shirtMaps.side}

@@ -3,7 +3,7 @@ import { z } from "zod";
 
 export type TemplateType = "shirt" | "pants";
 export type ToolType = "templates" | "uploads" | "media" | "aiMedia" | "accessories" | "text" | "draw";
-export type LayerType = "imageLayer" | "textLayer" | "brushLayer" | "accessoryLayer" | "paintLayerSet";
+export type LayerType = "imageLayer" | "textLayer" | "brushLayer" | "accessoryLayer" | "paintLayerSet" | "moduleLayer";
 
 export type LayerTransform = { x: number; y: number; scale: number; rotation: number; opacity: number; visible: boolean; locked: boolean };
 export type BrushPoint = { x: number; y: number; size: number; opacity: number; softness: number; erase?: boolean };
@@ -13,6 +13,8 @@ export type DesignLayer = {
   name: string;
   type: LayerType;
   zone: string;
+  assetId?: string;
+  assetCategory?: string;
   color?: string;
   image?: string;
   text?: string;
@@ -22,7 +24,7 @@ export type DesignLayer = {
 };
 
 export type DesignState = {
-  version: 2;
+  version: 3;
   template: TemplateType;
   activeTool: ToolType;
   activeZone: string;
@@ -36,7 +38,7 @@ export type DesignState = {
 const defaultTransform = (): LayerTransform => ({ x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, visible: true, locked: false });
 
 const initialState: DesignState = {
-  version: 2,
+  version: 3,
   template: "shirt",
   activeTool: "templates",
   activeZone: "front",
@@ -71,19 +73,34 @@ type DesignStore = {
 function uid(prefix: string) { return `${prefix}_${Math.random().toString(36).slice(2, 10)}`; }
 
 export const designStateSchema = z.object({
-  version: z.literal(2),
+  version: z.literal(3),
   template: z.enum(["shirt", "pants"]),
   activeTool: z.enum(["templates", "uploads", "media", "aiMedia", "accessories", "text", "draw"]),
   activeZone: z.string(),
   selectedLayerId: z.string().nullable(),
   paintSwatch: z.string(),
   preview: z.object({ split: z.boolean(), mode: z.enum(["2d", "3d", "split"]), bodyType: z.enum(["blocky", "boy", "girl"]), view: z.enum(["front", "back"]) }),
-  aiPlanPreview: z.array(z.any()),
+  aiPlanPreview: z.array(z.object({
+    id: z.string(),
+    name: z.string(),
+    type: z.enum(["imageLayer", "textLayer", "brushLayer", "accessoryLayer", "paintLayerSet", "moduleLayer"]),
+    zone: z.string(),
+    assetId: z.string().optional(),
+    assetCategory: z.string().optional(),
+    color: z.string().optional(),
+    image: z.string().optional(),
+    text: z.string().optional(),
+    fontSize: z.number().optional(),
+    points: z.array(z.object({ x: z.number(), y: z.number(), size: z.number(), opacity: z.number(), softness: z.number(), erase: z.boolean().optional() })).optional(),
+    transform: z.object({ x: z.number(), y: z.number(), scale: z.number(), rotation: z.number(), opacity: z.number(), visible: z.boolean(), locked: z.boolean() }),
+  })),
   layers: z.array(z.object({
     id: z.string(),
     name: z.string(),
-    type: z.enum(["imageLayer", "textLayer", "brushLayer", "accessoryLayer", "paintLayerSet"]),
+    type: z.enum(["imageLayer", "textLayer", "brushLayer", "accessoryLayer", "paintLayerSet", "moduleLayer"]),
     zone: z.string(),
+    assetId: z.string().optional(),
+    assetCategory: z.string().optional(),
     color: z.string().optional(),
     image: z.string().optional(),
     text: z.string().optional(),

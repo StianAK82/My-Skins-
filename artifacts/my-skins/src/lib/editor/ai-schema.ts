@@ -1,19 +1,34 @@
 import { z } from "zod";
-import type { DesignLayer } from "./design-state";
+import type { DesignLayer } from "./design-state.ts";
+
+const hexColor = z.string().regex(/^#[0-9A-Fa-f]{6}$/);
 
 const aiLayerSchema = z.object({
   name: z.string().min(1),
-  type: z.enum(["imageLayer", "textLayer", "accessoryLayer", "paintLayerSet"]),
+  type: z.enum(["imageLayer", "textLayer", "accessoryLayer", "paintLayerSet", "moduleLayer"]),
   zone: z.string().min(1),
   text: z.string().optional(),
   image: z.string().optional(),
-  color: z.string().optional(),
-});
+  color: hexColor.optional(),
+  assetId: z.string().optional(),
+  assetCategory: z.string().optional(),
+  transform: z.object({
+    x: z.number().default(0),
+    y: z.number().default(0),
+    scale: z.number().min(0.1).max(4).default(1),
+    rotation: z.number().min(-360).max(360).default(0),
+    opacity: z.number().min(0).max(1).default(1),
+  }).partial().optional(),
+}).strict();
 
 export const classicTextureAiSchema = z.object({
-  model: z.literal("ClassicTextureAI"),
+  model: z.literal("ClassicTextureAI.v2"),
+  garmentType: z.enum(["shirt", "pants"]),
+  style: z.string().min(1),
+  palette: z.array(hexColor).min(2).max(8),
+  zones: z.record(z.string().min(1)),
   layers: z.array(aiLayerSchema).min(1),
-});
+}).strict();
 
 export const aiMediaSchema = z.object({
   model: z.literal("AIMedia"),
@@ -33,6 +48,8 @@ export function parseClassicTextureAi(payload: unknown): DesignLayer[] {
     image: layer.image,
     text: layer.text,
     color: layer.color,
-    transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, visible: true, locked: false },
+    assetId: layer.assetId,
+    assetCategory: layer.assetCategory,
+    transform: { x: layer.transform?.x ?? 0, y: layer.transform?.y ?? 0, scale: layer.transform?.scale ?? 1, rotation: layer.transform?.rotation ?? 0, opacity: layer.transform?.opacity ?? 1, visible: true, locked: false },
   }));
 }
