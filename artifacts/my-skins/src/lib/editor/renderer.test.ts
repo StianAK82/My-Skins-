@@ -1,15 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import type { DesignState } from "./design-state.ts";
-import { renderDesignToCanvas } from "./renderer.ts";
+import { preloadOverlayImages, renderDesignToCanvas } from "./renderer.ts";
 
 type Op = { name: string; args?: unknown[] };
 
 class FakeGradient {
   addColorStop() {}
 }
-
-class FakePattern {}
 
 class FakeContext {
   ops: Op[] = [];
@@ -41,10 +39,6 @@ class FakeContext {
   roundRect(...args: number[]) { this.ops.push({ name: "roundRect", args }); }
   drawImage(...args: unknown[]) { this.ops.push({ name: "drawImage", args }); }
   createRadialGradient() { return new FakeGradient(); }
-  createPattern(...args: unknown[]) {
-    this.ops.push({ name: "createPattern", args });
-    return new FakePattern() as unknown as CanvasPattern;
-  }
 }
 
 class FakeCanvas {
@@ -93,7 +87,7 @@ test("renderer keeps layer order deterministic for stacked overlays", () => {
   assert.deepEqual(translates[1]?.args, [270, 186]);
 });
 
-test("pattern assets use repeat image path with clipping and deterministic offset", () => {
+test("pattern assets tile image content with clipping and deterministic transform", () => {
   const previousImage = globalThis.Image;
   class LoadedImage {
     onload: null | (() => void) = null;
@@ -119,8 +113,8 @@ test("pattern assets use repeat image path with clipping and deterministic offse
 
     const ops = second.context.ops;
     assert.equal(ops.some((op) => op.name === "clip"), true);
-    assert.equal(ops.some((op) => op.name === "createPattern"), true);
-    assert.deepEqual(ops.find((op) => op.name === "translate")?.args, [207, 125]);
+    assert.equal(ops.some((op) => op.name === "drawImage"), true);
+    assert.deepEqual(ops.find((op) => op.name === "translate")?.args, [271, 189]);
   } finally {
     globalThis.Image = previousImage;
   }
@@ -142,7 +136,7 @@ test("module assets use catalog overlay images instead of fallback geometry once
     const state: DesignState = {
       ...baseState,
       layers: [
-        { id: "mod", name: "Pocket", type: "moduleLayer", zone: "front", assetId: "module_pocket", assetCategory: "module", transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, visible: true, locked: false } },
+        { id: "img", name: "Loading image", type: "imageLayer", zone: "front", image: "data:image/png;base64,pending_only_unique", transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, visible: true, locked: false } },
       ],
     };
 
@@ -152,6 +146,33 @@ test("module assets use catalog overlay images instead of fallback geometry once
     renderDesignToCanvas(state, second as unknown as HTMLCanvasElement);
     assert.equal(second.context.ops.some((op) => op.name === "drawImage"), true);
     assert.equal(second.context.ops.some((op) => op.name === "strokeRect"), false);
+  } finally {
+    globalThis.Image = previousImage;
+  }
+});
+
+test("overlay layers with image sources do not draw placeholder geometry while image is loading", () => {
+  const previousImage = globalThis.Image;
+  class PendingImage {
+    onload: null | (() => void) = null;
+    onerror: null | (() => void) = null;
+    decoding = "";
+    set src(_value: string) {}
+  }
+  globalThis.Image = PendingImage as unknown as typeof Image;
+
+  try {
+    const state: DesignState = {
+      ...baseState,
+      layers: [
+        { id: "mod", name: "Pocket", type: "moduleLayer", zone: "front", assetId: "module_pocket", assetCategory: "module", transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, visible: true, locked: false } },
+      ],
+    };
+
+    const canvas = new FakeCanvas();
+    renderDesignToCanvas(state, canvas as unknown as HTMLCanvasElement);
+    assert.equal(canvas.context.ops.some((op) => op.name === "strokeRect"), false);
+    assert.equal(canvas.context.ops.some((op) => op.name === "drawImage"), false);
   } finally {
     globalThis.Image = previousImage;
   }
@@ -213,6 +234,35 @@ test("renderer notifies when async overlay images are ready", () => {
     );
 
     assert.equal(calls, 1);
+  } finally {
+    globalThis.Image = previousImage;
+  }
+});
+
+test("preloadOverlayImages resolves overlay sources before export render", async () => {
+  const previousImage = globalThis.Image;
+  class LoadedImage {
+    onload: null | (() => void) = null;
+    onerror: null | (() => void) = null;
+    decoding = "";
+    set src(_value: string) {
+      if (this.onload) this.onload();
+    }
+  }
+  globalThis.Image = LoadedImage as unknown as typeof Image;
+
+  try {
+    const state: DesignState = {
+      ...baseState,
+      layers: [
+        { id: "img", name: "Image", type: "imageLayer", zone: "front", image: "data:image/png;base64,ghi", transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, visible: true, locked: false } },
+      ],
+    };
+
+    await preloadOverlayImages(state);
+    const canvas = new FakeCanvas();
+    renderDesignToCanvas(state, canvas as unknown as HTMLCanvasElement);
+    assert.equal(canvas.context.ops.some((op) => op.name === "drawImage"), true);
   } finally {
     globalThis.Image = previousImage;
   }

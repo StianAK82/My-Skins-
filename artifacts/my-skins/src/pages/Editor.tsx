@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { AvatarPreview } from "@/components/editor/AvatarPreview";
 import { classicTextureAiSchema, parseClassicTextureAi } from "@/lib/editor/ai-schema";
 import { useDesignStore, type ToolType } from "@/lib/editor/design-state";
-import { renderDesignToCanvas } from "@/lib/editor/renderer";
+import { preloadOverlayImages, renderDesignToCanvas } from "@/lib/editor/renderer";
 import { parseDesignState, serializeDesignState } from "@/lib/editor/persistence";
 import { getAssetsForTemplate, makeLayerFromAsset, type AssetCategory } from "@/lib/editor/assets";
 import { TEMPLATE_SIZE, getZonesForTemplate } from "@/lib/editor/templates";
@@ -71,6 +71,15 @@ export default function Editor() {
   const handleOverlayImageReady = useCallback(() => {
     setImageRenderNonce((current) => current + 1);
   }, []);
+
+  const handleExportPng = useCallback(async () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    await preloadOverlayImages(state);
+    const nextTexture = renderDesignToCanvas(state, canvas, { onOverlayImageReady: handleOverlayImageReady });
+    setPreviewTexture(nextTexture);
+    downloadPng(nextTexture, `${state.template}.png`);
+  }, [handleOverlayImageReady, state]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -159,7 +168,7 @@ export default function Editor() {
         <div className="flex items-center gap-2">
           <Button variant="secondary" onClick={saveDesign}>Save</Button>
           <Button variant="secondary" onClick={loadDesign}>Load</Button>
-          <Button onClick={() => previewTexture && downloadPng(previewTexture, `${state.template}.png`)}><Download className="mr-2 h-4 w-4" />Export PNG</Button>
+          <Button onClick={() => void handleExportPng()}><Download className="mr-2 h-4 w-4" />Export PNG</Button>
         </div>
       </div>
 
