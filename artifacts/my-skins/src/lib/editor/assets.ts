@@ -1,6 +1,7 @@
-import type { DesignLayer, TemplateType } from "./design-state.ts";
+import type { AvatarCosmeticSlot, DesignLayer, TemplateType } from "./design-state.ts";
 
 export type AssetCategory = "pattern" | "graphic" | "trim" | "patch" | "accessory" | "module" | "hair";
+export type AvatarAssetCategory = "face" | "hair" | "hat" | "neck" | "shoulder" | "back" | "footwear" | "aura";
 
 export type StudioAsset = {
   id: string;
@@ -10,6 +11,15 @@ export type StudioAsset = {
   supportedTemplates: TemplateType[];
   preferredZone: string;
   overlayImage?: string;
+};
+
+export type AvatarAsset = {
+  id: string;
+  name: string;
+  category: AvatarAssetCategory;
+  slot: AvatarCosmeticSlot;
+  color: string;
+  mesh: "box" | "sphere" | "cone" | "ring" | "aura" | "visor";
 };
 
 const svgData = (svg: string) => `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
@@ -40,7 +50,23 @@ export const STUDIO_ASSETS: StudioAsset[] = [
   { id: "hair_preview_spiky", name: "Spiky Hair Preview", category: "hair", defaultColor: "#4b2e1f", supportedTemplates: ["shirt", "pants"], preferredZone: "front", overlayImage: OVERLAY_IMAGES.hair_preview_spiky },
 ];
 
+export const AVATAR_ASSETS: AvatarAsset[] = [
+  { id: "face_confident", name: "Confident Face", category: "face", slot: "face", color: "#111827", mesh: "visor" },
+  { id: "face_smiley", name: "Smiley Face", category: "face", slot: "face", color: "#1f2937", mesh: "visor" },
+  { id: "hair_spiky_ember", name: "Spiky Ember Hair", category: "hair", slot: "hair", color: "#3b2a1d", mesh: "cone" },
+  { id: "hair_wavy_midnight", name: "Wavy Midnight Hair", category: "hair", slot: "hair", color: "#111827", mesh: "sphere" },
+  { id: "hat_street_cap", name: "Street Cap", category: "hat", slot: "hat", color: "#0f172a", mesh: "ring" },
+  { id: "neck_chain_gold", name: "Gold Chain", category: "neck", slot: "neck", color: "#facc15", mesh: "ring" },
+  { id: "shoulder_orb_left", name: "Left Shoulder Orb", category: "shoulder", slot: "leftShoulder", color: "#60a5fa", mesh: "sphere" },
+  { id: "shoulder_orb_right", name: "Right Shoulder Orb", category: "shoulder", slot: "rightShoulder", color: "#60a5fa", mesh: "sphere" },
+  { id: "back_jetpack_mini", name: "Mini Jetpack", category: "back", slot: "back", color: "#334155", mesh: "box" },
+  { id: "footwear_runner_black", name: "Runner Black", category: "footwear", slot: "leftFootwear", color: "#111111", mesh: "box" },
+  { id: "footwear_runner_black_right", name: "Runner Black (Right)", category: "footwear", slot: "rightFootwear", color: "#111111", mesh: "box" },
+  { id: "aura_neon_ring", name: "Neon Aura", category: "aura", slot: "aura", color: "#22d3ee", mesh: "aura" },
+];
+
 const STUDIO_ASSET_MAP = new Map(STUDIO_ASSETS.map((asset) => [asset.id, asset] as const));
+const AVATAR_ASSET_MAP = new Map(AVATAR_ASSETS.map((asset) => [asset.id, asset] as const));
 
 export function getAssetsForTemplate(template: TemplateType) {
   return STUDIO_ASSETS.filter((asset) => asset.supportedTemplates.includes(template));
@@ -48,6 +74,18 @@ export function getAssetsForTemplate(template: TemplateType) {
 
 export function getAssetById(assetId?: string) {
   return assetId ? STUDIO_ASSET_MAP.get(assetId) : undefined;
+}
+
+export function getAvatarAssets() {
+  return AVATAR_ASSETS;
+}
+
+export function getAvatarAssetById(assetId?: string) {
+  return assetId ? AVATAR_ASSET_MAP.get(assetId) : undefined;
+}
+
+export function getAvatarAssetsForSlot(slot: AvatarCosmeticSlot) {
+  return AVATAR_ASSETS.filter((asset) => asset.slot === slot);
 }
 
 export function getLayerOverlayImage(layer: Pick<DesignLayer, "assetId" | "image">) {

@@ -5,11 +5,11 @@ import { aiGenerateDesign } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { AvatarPreview } from "@/components/editor/AvatarPreview";
-import { classicTextureAiSchema, parseClassicTextureAi } from "@/lib/editor/ai-schema";
+import { classicTextureAiSchema, parseClassicTextureAiPlan } from "@/lib/editor/ai-schema";
 import { useDesignStore, type ToolType } from "@/lib/editor/design-state";
 import { preloadOverlayImages, renderDesignToCanvas } from "@/lib/editor/renderer";
 import { parseDesignState, serializeDesignState } from "@/lib/editor/persistence";
-import { getAssetsForTemplate, makeLayerFromAsset, type AssetCategory } from "@/lib/editor/assets";
+import { getAssetsForTemplate, getAvatarAssetsForSlot, makeLayerFromAsset, type AssetCategory } from "@/lib/editor/assets";
 import { TEMPLATE_SIZE, getZonesForTemplate } from "@/lib/editor/templates";
 
 const TOOLS: Array<{ key: ToolType; label: string; hint: string }> = [
@@ -34,6 +34,31 @@ function downloadPng(dataUrl: string, filename: string) {
 
 function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
+}
+
+function buildAiAvatarLook(style: string, palette: string[]) {
+  const lower = style.toLowerCase();
+  const sporty = lower.includes("sport") || lower.includes("street");
+  const tactical = lower.includes("tactical");
+  return {
+    modelVariant: tactical ? "heroic" : sporty ? "proportioned_r15" : "classic_blocky",
+    presentation: sporty ? "androgynous" : "neutral",
+    skinTone: "#f1c27d",
+    pose: sporty ? "walk" : tactical ? "hero" : "idle",
+    scalePreset: tactical ? "stocky" : sporty ? "slender" : "standard",
+    bodyScale: { height: sporty ? 1.06 : 1, width: tactical ? 1.12 : 1, head: 1, legs: sporty ? 1.08 : 1 },
+    slots: {
+      face: { assetId: "face_confident", color: "#111827", scale: 1, offset: { x: 0, y: 0, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, visible: true },
+      hair: { assetId: sporty ? "hair_spiky_ember" : "hair_wavy_midnight", color: palette[1] ?? "#111827", scale: 1, offset: { x: 0, y: 0.06, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, visible: true },
+      neck: tactical ? { assetId: "neck_chain_gold", color: palette[0] ?? "#facc15", scale: 1, offset: { x: 0, y: 0, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, visible: true } : null,
+      leftShoulder: tactical ? { assetId: "shoulder_orb_left", scale: 0.9, offset: { x: 0, y: 0, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, visible: true } : null,
+      rightShoulder: tactical ? { assetId: "shoulder_orb_right", scale: 0.9, offset: { x: 0, y: 0, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, visible: true } : null,
+      back: tactical ? { assetId: "back_jetpack_mini", color: "#334155", scale: 1, offset: { x: 0, y: 0, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, visible: true } : null,
+      leftFootwear: { assetId: "footwear_runner_black", scale: 1, offset: { x: 0, y: 0, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, visible: true },
+      rightFootwear: { assetId: "footwear_runner_black_right", scale: 1, offset: { x: 0, y: 0, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, visible: true },
+      aura: sporty ? { assetId: "aura_neon_ring", color: palette[0] ?? "#22d3ee", scale: 1, offset: { x: 0, y: 0, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, visible: true } : null,
+    },
+  };
 }
 
 function mapAiModuleToLayer(module: {
@@ -105,7 +130,10 @@ export default function Editor() {
     setView,
     setPaintSwatch,
     addBrushPoint,
+    setAvatarPatch,
+    setAvatarSlot,
     setAiPlanPreview,
+    setAiAvatarPreview,
     applyAiPlan,
     loadSnapshot,
   } = useDesignStore();
@@ -173,18 +201,22 @@ export default function Editor() {
       const itemType = state.template === "shirt" ? "classic_shirt" : "classic_pants";
       const response = await aiGenerateDesign({ prompt: aiPrompt, itemType, style: aiStyle, theme: aiStyle });
       const payload = {
-        model: "ClassicTextureAI.v2",
+        model: "ClassicTextureAI.v3",
         garmentType: state.template,
         style: response.result.style,
         palette: response.result.colorPalette,
         zones: response.result.placement,
+        avatarLook: buildAiAvatarLook(response.result.style, response.result.colorPalette),
         layers: response.result.modules.map((module) => mapAiModuleToLayer(module, state.template)),
       };
       const parsed = classicTextureAiSchema.parse(payload);
-      setAiPlanPreview(parseClassicTextureAi(parsed));
+      const plan = parseClassicTextureAiPlan(parsed);
+      setAiPlanPreview(plan.layers);
+      setAiAvatarPreview(plan.avatarLook ?? null);
       if (parsed.palette[0]) setPaintSwatch(parsed.palette[0]);
     } catch (error) {
       setAiPlanPreview([]);
+      setAiAvatarPreview(null);
       setAiError(error instanceof Error ? error.message : "AI output rejected by schema");
     } finally {
       setAiLoading(false);
@@ -307,7 +339,7 @@ export default function Editor() {
             )}
             {(state.preview.mode === "3d" || state.preview.mode === "split") && (
               <div className="rounded-lg border border-slate-800 bg-slate-950 p-2 relative">
-                <AvatarPreview textureUrl={previewTexture} view={state.preview.view} bodyType={state.preview.bodyType === "girl" ? "slim" : state.preview.bodyType === "boy" ? "athletic" : "classic"} itemType={state.template} studioMode />
+                <AvatarPreview textureUrl={previewTexture} view={state.preview.view} bodyType={state.preview.bodyType === "girl" ? "slim" : state.preview.bodyType === "boy" ? "athletic" : "classic"} itemType={state.template} avatarState={state.avatar} studioMode />
                 <div className="absolute top-3 left-3 rounded bg-slate-900/70 border border-slate-700 px-2 py-1 text-[11px] text-slate-300 flex items-center gap-1"><Eye className="h-3 w-3" />Drag to orbit, buttons to zoom/rotate.</div>
               </div>
             )}
@@ -319,7 +351,7 @@ export default function Editor() {
               <p className="text-sm font-medium">AI Suggestion Cards</p>
               <Button size="sm" variant="secondary" onClick={() => void generateAiPlan()} disabled={aiLoading || !aiPrompt.trim()}>{aiLoading ? "Generating..." : "Generate"}</Button>
               <Button size="sm" onClick={applyAiPlan} disabled={state.aiPlanPreview.length === 0}><Wand2 className="h-3 w-3 mr-1" />Apply to Design</Button>
-              <p className="text-[11px] text-slate-400">{state.aiPlanPreview.length > 0 ? `Reviewing ${state.aiPlanPreview.length} card(s) before apply.` : "Generate cards, review placement, then apply."}</p>
+              <p className="text-[11px] text-slate-400">{state.aiPlanPreview.length > 0 ? `Reviewing ${state.aiPlanPreview.length} card(s) and avatar look before apply.` : "Generate cards, review placement, then apply."}</p>
             </div>
             <Input value={aiPrompt} onChange={(event) => setAiPrompt(event.target.value)} placeholder="Describe your Roblox clothing design..." />
             {aiError ? <p className="text-xs text-red-400 mt-2">{aiError}</p> : null}
@@ -385,6 +417,27 @@ export default function Editor() {
             <div className="grid grid-cols-2 gap-2">
               <Button variant={state.preview.view === "front" ? "default" : "outline"} onClick={() => setView("front")}>Front</Button>
               <Button variant={state.preview.view === "back" ? "default" : "outline"} onClick={() => setView("back")}>Back</Button>
+            </div>
+            <div className="space-y-2 rounded border border-slate-700 p-2">
+              <p className="text-xs uppercase text-slate-400">Avatar Styling</p>
+              <div className="grid grid-cols-3 gap-2">
+                <Button size="sm" variant={state.avatar.scalePreset === "standard" ? "default" : "outline"} onClick={() => setAvatarPatch({ scalePreset: "standard" })}>Standard</Button>
+                <Button size="sm" variant={state.avatar.scalePreset === "slender" ? "default" : "outline"} onClick={() => setAvatarPatch({ scalePreset: "slender" })}>Slender</Button>
+                <Button size="sm" variant={state.avatar.scalePreset === "stocky" ? "default" : "outline"} onClick={() => setAvatarPatch({ scalePreset: "stocky" })}>Stocky</Button>
+              </div>
+              <Input value={state.avatar.skinTone} onChange={(event) => setAvatarPatch({ skinTone: event.target.value })} placeholder="#f1c27d" />
+              <div className="grid grid-cols-2 gap-2">
+                <Button size="sm" variant={state.avatar.pose === "idle" ? "default" : "outline"} onClick={() => setAvatarPatch({ pose: "idle" })}>Idle</Button>
+                <Button size="sm" variant={state.avatar.pose === "hero" ? "default" : "outline"} onClick={() => setAvatarPatch({ pose: "hero" })}>Hero</Button>
+              </div>
+              <div className="space-y-1">
+                <p className="text-[11px] text-slate-400">Hair</p>
+                {getAvatarAssetsForSlot("hair").map((asset) => <Button key={asset.id} size="sm" variant={state.avatar.slots.hair?.assetId === asset.id ? "default" : "outline"} className="w-full justify-start" onClick={() => setAvatarSlot("hair", { assetId: asset.id, color: asset.color, scale: 1, offset: { x: 0, y: 0, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, visible: true })}>{asset.name}</Button>)}
+              </div>
+              <div className="space-y-1">
+                <p className="text-[11px] text-slate-400">Aura</p>
+                <Button size="sm" variant={state.avatar.slots.aura ? "default" : "outline"} className="w-full" onClick={() => setAvatarSlot("aura", state.avatar.slots.aura ? null : { assetId: "aura_neon_ring", color: "#22d3ee", scale: 1, offset: { x: 0, y: 0, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, visible: true })}>{state.avatar.slots.aura ? "Disable Aura" : "Enable Aura"}</Button>
+              </div>
             </div>
             <p className="text-xs text-slate-400">Export captures this exact design state and layer stack.</p>
           </div>
