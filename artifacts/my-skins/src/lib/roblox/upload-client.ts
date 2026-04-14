@@ -1,5 +1,6 @@
 import {
   createRobloxUpload,
+  disconnectRoblox,
   getRobloxLogin,
   getRobloxStatus as getRobloxStatusApi,
   getRobloxUpload,
@@ -11,6 +12,10 @@ export async function getRobloxStatus() {
 
 export async function getRobloxLoginUrl() {
   return getRobloxLogin();
+}
+
+export async function disconnectRobloxAccount() {
+  return disconnectRoblox();
 }
 
 export async function uploadToRoblox(projectId: string) {

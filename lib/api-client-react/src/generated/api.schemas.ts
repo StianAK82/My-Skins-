@@ -336,11 +336,16 @@ export type RobloxStatusConnection = {
   robloxUserId: string;
   robloxUsername: string;
   connectedAt: string;
+  accessTokenExpiresAt?: string | null;
+  lastRefreshAt?: string | null;
+  lastErrorCode?: string | null;
 } | null;
 
 export interface RobloxStatus {
   configured: boolean;
   connected: boolean;
+  connectionState: "connected" | "expired" | "disconnected";
+  reconnectRequired: boolean;
   connection: RobloxStatusConnection;
 }
 
@@ -368,7 +373,9 @@ export interface RobloxUploadEvent {
   id: string;
   uploadJobId: string;
   status: RobloxUploadStatus;
+  code?: string | null;
   message: string;
+  detail?: string | null;
   createdAt: string;
 }
 
@@ -380,6 +387,7 @@ export interface RobloxUploadJob {
   uploadJobId: string;
   projectId: string;
   status: RobloxUploadStatus;
+  reconnectRequired?: boolean;
   events: RobloxUploadEvent[];
 }
 

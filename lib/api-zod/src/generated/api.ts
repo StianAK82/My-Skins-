@@ -801,11 +801,16 @@ export const GetBillingStateResponse = zod.object({
 export const GetRobloxStatusResponse = zod.object({
   configured: zod.boolean(),
   connected: zod.boolean(),
+  connectionState: zod.enum(["connected", "expired", "disconnected"]),
+  reconnectRequired: zod.boolean(),
   connection: zod
     .object({
       robloxUserId: zod.string(),
       robloxUsername: zod.string(),
       connectedAt: zod.coerce.date(),
+      accessTokenExpiresAt: zod.coerce.date().nullable().optional(),
+      lastRefreshAt: zod.coerce.date().nullable().optional(),
+      lastErrorCode: zod.string().nullable().optional(),
     })
     .nullable(),
 });
@@ -848,6 +853,7 @@ export const GetRobloxUploadResponse = zod.object({
   uploadJobId: zod.string(),
   projectId: zod.string(),
   status: zod.enum(["queued", "processing", "completed", "failed", "blocked"]),
+  reconnectRequired: zod.boolean().optional(),
   events: zod.array(
     zod.object({
       id: zod.string(),
@@ -859,7 +865,9 @@ export const GetRobloxUploadResponse = zod.object({
         "failed",
         "blocked",
       ]),
+      code: zod.string().nullable().optional(),
       message: zod.string(),
+      detail: zod.string().nullable().optional(),
       createdAt: zod.coerce.date(),
     }),
   ),

@@ -12,5 +12,6 @@ export interface RobloxUploadJob {
   uploadJobId: string;
   projectId: string;
   status: RobloxUploadStatus;
+  reconnectRequired?: boolean;
   events: RobloxUploadEvent[];
 }

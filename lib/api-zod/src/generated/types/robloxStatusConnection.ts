@@ -10,4 +10,7 @@ export type RobloxStatusConnection = {
   robloxUserId: string;
   robloxUsername: string;
   connectedAt: Date;
+  accessTokenExpiresAt?: Date | null;
+  lastRefreshAt?: Date | null;
+  lastErrorCode?: string | null;
 } | null;
