@@ -12,6 +12,7 @@ import { parseDesignState, serializeDesignState } from "@/lib/editor/persistence
 import { getAssetsForTemplate, getAvatarAssetsForSlot, makeLayerFromAsset, type AssetCategory } from "@/lib/editor/assets";
 import { buildAiAvatarLook } from "@/lib/editor/avatar-look";
 import { normalizeAiResponse } from "@/lib/ai/normalize-ai-response";
+import { resolveAvatarSlotAssets } from "@/lib/ai/asset-resolver";
 import { TEMPLATE_SIZE, getZonesForTemplate } from "@/lib/editor/templates";
 
 const TOOLS: Array<{ key: ToolType; label: string; hint: string }> = [
@@ -77,21 +78,6 @@ function mapAiModuleToLayer(module: {
       opacity: clamp(module.opacity, 0.2, 1),
     },
   };
-}
-
-function slotAssetFromHint(slot: string, hint: string) {
-  const lowered = hint.toLowerCase();
-  if (slot === "back" && lowered.includes("wing")) return "back_dragon_wings";
-  if (slot === "hat" && (lowered.includes("horn") || lowered.includes("halo"))) return lowered.includes("halo") ? "hat_halo_ring" : "hat_cyber_horns";
-  if (slot === "aura") return lowered.includes("flame") ? "aura_flame_orbit" : "aura_neon_ring";
-  if (slot === "face") return lowered.includes("dragon") || lowered.includes("demon") ? "face_demon_glow" : "face_anime_glint";
-  if (slot === "hair") return lowered.includes("anime") ? "hair_twin_tail_pop" : "hair_wavy_midnight";
-  if (slot === "leftFootwear") return "footwear_tech_boot_l";
-  if (slot === "rightFootwear") return "footwear_tech_boot_r";
-  if (slot === "leftShoulder") return "shoulder_guard_left";
-  if (slot === "rightShoulder") return "shoulder_guard_right";
-  if (slot === "neck") return "neck_chain_gold";
-  return "face_confident";
 }
 
 export default function Editor() {
@@ -198,12 +184,12 @@ export default function Editor() {
         [response.result.style, ...response.result.intent.styleVibes].join(" "),
         response.result.colorPalette,
       );
-      for (const slotPlan of response.result.avatarSlotPlan) {
-        const mappedAssetId = slotAssetFromHint(slotPlan.slot, slotPlan.assetHint);
+      const resolvedSlots = resolveAvatarSlotAssets(response.result);
+      for (const slotPlan of resolvedSlots) {
         previewAvatar.slots = {
           ...previewAvatar.slots,
           [slotPlan.slot]: {
-            assetId: mappedAssetId,
+            assetId: slotPlan.assetId,
             scale: 1,
             visible: true,
             color: slotPlan.color,
@@ -230,9 +216,10 @@ export default function Editor() {
           ...(response.result.exportablePlan.classicShirt ? ["Classic shirt texture"] : []),
           ...(response.result.exportablePlan.classicPants ? ["Classic pants texture"] : []),
         ],
-        previewOnly: response.result.previewOnlyPlan.cosmetics.map((entry) => `${entry.slot}: ${entry.label}`),
+        previewOnly: response.result.previewOnlyPlan.cosmetics.map((entry) => `${entry.role} ${entry.slot}: ${entry.label}`),
         appliedTargets: [
           "Applied to shirt/pants layers",
+          ...resolvedSlots.map((slot) => `Resolved ${slot.role} ${slot.slot} -> ${slot.assetId}`),
           ...(response.result.intent.includesAvatarLook ? ["Applied to avatar look preview"] : []),
         ],
       });

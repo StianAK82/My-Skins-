@@ -17,6 +17,7 @@ export const moduleTypeSchema = z.enum([
 const intentFocusSchema = z.enum(["clothing", "outfit", "avatar_look", "accessory", "creature_fantasy", "effect_aura", "mixed"]);
 const styleVibeSchema = z.enum(["anime", "cyber", "dark_flame", "fantasy", "cute", "tactical", "streetwear", "villain", "dragon", "angelic", "sporty"]);
 const previewSlotSchema = z.enum(["face", "hair", "hat", "neck", "leftShoulder", "rightShoulder", "back", "leftFootwear", "rightFootwear", "aura"]);
+const assetRoleSchema = z.enum(["hero", "support", "decorative"]);
 
 const aiIntentSchema = z.object({
   primaryFocus: intentFocusSchema,
@@ -47,6 +48,7 @@ const accessoryPlanSchema = z.object({
     name: z.string().min(1),
     slot: previewSlotSchema,
     detail: z.string().min(1),
+    role: assetRoleSchema,
     exportStatus: z.enum(["preview_only"]),
   }).strict()).max(12),
 }).strict();
@@ -56,6 +58,7 @@ const previewOnlyPlanSchema = z.object({
     category: z.string().min(1),
     label: z.string().min(1),
     slot: previewSlotSchema,
+    role: assetRoleSchema,
   }).strict()).max(16),
 }).strict();
 
@@ -68,6 +71,8 @@ const exportablePlanSchema = z.object({
 const avatarSlotPlanSchema = z.object({
   slot: previewSlotSchema,
   assetHint: z.string().min(1),
+  role: assetRoleSchema,
+  rationale: z.string().min(1),
   color: hexColorSchema.optional(),
 }).strict();
 

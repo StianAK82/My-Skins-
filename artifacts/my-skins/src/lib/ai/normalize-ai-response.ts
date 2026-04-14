@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { AiLifecycleMeta } from "@/types/lifecycle";
 
 const previewSlotSchema = z.enum(["face", "hair", "hat", "neck", "leftShoulder", "rightShoulder", "back", "leftFootwear", "rightFootwear", "aura"]);
+const assetRoleSchema = z.enum(["hero", "support", "decorative"]);
 
 const aiResponseSchema = z.object({
   meta: z.object({
@@ -43,11 +44,12 @@ const aiResponseSchema = z.object({
         name: z.string(),
         slot: previewSlotSchema,
         detail: z.string(),
+        role: assetRoleSchema,
         exportStatus: z.literal("preview_only"),
       })),
     }),
     previewOnlyPlan: z.object({
-      cosmetics: z.array(z.object({ category: z.string(), label: z.string(), slot: previewSlotSchema })),
+      cosmetics: z.array(z.object({ category: z.string(), label: z.string(), slot: previewSlotSchema, role: assetRoleSchema })),
     }),
     exportablePlan: z.object({
       classicShirt: z.boolean(),
@@ -57,6 +59,8 @@ const aiResponseSchema = z.object({
     avatarSlotPlan: z.array(z.object({
       slot: previewSlotSchema,
       assetHint: z.string(),
+      role: assetRoleSchema,
+      rationale: z.string(),
       color: z.string().optional(),
     })),
     placement: z.object({
