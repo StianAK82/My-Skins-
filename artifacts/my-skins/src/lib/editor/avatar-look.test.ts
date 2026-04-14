@@ -16,4 +16,8 @@ test("AI avatar look mapping creates distinct anime/cyber/flame combinations", (
   const flame = buildAiAvatarLook("Flame streetwear", ["#fb923c", "#0f172a"]);
   assert.equal(flame.slots?.aura?.assetId, "aura_flame_orbit");
   assert.equal(flame.slots?.back?.assetId, "back_blade_rig");
+
+  const dragon = buildAiAvatarLook("Dragon warrior", ["#fb923c", "#0f172a"]);
+  assert.equal(dragon.slots?.back?.assetId, "back_dragon_wings");
+  assert.equal(dragon.slots?.hat?.assetId, "hat_cyber_horns");
 });

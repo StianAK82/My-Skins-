@@ -11,6 +11,7 @@ import { preloadOverlayImages, renderDesignToCanvas } from "@/lib/editor/rendere
 import { parseDesignState, serializeDesignState } from "@/lib/editor/persistence";
 import { getAssetsForTemplate, getAvatarAssetsForSlot, makeLayerFromAsset, type AssetCategory } from "@/lib/editor/assets";
 import { buildAiAvatarLook } from "@/lib/editor/avatar-look";
+import { normalizeAiResponse } from "@/lib/ai/normalize-ai-response";
 import { TEMPLATE_SIZE, getZonesForTemplate } from "@/lib/editor/templates";
 
 const TOOLS: Array<{ key: ToolType; label: string; hint: string }> = [
@@ -78,6 +79,21 @@ function mapAiModuleToLayer(module: {
   };
 }
 
+function slotAssetFromHint(slot: string, hint: string) {
+  const lowered = hint.toLowerCase();
+  if (slot === "back" && lowered.includes("wing")) return "back_dragon_wings";
+  if (slot === "hat" && (lowered.includes("horn") || lowered.includes("halo"))) return lowered.includes("halo") ? "hat_halo_ring" : "hat_cyber_horns";
+  if (slot === "aura") return lowered.includes("flame") ? "aura_flame_orbit" : "aura_neon_ring";
+  if (slot === "face") return lowered.includes("dragon") || lowered.includes("demon") ? "face_demon_glow" : "face_anime_glint";
+  if (slot === "hair") return lowered.includes("anime") ? "hair_twin_tail_pop" : "hair_wavy_midnight";
+  if (slot === "leftFootwear") return "footwear_tech_boot_l";
+  if (slot === "rightFootwear") return "footwear_tech_boot_r";
+  if (slot === "leftShoulder") return "shoulder_guard_left";
+  if (slot === "rightShoulder") return "shoulder_guard_right";
+  if (slot === "neck") return "neck_chain_gold";
+  return "face_confident";
+}
+
 export default function Editor() {
   const { id = "local" } = useParams<{ id?: string }>();
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -111,6 +127,7 @@ export default function Editor() {
     setAvatarSlot,
     setAiPlanPreview,
     setAiAvatarPreview,
+    setAiResultSummary,
     applyAiPlan,
     loadSnapshot,
   } = useDesignStore();
@@ -176,24 +193,54 @@ export default function Editor() {
     setAiError("");
     try {
       const itemType = state.template === "shirt" ? "classic_shirt" : "classic_pants";
-      const response = await aiGenerateDesign({ prompt: aiPrompt, itemType, style: aiStyle, theme: aiStyle });
+      const response = normalizeAiResponse(await aiGenerateDesign({ prompt: aiPrompt, itemType, style: aiStyle, theme: aiStyle }));
+      const previewAvatar = buildAiAvatarLook(
+        [response.result.style, ...response.result.intent.styleVibes].join(" "),
+        response.result.colorPalette,
+      );
+      for (const slotPlan of response.result.avatarSlotPlan) {
+        const mappedAssetId = slotAssetFromHint(slotPlan.slot, slotPlan.assetHint);
+        previewAvatar.slots = {
+          ...previewAvatar.slots,
+          [slotPlan.slot]: {
+            assetId: mappedAssetId,
+            scale: 1,
+            visible: true,
+            color: slotPlan.color,
+            offset: { x: 0, y: 0, z: 0 },
+            rotation: { x: 0, y: 0, z: 0 },
+          },
+        };
+      }
       const payload = {
         model: "ClassicTextureAI.v3",
         garmentType: state.template,
         style: response.result.style,
         palette: response.result.colorPalette,
         zones: response.result.placement,
-        avatarLook: buildAiAvatarLook(response.result.style, response.result.colorPalette),
+        avatarLook: previewAvatar,
         layers: response.result.modules.map((module) => mapAiModuleToLayer(module, state.template)),
       };
       const parsed = classicTextureAiSchema.parse(payload);
       const plan = parseClassicTextureAiPlan(parsed);
       setAiPlanPreview(plan.layers);
       setAiAvatarPreview(plan.avatarLook ?? null);
+      setAiResultSummary({
+        exportable: [
+          ...(response.result.exportablePlan.classicShirt ? ["Classic shirt texture"] : []),
+          ...(response.result.exportablePlan.classicPants ? ["Classic pants texture"] : []),
+        ],
+        previewOnly: response.result.previewOnlyPlan.cosmetics.map((entry) => `${entry.slot}: ${entry.label}`),
+        appliedTargets: [
+          "Applied to shirt/pants layers",
+          ...(response.result.intent.includesAvatarLook ? ["Applied to avatar look preview"] : []),
+        ],
+      });
       if (parsed.palette[0]) setPaintSwatch(parsed.palette[0]);
     } catch (error) {
       setAiPlanPreview([]);
       setAiAvatarPreview(null);
+      setAiResultSummary(null);
       setAiError(error instanceof Error ? error.message : "AI output rejected by schema");
     } finally {
       setAiLoading(false);
@@ -333,13 +380,23 @@ export default function Editor() {
             <Input value={aiPrompt} onChange={(event) => setAiPrompt(event.target.value)} placeholder="Describe your Roblox clothing design..." />
             {aiError ? <p className="text-xs text-red-400 mt-2">{aiError}</p> : null}
             {state.aiPlanPreview.length > 0 ? (
-              <div className="grid grid-cols-2 gap-2 mt-2">
-                {state.aiPlanPreview.map((layer) => (
-                  <div key={layer.id} className="rounded border border-slate-700 p-2 text-xs">
-                    <p className="font-medium">{layer.name}</p>
-                    <p className="text-slate-400">{layer.type} · {layer.zone}</p>
+              <div className="space-y-2 mt-2">
+                <div className="grid grid-cols-2 gap-2">
+                  {state.aiPlanPreview.map((layer) => (
+                    <div key={layer.id} className="rounded border border-slate-700 p-2 text-xs">
+                      <p className="font-medium">{layer.name}</p>
+                      <p className="text-slate-400">{layer.type} · {layer.zone}</p>
+                    </div>
+                  ))}
+                </div>
+                {state.aiResultSummary ? (
+                  <div className="rounded border border-slate-700/70 bg-slate-900/60 p-2 text-[11px] space-y-1">
+                    <p className="font-semibold text-slate-200">AI result breakdown</p>
+                    <p className="text-slate-400">Exportable clothing: {state.aiResultSummary.exportable.join(", ") || "none"}</p>
+                    <p className="text-slate-400">Avatar preview cosmetics: {state.aiResultSummary.previewOnly.join(", ") || "none"}</p>
+                    <p className="text-slate-400">Applied targets: {state.aiResultSummary.appliedTargets.join(", ")}</p>
                   </div>
-                ))}
+                ) : null}
               </div>
             ) : <p className="text-xs text-slate-400 mt-2">No AI cards yet. Generate first, review cards, then apply.</p>}
           </div>

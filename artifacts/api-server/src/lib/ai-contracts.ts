@@ -14,6 +14,63 @@ export const moduleTypeSchema = z.enum([
   "stripe",
 ]);
 
+const intentFocusSchema = z.enum(["clothing", "outfit", "avatar_look", "accessory", "creature_fantasy", "effect_aura", "mixed"]);
+const styleVibeSchema = z.enum(["anime", "cyber", "dark_flame", "fantasy", "cute", "tactical", "streetwear", "villain", "dragon", "angelic", "sporty"]);
+const previewSlotSchema = z.enum(["face", "hair", "hat", "neck", "leftShoulder", "rightShoulder", "back", "leftFootwear", "rightFootwear", "aura"]);
+
+const aiIntentSchema = z.object({
+  primaryFocus: intentFocusSchema,
+  requestKinds: z.array(intentFocusSchema).min(1).max(7),
+  styleVibes: z.array(styleVibeSchema).max(8),
+  includesAvatarLook: z.boolean(),
+  includesAccessories: z.boolean(),
+  includesEffects: z.boolean(),
+  fantasyArchetype: z.enum(["dragon", "demon", "angel"]).nullable(),
+}).strict();
+
+const clothingPlanSchema = z.object({
+  summary: z.string().min(1),
+  layers: z.array(z.string().min(1)).min(1).max(12),
+  paletteLogic: z.string().min(1),
+}).strict();
+
+const avatarLookPlanSchema = z.object({
+  identity: z.string().min(1),
+  silhouette: z.string().min(1),
+  hair: z.string().min(1),
+  face: z.string().min(1),
+  aura: z.string().nullable(),
+}).strict();
+
+const accessoryPlanSchema = z.object({
+  items: z.array(z.object({
+    name: z.string().min(1),
+    slot: previewSlotSchema,
+    detail: z.string().min(1),
+    exportStatus: z.enum(["preview_only"]),
+  }).strict()).max(12),
+}).strict();
+
+const previewOnlyPlanSchema = z.object({
+  cosmetics: z.array(z.object({
+    category: z.string().min(1),
+    label: z.string().min(1),
+    slot: previewSlotSchema,
+  }).strict()).max(16),
+}).strict();
+
+const exportablePlanSchema = z.object({
+  classicShirt: z.boolean(),
+  classicPants: z.boolean(),
+  notes: z.array(z.string().min(1)).min(1).max(8),
+}).strict();
+
+const avatarSlotPlanSchema = z.object({
+  slot: previewSlotSchema,
+  assetHint: z.string().min(1),
+  color: hexColorSchema.optional(),
+}).strict();
+
 export const designModuleSchema = z.object({
   id: z.string().min(1),
   type: moduleTypeSchema,
@@ -49,6 +106,13 @@ export const aiDesignSchema = z.object({
   theme: z.string().min(1),
   colorPalette: z.array(hexColorSchema).min(2).max(8),
   designElements: z.array(z.string().min(1)).min(1).max(12),
+  intent: aiIntentSchema,
+  clothingPlan: clothingPlanSchema,
+  avatarLookPlan: avatarLookPlanSchema,
+  accessoryPlan: accessoryPlanSchema,
+  previewOnlyPlan: previewOnlyPlanSchema,
+  exportablePlan: exportablePlanSchema,
+  avatarSlotPlan: z.array(avatarSlotPlanSchema).max(12),
   placement: placementSchema,
   modules: z.array(designModuleSchema).max(50),
   editorInstructions: editorInstructionsSchema,

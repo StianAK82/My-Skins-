@@ -60,6 +60,11 @@ export type DesignState = {
   paintSwatch: string;
   aiPlanPreview: DesignLayer[];
   aiAvatarPreview: AvatarStatePatch | null;
+  aiResultSummary: {
+    exportable: string[];
+    previewOnly: string[];
+    appliedTargets: string[];
+  } | null;
 };
 
 const defaultTransform = (): LayerTransform => ({ x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, visible: true, locked: false });
@@ -97,6 +102,7 @@ const initialState: DesignState = {
   paintSwatch: "#ef4444",
   aiPlanPreview: [],
   aiAvatarPreview: null,
+  aiResultSummary: null,
 };
 
 type DesignStore = {
@@ -119,6 +125,7 @@ type DesignStore = {
   addBrushPoint: (layerId: string, point: BrushPoint) => void;
   setAiPlanPreview: (layers: DesignLayer[]) => void;
   setAiAvatarPreview: (avatar: AvatarStatePatch | null) => void;
+  setAiResultSummary: (summary: DesignState["aiResultSummary"]) => void;
   applyAiPlan: () => void;
   loadSnapshot: (snapshot: DesignState) => void;
 };
@@ -186,6 +193,11 @@ export const designStateSchema = z.object({
       aura: avatarSlotItemSchema.nullable().optional(),
     }).optional(),
   }).nullable(),
+  aiResultSummary: z.object({
+    exportable: z.array(z.string()),
+    previewOnly: z.array(z.string()),
+    appliedTargets: z.array(z.string()),
+  }).nullable().optional().default(null),
   aiPlanPreview: z.array(z.object({
     id: z.string(), name: z.string(), type: z.enum(["imageLayer", "textLayer", "brushLayer", "accessoryLayer", "paintLayerSet", "moduleLayer"]), zone: z.string(),
     assetId: z.string().optional(), assetCategory: z.string().optional(), color: z.string().optional(), image: z.string().optional(), text: z.string().optional(), fontSize: z.number().optional(),
@@ -236,6 +248,7 @@ export const useDesignStore = create<DesignStore>((set) => ({
   addBrushPoint: (layerId, point) => set((s) => ({ state: { ...s.state, layers: s.state.layers.map((layer) => layer.id === layerId ? { ...layer, points: [...(layer.points ?? []), point] } : layer) } })),
   setAiPlanPreview: (layers) => set((s) => ({ state: { ...s.state, aiPlanPreview: layers } })),
   setAiAvatarPreview: (avatar) => set((s) => ({ state: { ...s.state, aiAvatarPreview: avatar } })),
+  setAiResultSummary: (summary) => set((s) => ({ state: { ...s.state, aiResultSummary: summary } })),
   applyAiPlan: () => set((s) => {
     const appliedLayers = s.state.aiPlanPreview.map((layer) => ({ ...layer, id: uid("layer") }));
     const nextAvatar = s.state.aiAvatarPreview ? {
@@ -251,6 +264,7 @@ export const useDesignStore = create<DesignStore>((set) => ({
         selectedLayerId: appliedLayers.at(-1)?.id ?? s.state.selectedLayerId,
         aiPlanPreview: [],
         aiAvatarPreview: null,
+        aiResultSummary: null,
       },
     };
   }),

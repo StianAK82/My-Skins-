@@ -10,6 +10,42 @@ const base = {
   theme: "neon racing",
   colorPalette: ["#111111", "#00AEEF", "#EEEEEE"],
   designElements: ["stripes", "trim"],
+  intent: {
+    primaryFocus: "mixed",
+    requestKinds: ["clothing", "avatar_look"],
+    styleVibes: ["cyber"],
+    includesAvatarLook: true,
+    includesAccessories: true,
+    includesEffects: true,
+    fantasyArchetype: null,
+  },
+  clothingPlan: {
+    summary: "Cyber shirt with sharp trim layering",
+    layers: ["base fill", "chest stripe", "sleeve trims"],
+    paletteLogic: "Dark base with cyan hero accents",
+  },
+  avatarLookPlan: {
+    identity: "cyber avatar",
+    silhouette: "structured",
+    hair: "angular",
+    face: "stoic",
+    aura: "energy ring",
+  },
+  accessoryPlan: {
+    items: [{ name: "micro wings", slot: "back", detail: "small tech wings", exportStatus: "preview_only" }],
+  },
+  previewOnlyPlan: {
+    cosmetics: [{ category: "accessory", label: "micro_wings", slot: "back" }],
+  },
+  exportablePlan: {
+    classicShirt: true,
+    classicPants: false,
+    notes: ["Classic layers export now", "Avatar extras are preview only"],
+  },
+  avatarSlotPlan: [
+    { slot: "face", assetHint: "face_stylized", color: "#EEEEEE" },
+    { slot: "back", assetHint: "micro_wings", color: "#00AEEF" },
+  ],
   placement: {
     front: "bold center stripe",
     back: "small logo-free panel",
@@ -43,6 +79,7 @@ test("placement validation accepts pants with disabled sleeves", () => {
   const payload = aiDesignSchema.parse({
     ...base,
     itemType: "classic_pants",
+    exportablePlan: { ...base.exportablePlan, classicShirt: false, classicPants: true },
     placement: {
       front: "knee stripe",
       back: "rear stripe",
