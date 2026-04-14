@@ -1,44 +1,124 @@
 import type { AvatarStatePatch } from "./design-state.ts";
 
+type AvatarBundle = {
+  face: string;
+  hair: string;
+  hat: string | null;
+  neck: string | null;
+  leftShoulder: string | null;
+  rightShoulder: string | null;
+  back: string | null;
+  leftFootwear: string;
+  rightFootwear: string;
+  aura: string | null;
+};
+
 function zeroTransform() {
   return { scale: 1, offset: { x: 0, y: 0, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, visible: true };
 }
 
+function chooseBundle(style: string): AvatarBundle {
+  const lower = style.toLowerCase();
+  if (lower.includes("anime")) {
+    return {
+      face: "face_anime_glint",
+      hair: "hair_twin_tail_pop",
+      hat: null,
+      neck: "neck_scarf_neo",
+      leftShoulder: null,
+      rightShoulder: null,
+      back: null,
+      leftFootwear: "footwear_runner_black",
+      rightFootwear: "footwear_runner_black_right",
+      aura: "aura_neon_ring",
+    };
+  }
+  if (lower.includes("cyber") || lower.includes("tech") || lower.includes("tactical")) {
+    return {
+      face: "face_stoic",
+      hair: "hair_wavy_midnight",
+      hat: "hat_cyber_horns",
+      neck: "neck_scarf_neo",
+      leftShoulder: "shoulder_guard_left",
+      rightShoulder: "shoulder_guard_right",
+      back: "back_jetpack_mini",
+      leftFootwear: "footwear_tech_boot_l",
+      rightFootwear: "footwear_tech_boot_r",
+      aura: "aura_pixel_spark",
+    };
+  }
+  if (lower.includes("dark") || lower.includes("goth") || lower.includes("flame") || lower.includes("fire")) {
+    return {
+      face: "face_stoic",
+      hair: "hair_wavy_midnight",
+      hat: "hat_beanie_soft",
+      neck: "neck_chain_gold",
+      leftShoulder: "shoulder_orb_left",
+      rightShoulder: "shoulder_orb_right",
+      back: "back_blade_rig",
+      leftFootwear: "footwear_tech_boot_l",
+      rightFootwear: "footwear_tech_boot_r",
+      aura: lower.includes("flame") || lower.includes("fire") ? "aura_flame_orbit" : null,
+    };
+  }
+  if (lower.includes("sport") || lower.includes("street")) {
+    return {
+      face: "face_confident",
+      hair: "hair_spiky_ember",
+      hat: "hat_street_cap",
+      neck: "neck_chain_gold",
+      leftShoulder: null,
+      rightShoulder: null,
+      back: null,
+      leftFootwear: "footwear_runner_black",
+      rightFootwear: "footwear_runner_black_right",
+      aura: "aura_neon_ring",
+    };
+  }
+  return {
+    face: "face_wink_star",
+    hair: "hair_spiky_ember",
+    hat: null,
+    neck: "neck_chain_gold",
+    leftShoulder: null,
+    rightShoulder: null,
+    back: null,
+    leftFootwear: "footwear_runner_black",
+    rightFootwear: "footwear_runner_black_right",
+    aura: null,
+  };
+}
+
 export function buildAiAvatarLook(style: string, palette: string[]): AvatarStatePatch {
   const lower = style.toLowerCase();
-  const dark = lower.includes("dark") || lower.includes("goth");
   const anime = lower.includes("anime");
-  const cyber = lower.includes("cyber") || lower.includes("tech");
+  const cyber = lower.includes("cyber") || lower.includes("tech") || lower.includes("tactical");
   const street = lower.includes("street") || lower.includes("sport");
-  const flame = lower.includes("flame") || lower.includes("fire");
-
-  const auraAssetId = flame ? "aura_flame_orbit" : cyber ? "aura_pixel_spark" : street ? "aura_neon_ring" : null;
-  const hairAssetId = anime ? "hair_twin_tail_pop" : dark ? "hair_wavy_midnight" : "hair_spiky_ember";
-  const faceAssetId = anime ? "face_anime_glint" : dark ? "face_stoic" : "face_confident";
+  const bundle = chooseBundle(style);
 
   return {
     modelVariant: cyber ? "heroic" : street ? "proportioned_r15" : "classic_blocky",
-    presentation: anime || street ? "androgynous" : "neutral",
+    presentation: anime || street ? "androgynous" : cyber ? "masculine" : "neutral",
     skinTone: "#f1c27d",
     pose: street ? "walk" : cyber ? "hero" : "idle",
     scalePreset: cyber ? "stocky" : anime ? "slender" : "standard",
     bodyScale: {
       height: anime ? 1.08 : 1,
-      width: dark ? 0.98 : cyber ? 1.1 : 1,
+      width: cyber ? 1.08 : lower.includes("dark") ? 0.98 : 1,
       head: anime ? 1.08 : 1,
-      legs: street ? 1.1 : 1,
+      legs: street ? 1.08 : 1,
     },
     slots: {
-      face: { assetId: faceAssetId, color: "#0f172a", ...zeroTransform() },
-      hair: { assetId: hairAssetId, color: palette[1] ?? "#111827", ...zeroTransform(), offset: { x: 0, y: 0.05, z: 0 } },
-      hat: cyber ? { assetId: "hat_cyber_horns", color: palette[0] ?? "#38bdf8", ...zeroTransform() } : street ? { assetId: "hat_street_cap", color: palette[0] ?? "#0f172a", ...zeroTransform() } : dark ? { assetId: "hat_beanie_soft", color: "#1e293b", ...zeroTransform() } : null,
-      neck: cyber ? { assetId: "neck_scarf_neo", color: palette[0] ?? "#22c55e", ...zeroTransform() } : { assetId: "neck_chain_gold", color: palette[0] ?? "#facc15", ...zeroTransform() },
-      leftShoulder: cyber ? { assetId: "shoulder_guard_left", color: "#94a3b8", ...zeroTransform(), scale: 0.95 } : dark ? { assetId: "shoulder_orb_left", color: "#60a5fa", ...zeroTransform(), scale: 0.85 } : null,
-      rightShoulder: cyber ? { assetId: "shoulder_guard_right", color: "#94a3b8", ...zeroTransform(), scale: 0.95 } : dark ? { assetId: "shoulder_orb_right", color: "#60a5fa", ...zeroTransform(), scale: 0.85 } : null,
-      back: cyber ? { assetId: "back_jetpack_mini", color: "#334155", ...zeroTransform() } : flame ? { assetId: "back_blade_rig", color: "#475569", ...zeroTransform() } : null,
-      leftFootwear: { assetId: cyber ? "footwear_tech_boot_l" : "footwear_runner_black", ...zeroTransform() },
-      rightFootwear: { assetId: cyber ? "footwear_tech_boot_r" : "footwear_runner_black_right", ...zeroTransform() },
-      aura: auraAssetId ? { assetId: auraAssetId, color: palette[0] ?? "#22d3ee", ...zeroTransform() } : null,
+      face: { assetId: bundle.face, color: "#0f172a", ...zeroTransform() },
+      hair: { assetId: bundle.hair, color: palette[1] ?? "#111827", ...zeroTransform(), offset: { x: 0, y: 0.05, z: 0 } },
+      hat: bundle.hat ? { assetId: bundle.hat, color: palette[0] ?? "#334155", ...zeroTransform() } : null,
+      neck: bundle.neck ? { assetId: bundle.neck, color: palette[0] ?? "#22c55e", ...zeroTransform() } : null,
+      leftShoulder: bundle.leftShoulder ? { assetId: bundle.leftShoulder, color: "#94a3b8", ...zeroTransform(), scale: 0.95 } : null,
+      rightShoulder: bundle.rightShoulder ? { assetId: bundle.rightShoulder, color: "#94a3b8", ...zeroTransform(), scale: 0.95 } : null,
+      back: bundle.back ? { assetId: bundle.back, color: "#475569", ...zeroTransform() } : null,
+      leftFootwear: { assetId: bundle.leftFootwear, ...zeroTransform() },
+      rightFootwear: { assetId: bundle.rightFootwear, ...zeroTransform() },
+      aura: bundle.aura ? { assetId: bundle.aura, color: palette[0] ?? "#22d3ee", ...zeroTransform() } : null,
     },
   };
 }

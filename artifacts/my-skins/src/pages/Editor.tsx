@@ -89,6 +89,7 @@ export default function Editor() {
   const [aiLoading, setAiLoading] = useState(false);
   const [imageRenderNonce, setImageRenderNonce] = useState(0);
   const [saveStatus, setSaveStatus] = useState<string>("");
+  const [previewFocus, setPreviewFocus] = useState<"clothing" | "avatar">("clothing");
 
   const {
     state,
@@ -315,7 +316,7 @@ export default function Editor() {
             )}
             {(state.preview.mode === "3d" || state.preview.mode === "split") && (
               <div className="rounded-lg border border-slate-800 bg-slate-950 p-2 relative">
-                <AvatarPreview textureUrl={previewTexture} view={state.preview.view} bodyType={state.preview.bodyType === "girl" ? "slim" : state.preview.bodyType === "boy" ? "athletic" : "classic"} itemType={state.template} avatarState={state.avatar} studioMode />
+                <AvatarPreview textureUrl={previewTexture} view={state.preview.view} previewMode={previewFocus} bodyType={state.preview.bodyType === "girl" ? "slim" : state.preview.bodyType === "boy" ? "athletic" : "classic"} itemType={state.template} avatarState={state.avatar} studioMode />
                 <div className="absolute top-3 left-3 rounded bg-slate-900/70 border border-slate-700 px-2 py-1 text-[11px] text-slate-300 flex items-center gap-1"><Eye className="h-3 w-3" />Drag to orbit, buttons to zoom/rotate.</div>
               </div>
             )}
@@ -393,6 +394,10 @@ export default function Editor() {
             <div className="grid grid-cols-2 gap-2">
               <Button variant={state.preview.view === "front" ? "default" : "outline"} onClick={() => setView("front")}>Front</Button>
               <Button variant={state.preview.view === "back" ? "default" : "outline"} onClick={() => setView("back")}>Back</Button>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <Button variant={previewFocus === "clothing" ? "default" : "outline"} onClick={() => setPreviewFocus("clothing")}>Clothing Focus</Button>
+              <Button variant={previewFocus === "avatar" ? "default" : "outline"} onClick={() => setPreviewFocus("avatar")}>Avatar Focus</Button>
             </div>
             <div className="space-y-2 rounded border border-slate-700 p-2">
               <p className="text-xs uppercase text-slate-400">Avatar Styling</p>
