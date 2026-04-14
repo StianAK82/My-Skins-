@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { useDesignStore } from "./design-state.ts";
 
-test("applyAiPlan applies clothing layers + avatar preview and resets AI preview state", () => {
+test("applyAiPlan applies clothing layers + avatar preview and keeps applied summary for reload clarity", () => {
   useDesignStore.setState((s) => ({
     ...s,
     state: {
@@ -28,5 +28,5 @@ test("applyAiPlan applies clothing layers + avatar preview and resets AI preview
   assert.equal(next.avatar.slots.back?.assetId, "back_blade_rig");
   assert.equal(next.aiPlanPreview.length, 0);
   assert.equal(next.aiAvatarPreview, null);
-  assert.equal(next.aiResultSummary, null);
+  assert.deepEqual(next.aiResultSummary, { exportable: ["Classic shirt texture"], previewOnly: ["hero back: back_blade_rig"], appliedTargets: ["Applied to shirt/pants layers", "Applied to avatar look preview"] });
 });

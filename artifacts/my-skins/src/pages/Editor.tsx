@@ -133,7 +133,7 @@ export default function Editor() {
     const canvas = canvasRef.current;
     if (!canvas || !hasLayers) return;
     await preloadOverlayImages(state);
-    const nextTexture = renderDesignToCanvas(state, canvas, { onOverlayImageReady: handleOverlayImageReady });
+    const nextTexture = renderDesignToCanvas(state, canvas, { onOverlayImageReady: handleOverlayImageReady, target: "export" });
     setPreviewTexture(nextTexture);
     downloadPng(nextTexture, `${state.template}.png`);
     setSaveStatus("Exported PNG from current design state.");

@@ -1,10 +1,12 @@
-import { getLayerOverlayImage } from "./assets.ts";
+import { getAssetById, getLayerOverlayImage } from "./assets.ts";
 import type { DesignLayer, DesignState } from "./design-state.ts";
 import { TEMPLATE_SIZE, TEMPLATE_ZONES, type ZoneRect } from "./templates.ts";
 
 type ImageCacheEntry = { status: "loading" | "loaded" | "error"; image: CanvasImageSource | null };
 
-type RenderOptions = { onOverlayImageReady?: () => void };
+type RenderTarget = "preview" | "export";
+
+type RenderOptions = { onOverlayImageReady?: () => void; target?: RenderTarget };
 
 const overlayImageCache = new Map<string, ImageCacheEntry>();
 
@@ -36,6 +38,41 @@ function getOverlayImage(layer: DesignLayer, options?: RenderOptions): CanvasIma
 
 function getOverlaySource(layer: DesignLayer) {
   return getLayerOverlayImage(layer);
+}
+
+function isFiniteNumber(value: number) {
+  return Number.isFinite(value);
+}
+
+function clamp(value: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, value));
+}
+
+function normalizeLayerTransform(layer: DesignLayer): DesignLayer["transform"] {
+  const scale = isFiniteNumber(layer.transform.scale) ? clamp(layer.transform.scale, 0.1, 4) : 1;
+  const rotation = isFiniteNumber(layer.transform.rotation) ? clamp(layer.transform.rotation, -360, 360) : 0;
+  const x = isFiniteNumber(layer.transform.x) ? clamp(layer.transform.x, -TEMPLATE_SIZE.width, TEMPLATE_SIZE.width) : 0;
+  const y = isFiniteNumber(layer.transform.y) ? clamp(layer.transform.y, -TEMPLATE_SIZE.height, TEMPLATE_SIZE.height) : 0;
+  const opacity = isFiniteNumber(layer.transform.opacity) ? clamp(layer.transform.opacity, 0, 1) : 1;
+  return {
+    ...layer.transform,
+    x,
+    y,
+    scale,
+    rotation,
+    opacity,
+    visible: layer.transform.visible !== false,
+    locked: Boolean(layer.transform.locked),
+  };
+}
+
+function shouldRenderLayerInTarget(layer: DesignLayer, target: RenderTarget) {
+  if (target === "preview") return true;
+  if (layer.type === "accessoryLayer") return false;
+  const layerAsset = getAssetById(layer.assetId);
+  if (layerAsset?.previewOnly) return false;
+  if (layer.assetCategory === "hair" || layer.assetCategory === "accessory") return false;
+  return true;
 }
 
 function drawText(ctx: CanvasRenderingContext2D, layer: DesignLayer) {
@@ -242,6 +279,7 @@ function drawOverlayLayer(ctx: CanvasRenderingContext2D, state: DesignState, lay
 
 export function preloadOverlayImages(state: DesignState) {
   const imageLayers = state.layers
+    .filter((layer) => shouldRenderLayerInTarget(layer, "export"))
     .map((layer) => getOverlaySource(layer))
     .filter((src): src is string => Boolean(src));
 
@@ -271,6 +309,7 @@ export function preloadOverlayImages(state: DesignState) {
 }
 
 export function renderDesignToCanvas(state: DesignState, canvas: HTMLCanvasElement, options?: RenderOptions): string {
+  const target = options?.target ?? "preview";
   canvas.width = TEMPLATE_SIZE.width;
   canvas.height = TEMPLATE_SIZE.height;
   const ctx = canvas.getContext("2d");
@@ -281,12 +320,14 @@ export function renderDesignToCanvas(state: DesignState, canvas: HTMLCanvasEleme
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
   state.layers.forEach((layer) => {
-    if (!layer.transform.visible) return;
-    if (layer.type === "paintLayerSet") drawZoneColor(ctx, state, layer);
-    if (layer.type === "textLayer") drawText(ctx, layer);
-    if (layer.type === "brushLayer") drawBrush(ctx, layer);
-    if (layer.type === "imageLayer" || layer.type === "accessoryLayer" || layer.type === "moduleLayer") {
-      drawOverlayLayer(ctx, state, layer, options);
+    if (!shouldRenderLayerInTarget(layer, target)) return;
+    const normalizedLayer: DesignLayer = { ...layer, transform: normalizeLayerTransform(layer) };
+    if (!normalizedLayer.transform.visible) return;
+    if (normalizedLayer.type === "paintLayerSet") drawZoneColor(ctx, state, normalizedLayer);
+    if (normalizedLayer.type === "textLayer") drawText(ctx, normalizedLayer);
+    if (normalizedLayer.type === "brushLayer") drawBrush(ctx, normalizedLayer);
+    if (normalizedLayer.type === "imageLayer" || normalizedLayer.type === "accessoryLayer" || normalizedLayer.type === "moduleLayer") {
+      drawOverlayLayer(ctx, state, normalizedLayer, options);
     }
   });
 

@@ -264,7 +264,7 @@ export const useDesignStore = create<DesignStore>((set) => ({
         selectedLayerId: appliedLayers.at(-1)?.id ?? s.state.selectedLayerId,
         aiPlanPreview: [],
         aiAvatarPreview: null,
-        aiResultSummary: null,
+        aiResultSummary: s.state.aiResultSummary,
       },
     };
   }),
