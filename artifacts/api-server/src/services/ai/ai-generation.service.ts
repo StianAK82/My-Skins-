@@ -10,6 +10,7 @@ import {
   stylizedOutfitResponseSchema,
   type aiGenerateRequestSchema,
 } from "../../lib/ai-contracts";
+import { routeAiIntent } from "../../lib/ai-intent-router";
 import { aiValidationService } from "./ai-validation.service";
 
 type GenerateInput = z.infer<typeof aiGenerateRequestSchema>;
@@ -54,6 +55,18 @@ function mapModuleType(value: unknown): string {
     stripes: "stripe",
   };
   return map[normalized] ?? "graphic";
+}
+
+function toPreviewSlot(name: string): "face" | "hair" | "hat" | "neck" | "leftShoulder" | "rightShoulder" | "back" | "leftFootwear" | "rightFootwear" | "aura" {
+  const text = name.toLowerCase();
+  if (text.includes("hair")) return "hair";
+  if (text.includes("face") || text.includes("eye")) return "face";
+  if (text.includes("wing") || text.includes("back")) return "back";
+  if (text.includes("horn") || text.includes("hat") || text.includes("halo")) return "hat";
+  if (text.includes("boot") || text.includes("shoe")) return "leftFootwear";
+  if (text.includes("aura") || text.includes("glow") || text.includes("flame")) return "aura";
+  if (text.includes("shoulder")) return "leftShoulder";
+  return "neck";
 }
 
 export class AiGenerationService {
@@ -139,6 +152,7 @@ export class AiGenerationService {
     const raw = (payload && typeof payload === "object") ? payload as Record<string, unknown> : {};
     const source = (raw.result && typeof raw.result === "object") ? raw.result as Record<string, unknown> : raw;
     const itemType = input.itemType;
+    const intent = routeAiIntent(input.prompt, input.style, input.theme);
 
     const fallbackPalette = ["#1F2937", "#2563EB", "#F9FAFB"];
     const palette = Array.isArray(source.colorPalette)
@@ -196,6 +210,33 @@ export class AiGenerationService {
       ? source.designElements.filter((entry): entry is string => typeof entry === "string" && Boolean(entry.trim())).slice(0, 12)
       : [];
 
+    const accessoryTerms = ["wings", "horns", "halo", "boots", "hat", "hair", "aura", "glowing eyes"];
+    const accessoryItems = accessoryTerms
+      .filter((term) => input.prompt.toLowerCase().includes(term.replace(/s$/, "")) || input.prompt.toLowerCase().includes(term))
+      .map((term) => ({
+        name: term,
+        slot: toPreviewSlot(term),
+        detail: `Preview cosmetic inspired by ${term}`,
+        exportStatus: "preview_only" as const,
+      }))
+      .slice(0, 8);
+
+    const avatarSlotPlan = accessoryItems.map((item, idx) => ({
+      slot: item.slot,
+      assetHint: `${item.name.replace(/\s+/g, "_")}_${idx + 1}`,
+      color: colorPalette[idx % colorPalette.length],
+    }));
+
+    if (intent.includesAvatarLook && !avatarSlotPlan.some((slot) => slot.slot === "face")) {
+      avatarSlotPlan.push({ slot: "face", assetHint: intent.fantasyArchetype ? `face_${intent.fantasyArchetype}_eyes` : "face_stylized", color: colorPalette[0] });
+    }
+    if (intent.includesAvatarLook && !avatarSlotPlan.some((slot) => slot.slot === "hair")) {
+      avatarSlotPlan.push({ slot: "hair", assetHint: intent.styleVibes.includes("anime") ? "hair_anime_layered" : "hair_wavy_midnight", color: colorPalette[1] });
+    }
+    if (intent.includesEffects && !avatarSlotPlan.some((slot) => slot.slot === "aura")) {
+      avatarSlotPlan.push({ slot: "aura", assetHint: "aura_energy_ring", color: colorPalette[0] });
+    }
+
     return {
       title: typeof source.title === "string" && source.title.trim() ? source.title.trim() : "Generated Roblox Design",
       itemType,
@@ -204,6 +245,38 @@ export class AiGenerationService {
       theme: typeof source.theme === "string" && source.theme.trim() ? source.theme.trim() : (input.theme ?? input.prompt.slice(0, 80)),
       colorPalette,
       designElements: designElements.length > 0 ? designElements : ["core motif"],
+      intent,
+      clothingPlan: {
+        summary: `Classic ${itemType === "classic_shirt" ? "shirt" : "pants"} plan for ${input.prompt}`,
+        layers: designElements.length > 0 ? designElements.slice(0, 8) : ["base fill", "main motif", "accent trim"],
+        paletteLogic: `Use ${colorPalette[0]} as base, ${colorPalette[1]} for hero contrast, and keep trim readable at Roblox distance.`,
+      },
+      avatarLookPlan: {
+        identity: intent.fantasyArchetype ? `${intent.fantasyArchetype} inspired avatar` : "cohesive stylized avatar",
+        silhouette: intent.includesAccessories ? "strong accessory silhouette" : "clean readable silhouette",
+        hair: intent.styleVibes.includes("anime") ? "high-volume anime hair" : "structured modern hair",
+        face: intent.includesEffects ? "high-contrast glowing eyes" : "clean expression",
+        aura: intent.includesEffects ? "energy aura" : null,
+      },
+      accessoryPlan: {
+        items: accessoryItems,
+      },
+      previewOnlyPlan: {
+        cosmetics: avatarSlotPlan.map((slot) => ({
+          category: slot.slot === "aura" ? "effect" : "accessory",
+          label: slot.assetHint,
+          slot: slot.slot,
+        })),
+      },
+      exportablePlan: {
+        classicShirt: itemType === "classic_shirt",
+        classicPants: itemType === "classic_pants",
+        notes: [
+          "Classic shirt/pants layers are exportable now.",
+          "Avatar cosmetics and creature accessories are preview-only in this release.",
+        ],
+      },
+      avatarSlotPlan: avatarSlotPlan.slice(0, 12),
       placement,
       modules,
       editorInstructions: {

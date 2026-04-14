@@ -11,6 +11,10 @@ export class AiEditorMapperService {
         normalizedY: Math.max(0, Math.min(1, module.position.y)),
       })),
       placement: design.placement,
+      intent: design.intent,
+      exportablePlan: design.exportablePlan,
+      previewOnlyPlan: design.previewOnlyPlan,
+      avatarSlotPlan: design.avatarSlotPlan,
     };
   }
 }

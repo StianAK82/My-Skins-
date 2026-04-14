@@ -1,6 +1,8 @@
 import { z } from "zod";
 import type { AiLifecycleMeta } from "@/types/lifecycle";
 
+const previewSlotSchema = z.enum(["face", "hair", "hat", "neck", "leftShoulder", "rightShoulder", "back", "leftFootwear", "rightFootwear", "aura"]);
+
 const aiResponseSchema = z.object({
   meta: z.object({
     generationId: z.string(),
@@ -15,6 +17,48 @@ const aiResponseSchema = z.object({
     theme: z.string(),
     colorPalette: z.array(z.string()),
     designElements: z.array(z.string()),
+    intent: z.object({
+      primaryFocus: z.enum(["clothing", "outfit", "avatar_look", "accessory", "creature_fantasy", "effect_aura", "mixed"]),
+      requestKinds: z.array(z.enum(["clothing", "outfit", "avatar_look", "accessory", "creature_fantasy", "effect_aura", "mixed"])),
+      styleVibes: z.array(z.enum(["anime", "cyber", "dark_flame", "fantasy", "cute", "tactical", "streetwear", "villain", "dragon", "angelic", "sporty"])),
+      includesAvatarLook: z.boolean(),
+      includesAccessories: z.boolean(),
+      includesEffects: z.boolean(),
+      fantasyArchetype: z.enum(["dragon", "demon", "angel"]).nullable(),
+    }),
+    clothingPlan: z.object({
+      summary: z.string(),
+      layers: z.array(z.string()),
+      paletteLogic: z.string(),
+    }),
+    avatarLookPlan: z.object({
+      identity: z.string(),
+      silhouette: z.string(),
+      hair: z.string(),
+      face: z.string(),
+      aura: z.string().nullable(),
+    }),
+    accessoryPlan: z.object({
+      items: z.array(z.object({
+        name: z.string(),
+        slot: previewSlotSchema,
+        detail: z.string(),
+        exportStatus: z.literal("preview_only"),
+      })),
+    }),
+    previewOnlyPlan: z.object({
+      cosmetics: z.array(z.object({ category: z.string(), label: z.string(), slot: previewSlotSchema })),
+    }),
+    exportablePlan: z.object({
+      classicShirt: z.boolean(),
+      classicPants: z.boolean(),
+      notes: z.array(z.string()),
+    }),
+    avatarSlotPlan: z.array(z.object({
+      slot: previewSlotSchema,
+      assetHint: z.string(),
+      color: z.string().optional(),
+    })),
     placement: z.object({
       front: z.string(),
       back: z.string(),

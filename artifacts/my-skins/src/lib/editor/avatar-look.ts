@@ -19,6 +19,34 @@ function zeroTransform() {
 
 function chooseBundle(style: string): AvatarBundle {
   const lower = style.toLowerCase();
+  if (lower.includes("dragon")) {
+    return {
+      face: "face_demon_glow",
+      hair: "hair_wavy_midnight",
+      hat: "hat_cyber_horns",
+      neck: "neck_chain_gold",
+      leftShoulder: "shoulder_guard_left",
+      rightShoulder: "shoulder_guard_right",
+      back: "back_dragon_wings",
+      leftFootwear: "footwear_tech_boot_l",
+      rightFootwear: "footwear_tech_boot_r",
+      aura: "aura_flame_orbit",
+    };
+  }
+  if (lower.includes("angel")) {
+    return {
+      face: "face_anime_glint",
+      hair: "hair_twin_tail_pop",
+      hat: "hat_halo_ring",
+      neck: "neck_scarf_neo",
+      leftShoulder: null,
+      rightShoulder: null,
+      back: "back_angel_wings",
+      leftFootwear: "footwear_runner_black",
+      rightFootwear: "footwear_runner_black_right",
+      aura: "aura_neon_ring",
+    };
+  }
   if (lower.includes("anime")) {
     return {
       face: "face_anime_glint",

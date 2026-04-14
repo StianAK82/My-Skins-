@@ -16,6 +16,7 @@ const baseState = {
   avatar: defaultAvatarState(),
   aiPlanPreview: [],
   aiAvatarPreview: null,
+  aiResultSummary: null,
   layers: [
     {
       id: "l1",
