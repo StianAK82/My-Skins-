@@ -55,13 +55,56 @@ const avatarLookSchema = z.object({
   }),
 }).strict();
 
+const styleIdentitySchema = z.enum([
+  "dark_flame",
+  "anime_cute",
+  "cyber_streetwear",
+  "tactical",
+  "luxury",
+  "sporty",
+  "fantasy",
+  "gothic",
+  "cute_pastel",
+  "heroic",
+  "villain",
+  "minimal",
+]);
+
 export const classicTextureAiSchema = z.object({
   model: z.literal("ClassicTextureAI.v3"),
   garmentType: z.enum(["shirt", "pants"]),
   style: z.string().min(1),
-  palette: z.array(hexColor).min(2).max(8),
+  styleIdentity: styleIdentitySchema.optional(),
+  theme: z.string().min(3).optional(),
+  palette: z.array(hexColor).min(3).max(8),
+  paletteRoles: z.object({
+    primary: hexColor,
+    secondary: hexColor,
+    accent: hexColor,
+    neutral: hexColor,
+    contrastPair: z.tuple([hexColor, hexColor]),
+    contrastLevel: z.enum(["high", "medium"]),
+  }).optional(),
   zones: z.record(z.string().min(1)),
   avatarLook: avatarLookSchema.optional(),
+  avatarCoordination: z.object({
+    faceMood: z.string().min(1),
+    hairMood: z.string().min(1),
+    auraIntent: z.string().min(1),
+    accessoryIntent: z.array(z.string().min(1)).min(1).max(5),
+    cohesionNotes: z.array(z.string().min(1)).min(2).max(8),
+  }).optional(),
+  outfitComposition: z.object({
+    silhouette: z.enum(["slim", "balanced", "oversized", "armored"]),
+    vibe: z.enum(["subtle", "bold", "flashy", "minimal"]),
+    garmentFocus: z.enum(["front_graphic", "allover_pattern", "trim_work", "symbolic", "split_panel"]),
+  }).optional(),
+  qualitySignals: z.object({
+    distinctiveness: z.number().int().min(1).max(10),
+    paletteScore: z.number().int().min(1).max(10),
+    coherenceScore: z.number().int().min(1).max(10),
+    robloxReadability: z.number().int().min(1).max(10),
+  }).optional(),
   layers: z.array(aiLayerSchema).min(1),
 }).strict().superRefine((payload, ctx) => {
   const templateZones = TEMPLATE_ZONES[payload.garmentType];
@@ -83,6 +126,16 @@ export const classicTextureAiSchema = z.object({
       ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["layers", index, "assetCategory"], message: "accessoryLayer assetCategory must be accessory or hair" });
     }
   });
+
+  const hasHeroOrGraphic = payload.layers.some((layer) => layer.placementIntent === "hero" || layer.type === "textLayer");
+  if (!hasHeroOrGraphic) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["layers"], message: "AI plan needs at least one hero-readable focal layer" });
+  }
+
+  const decorativeLayerCount = payload.layers.filter((layer) => layer.type === "moduleLayer" || layer.type === "imageLayer" || layer.type === "accessoryLayer").length;
+  if (decorativeLayerCount < 2) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["layers"], message: "AI plan needs at least two decorative layers for styling depth" });
+  }
 });
 
 export const aiMediaSchema = z.object({
@@ -99,27 +152,33 @@ export function parseClassicTextureAi(payload: unknown): DesignLayer[] {
 export function parseClassicTextureAiPlan(payload: unknown): { layers: DesignLayer[]; avatarLook?: AvatarStatePatch } {
   const parsed = classicTextureAiSchema.safeParse(payload);
   if (!parsed.success) throw new Error(parsed.error.message);
+
+  const layerCount = parsed.data.layers.length;
   return {
-    layers: parsed.data.layers.map((layer) => ({
-      id: `ai_${layer.name.replace(/\s+/g, "_")}`,
-      name: layer.name,
-      type: layer.type,
-      zone: layer.zone,
-      image: layer.image,
-      text: layer.text,
-      color: layer.color,
-      assetId: layer.assetId,
-      assetCategory: layer.assetCategory,
-      transform: {
-        x: boundOffsetForZone(layer.transform?.x ?? anchorOffset(layer.anchor, layer.zone, parsed.data.garmentType).x, layer.zone, parsed.data.garmentType, "x"),
-        y: boundOffsetForZone(layer.transform?.y ?? anchorOffset(layer.anchor, layer.zone, parsed.data.garmentType).y, layer.zone, parsed.data.garmentType, "y"),
-        scale: clamp(layer.transform?.scale ?? layer.relativeScale ?? intentScale(layer.placementIntent, layer.type), 0.15, 4),
-        rotation: layer.transform?.rotation ?? 0,
-        opacity: layer.transform?.opacity ?? 1,
-        visible: true,
-        locked: false,
-      },
-    })),
+    layers: parsed.data.layers.map((layer, index) => {
+      const heroBoost = layer.placementIntent === "hero" ? 1.08 : 1;
+      const indexStagger = layerCount > 3 ? (index % 2 === 0 ? -2 : 2) : 0;
+      return {
+        id: `ai_${layer.name.replace(/\s+/g, "_")}`,
+        name: layer.name,
+        type: layer.type,
+        zone: layer.zone,
+        image: layer.image,
+        text: layer.text,
+        color: layer.color,
+        assetId: layer.assetId,
+        assetCategory: layer.assetCategory,
+        transform: {
+          x: boundOffsetForZone((layer.transform?.x ?? anchorOffset(layer.anchor, layer.zone, parsed.data.garmentType).x) + indexStagger, layer.zone, parsed.data.garmentType, "x"),
+          y: boundOffsetForZone(layer.transform?.y ?? anchorOffset(layer.anchor, layer.zone, parsed.data.garmentType).y, layer.zone, parsed.data.garmentType, "y"),
+          scale: clamp((layer.transform?.scale ?? layer.relativeScale ?? intentScale(layer.placementIntent, layer.type)) * heroBoost, 0.15, 4),
+          rotation: layer.transform?.rotation ?? 0,
+          opacity: layer.transform?.opacity ?? 1,
+          visible: true,
+          locked: false,
+        },
+      };
+    }),
     avatarLook: parsed.data.avatarLook,
   };
 }
@@ -129,8 +188,8 @@ function clamp(value: number, min: number, max: number) {
 }
 
 function intentScale(intent: z.infer<typeof aiLayerSchema>["placementIntent"], type: DesignLayer["type"]) {
-  if (intent === "hero") return type === "accessoryLayer" ? 0.9 : 1.05;
-  if (intent === "supporting") return 0.7;
+  if (intent === "hero") return type === "accessoryLayer" ? 0.9 : 1.08;
+  if (intent === "supporting") return 0.72;
   if (intent === "edge") return 0.45;
   if (intent === "allover") return 0.55;
   return 1;

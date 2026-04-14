@@ -24,7 +24,7 @@ const TOOLS: Array<{ key: ToolType; label: string; hint: string }> = [
 ];
 
 const SWATCHES = ["#ef4444", "#3b82f6", "#f59e0b", "#10b981", "#a855f7", "#f8fafc", "#111827"];
-const STYLE_PRESETS = ["Streetwear", "Esports", "Tactical", "Fantasy", "Minimal", "Anime"];
+const STYLE_PRESETS = ["Streetwear", "Esports", "Tactical", "Fantasy", "Minimal", "Anime", "Gothic", "Luxury", "Cute Pastel", "Dark Flame"];
 
 function downloadPng(dataUrl: string, filename: string) {
   const a = document.createElement("a");
@@ -46,37 +46,50 @@ function mapAiModuleToLayer(module: {
   scale: number;
   rotation: number;
   opacity: number;
-}, template: "shirt" | "pants") {
+  layer: number;
+}, template: "shirt" | "pants", styleIdentity?: string) {
   const boundedX = clamp(module.position.x, 0, 1);
   const boundedY = clamp(module.position.y, 0, 1);
-  const isPattern = module.type.toLowerCase().includes("pattern");
-  const isAccessory = module.type.toLowerCase().includes("accessory") || module.type.toLowerCase().includes("hair");
-  const isTrim = module.type.toLowerCase().includes("trim");
+  const moduleType = module.type.toLowerCase();
+  const isPattern = moduleType.includes("pattern");
+  const isAccessory = moduleType.includes("accessory") || moduleType.includes("hair");
+  const isTrim = moduleType.includes("trim") || moduleType.includes("stripe");
+  const isHeroic = moduleType.includes("chest") || module.layer === 0 || module.scale >= 0.95;
+
   const zone = template === "shirt"
-    ? boundedX < 0.18 ? "left_sleeve" : boundedX > 0.82 ? "right_sleeve" : boundedY > 0.72 ? "back" : "front"
+    ? isTrim && boundedX < 0.28
+      ? "left_sleeve"
+      : isTrim && boundedX > 0.72
+        ? "right_sleeve"
+        : boundedY > 0.7
+          ? "back"
+          : "front"
     : boundedX >= 0.5 ? "right_leg_front" : "left_leg_front";
   const halfWidth = template === "shirt" ? 64 : 34;
   const halfHeight = template === "shirt" ? 64 : 96;
   const layerType: "accessoryLayer" | "moduleLayer" = isAccessory ? "accessoryLayer" : "moduleLayer";
+  const styleBoost = (styleIdentity ?? "").includes("minimal") ? 0.9 : (styleIdentity ?? "").includes("flash") ? 1.08 : 1;
+
   return {
     name: module.label,
     type: layerType,
     zone,
-    placementIntent: isPattern ? "allover" : boundedY < 0.3 ? "hero" : "supporting",
+    placementIntent: isPattern ? "allover" : isHeroic ? "hero" : boundedY < 0.42 ? "supporting" : "edge",
     anchor: boundedY < 0.25 ? "top" : boundedY > 0.75 ? "bottom" : "center",
-    relativeScale: clamp(module.scale, 0.2, isPattern ? 0.95 : 1.25),
+    relativeScale: clamp(module.scale * styleBoost, 0.2, isPattern ? 0.95 : 1.35),
     color: module.color,
     assetId: module.id,
     assetCategory: isPattern ? "pattern" : isAccessory ? "accessory" : isTrim ? "trim" : "module",
     transform: {
       x: clamp((boundedX - 0.5) * halfWidth * 2, -halfWidth, halfWidth),
       y: clamp((boundedY - 0.5) * halfHeight * 2, -halfHeight, halfHeight),
-      scale: clamp(module.scale, 0.2, 1.6),
+      scale: clamp(module.scale * styleBoost, 0.2, 1.7),
       rotation: clamp(module.rotation, -180, 180),
-      opacity: clamp(module.opacity, 0.2, 1),
+      opacity: clamp(module.opacity, 0.25, 1),
     },
   };
 }
+
 
 export default function Editor() {
   const { id = "local" } = useParams<{ id?: string }>();
@@ -177,14 +190,55 @@ export default function Editor() {
     try {
       const itemType = state.template === "shirt" ? "classic_shirt" : "classic_pants";
       const response = await aiGenerateDesign({ prompt: aiPrompt, itemType, style: aiStyle, theme: aiStyle });
+      const result = response.result as typeof response.result & {
+        styleIdentity?: string;
+        theme?: string;
+        paletteRoles?: {
+          primary: string;
+          secondary: string;
+          accent: string;
+          neutral: string;
+          contrastPair: [string, string];
+          contrastLevel: "high" | "medium";
+        };
+        avatarCoordination?: {
+          faceMood?: string;
+          hairMood?: string;
+          auraIntent?: string;
+          accessoryIntent?: string[];
+          cohesionNotes?: string[];
+        };
+        outfitComposition?: {
+          silhouette?: "slim" | "balanced" | "oversized" | "armored";
+          vibe?: "subtle" | "bold" | "flashy" | "minimal";
+          garmentFocus?: "front_graphic" | "allover_pattern" | "trim_work" | "symbolic" | "split_panel";
+        };
+        qualitySignals?: {
+          distinctiveness: number;
+          paletteScore: number;
+          coherenceScore: number;
+          robloxReadability: number;
+        };
+      };
+
       const payload = {
         model: "ClassicTextureAI.v3",
         garmentType: state.template,
-        style: response.result.style,
-        palette: response.result.colorPalette,
-        zones: response.result.placement,
-        avatarLook: buildAiAvatarLook(response.result.style, response.result.colorPalette),
-        layers: response.result.modules.map((module) => mapAiModuleToLayer(module, state.template)),
+        style: result.style,
+        styleIdentity: result.styleIdentity,
+        theme: result.theme,
+        palette: result.colorPalette,
+        paletteRoles: result.paletteRoles,
+        zones: result.placement,
+        avatarCoordination: result.avatarCoordination,
+        outfitComposition: result.outfitComposition,
+        qualitySignals: result.qualitySignals,
+        avatarLook: buildAiAvatarLook(result.style, result.colorPalette, {
+          styleIdentity: result.styleIdentity,
+          avatarCoordination: result.avatarCoordination,
+          outfitComposition: result.outfitComposition,
+        }),
+        layers: result.modules.map((module) => mapAiModuleToLayer(module, state.template, result.styleIdentity)),
       };
       const parsed = classicTextureAiSchema.parse(payload);
       const plan = parseClassicTextureAiPlan(parsed);

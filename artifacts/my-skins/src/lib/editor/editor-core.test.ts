@@ -104,16 +104,17 @@ test("AI schema rejects invalid payload and accepts strict structured plan", () 
     model: "ClassicTextureAI.v3",
     garmentType: "shirt",
     style: "Neo",
-    palette: ["#111111", "#22d3ee"],
+    palette: ["#111111", "#22d3ee", "#f8fafc"],
     zones: { front: "main focus" },
     layers: [
-      { name: "Main", type: "moduleLayer", zone: "front", assetId: "module_pocket", color: "#22d3ee", transform: { scale: 1.2 } },
+      { name: "Main", type: "moduleLayer", zone: "front", placementIntent: "hero", assetId: "module_pocket", color: "#22d3ee", transform: { scale: 1.2 } },
+      { name: "Accent", type: "moduleLayer", zone: "front", assetId: "module_side_stripe", color: "#f8fafc", transform: { scale: 0.6 } },
     ],
   });
 
   const parsedLayers = parseClassicTextureAi(valid);
   assert.equal(parsedLayers[0]?.type, "moduleLayer");
-  assert.equal(parsedLayers[0]?.transform.scale, 1.2);
+  assert.equal(parsedLayers[0]?.transform.scale, 1.296);
 });
 
 test("AI schema enforces garment zone validity and required content by layer type", () => {
@@ -121,27 +122,42 @@ test("AI schema enforces garment zone validity and required content by layer typ
     model: "ClassicTextureAI.v3",
     garmentType: "pants",
     style: "Utility",
-    palette: ["#111111", "#22d3ee"],
+    palette: ["#111111", "#22d3ee", "#f8fafc"],
     zones: { left_leg_front: "focus" },
-    layers: [{ name: "Chest", type: "moduleLayer", zone: "waist_panel", transform: { scale: 1 } }],
+    layers: [{ name: "Chest", type: "moduleLayer", zone: "waist_panel", placementIntent: "hero", assetId: "module_pocket", transform: { scale: 1 } }, { name: "Support", type: "moduleLayer", zone: "left_leg_front", assetId: "module_side_stripe" }],
   }));
 
   assert.throws(() => classicTextureAiSchema.parse({
     model: "ClassicTextureAI.v3",
     garmentType: "shirt",
     style: "Neo",
-    palette: ["#111111", "#22d3ee"],
+    palette: ["#111111", "#22d3ee", "#f8fafc"],
     zones: { front: "focus" },
-    layers: [{ name: "Headline", type: "textLayer", zone: "front", transform: { scale: 1 } }],
+    layers: [{ name: "Headline", type: "textLayer", zone: "front", transform: { scale: 1 } }, { name: "Support", type: "moduleLayer", zone: "front", assetId: "module_pocket" }],
   }));
 
   assert.throws(() => classicTextureAiSchema.parse({
     model: "ClassicTextureAI.v3",
     garmentType: "shirt",
     style: "Neo",
-    palette: ["#111111", "#22d3ee"],
+    palette: ["#111111", "#22d3ee", "#f8fafc"],
     zones: { front: "focus" },
-    layers: [{ name: "Invalid allover", type: "moduleLayer", zone: "front", placementIntent: "allover", assetCategory: "module", assetId: "module_pocket" }],
+    layers: [{ name: "Invalid allover", type: "moduleLayer", zone: "front", placementIntent: "allover", assetCategory: "module", assetId: "module_pocket" }, { name: "Support", type: "moduleLayer", zone: "front", assetId: "module_side_stripe" }],
+  }));
+});
+
+
+
+test("AI schema quality guardrails reject weak one-layer plans", () => {
+  assert.throws(() => classicTextureAiSchema.parse({
+    model: "ClassicTextureAI.v3",
+    garmentType: "shirt",
+    style: "Minimal",
+    palette: ["#111111", "#333333", "#555555"],
+    zones: { front: "focus" },
+    layers: [
+      { name: "single", type: "moduleLayer", zone: "front", assetId: "module_pocket" },
+    ],
   }));
 });
 
@@ -150,17 +166,18 @@ test("AI parser applies structured placement anchor and bounds layer transform",
     model: "ClassicTextureAI.v3",
     garmentType: "pants",
     style: "Neo",
-    palette: ["#111111", "#22d3ee"],
+    palette: ["#111111", "#22d3ee", "#f8fafc"],
     zones: { left_leg_front: "focus", right_leg_front: "support" },
     layers: [
-      { name: "Leg stripe", type: "moduleLayer", zone: "left_leg_front", assetId: "module_side_stripe", anchor: "top_left", relativeScale: 0.4, transform: { x: -999, y: -999, rotation: 280 } },
+      { name: "Leg stripe", type: "moduleLayer", zone: "left_leg_front", placementIntent: "hero", assetId: "module_side_stripe", anchor: "top_left", relativeScale: 0.4, transform: { x: -999, y: -999, rotation: 280 } },
+      { name: "Leg trim", type: "moduleLayer", zone: "right_leg_front", assetId: "module_pocket", relativeScale: 0.4 },
     ],
   });
 
-  assert.equal(parsedLayers.length, 1);
+  assert.equal(parsedLayers.length, 2);
   assert.equal(parsedLayers[0]?.transform.x, -64);
   assert.equal(parsedLayers[0]?.transform.y, -96);
-  assert.equal(parsedLayers[0]?.transform.scale, 0.4);
+  assert.equal(parsedLayers[0]?.transform.scale, 0.43200000000000005);
   assert.equal(parsedLayers[0]?.transform.rotation, 280);
 });
 
@@ -180,18 +197,19 @@ test("AI apply flow is deterministic: preview cleared and appended order preserv
     model: "ClassicTextureAI.v3",
     garmentType: "shirt",
     style: "Neo",
-    palette: ["#111111", "#22d3ee"],
+    palette: ["#111111", "#22d3ee", "#f8fafc"],
     zones: { front: "main focus" },
     layers: [
-      { name: "Main", type: "moduleLayer", zone: "front", assetId: "module_pocket", color: "#22d3ee", transform: { scale: 1.2 } },
+      { name: "Main", type: "moduleLayer", zone: "front", placementIntent: "hero", assetId: "module_pocket", color: "#22d3ee", transform: { scale: 1.2 } },
       { name: "Label", type: "textLayer", zone: "front", text: "MY SKINS", color: "#111111" },
+      { name: "Accent", type: "moduleLayer", zone: "front", assetId: "module_side_stripe", color: "#f8fafc" },
     ],
   });
   store.setAiPlanPreview(aiLayers);
   store.applyAiPlan();
 
   const state = useDesignStore.getState().state;
-  assert.deepEqual(state.layers.map((layer) => layer.name), ["Existing", "Main", "Label"]);
+  assert.deepEqual(state.layers.map((layer) => layer.name), ["Existing", "Main", "Label", "Accent"]);
   assert.equal(state.aiPlanPreview.length, 0);
   assert.ok(state.selectedLayerId?.startsWith("layer_"));
 });

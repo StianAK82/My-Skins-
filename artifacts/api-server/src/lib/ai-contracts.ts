@@ -41,16 +41,71 @@ export const editorInstructionsSchema = z.object({
   notes: z.array(z.string().min(1)).min(1),
 }).strict();
 
+export const styleIdentitySchema = z.enum([
+  "dark_flame",
+  "anime_cute",
+  "cyber_streetwear",
+  "tactical",
+  "luxury",
+  "sporty",
+  "fantasy",
+  "gothic",
+  "cute_pastel",
+  "heroic",
+  "villain",
+  "minimal",
+]);
+
+export const paletteRoleSchema = z.object({
+  primary: hexColorSchema,
+  secondary: hexColorSchema,
+  accent: hexColorSchema,
+  neutral: hexColorSchema,
+  contrastPair: z.tuple([hexColorSchema, hexColorSchema]),
+  contrastLevel: z.enum(["high", "medium"]),
+}).strict();
+
+export const outfitCompositionSchema = z.object({
+  silhouette: z.enum(["slim", "balanced", "oversized", "armored"]),
+  vibe: z.enum(["subtle", "bold", "flashy", "minimal"]),
+  garmentFocus: z.enum(["front_graphic", "allover_pattern", "trim_work", "symbolic", "split_panel"]),
+  trimIntent: z.string().min(1),
+  patternDensity: z.enum(["none", "light", "medium", "heavy"]),
+  accessoryDensity: z.enum(["none", "light", "medium", "heavy"]),
+}).strict();
+
+export const avatarCoordinationSchema = z.object({
+  faceMood: z.enum(["friendly", "confident", "stoic", "mischievous", "fierce"]),
+  hairMood: z.enum(["clean", "spiky", "flowy", "cute", "edgy"]),
+  auraIntent: z.enum(["none", "subtle", "energy", "flame", "shadow", "sparkle"]),
+  accessoryIntent: z.array(z.enum(["hat", "neck", "shoulders", "back", "footwear"]))
+    .min(1)
+    .max(5),
+  cohesionNotes: z.array(z.string().min(1)).min(2).max(8),
+}).strict();
+
+export const qualitySignalsSchema = z.object({
+  distinctiveness: z.number().int().min(1).max(10),
+  paletteScore: z.number().int().min(1).max(10),
+  coherenceScore: z.number().int().min(1).max(10),
+  robloxReadability: z.number().int().min(1).max(10),
+}).strict();
+
 export const aiDesignSchema = z.object({
   title: z.string().min(1),
   itemType: itemTypeSchema,
   style: z.string().min(1),
+  styleIdentity: styleIdentitySchema,
   target: z.literal("roblox"),
   theme: z.string().min(1),
-  colorPalette: z.array(hexColorSchema).min(2).max(8),
-  designElements: z.array(z.string().min(1)).min(1).max(12),
+  colorPalette: z.array(hexColorSchema).min(3).max(8),
+  paletteRoles: paletteRoleSchema,
+  designElements: z.array(z.string().min(1)).min(3).max(12),
   placement: placementSchema,
-  modules: z.array(designModuleSchema).max(50),
+  modules: z.array(designModuleSchema).min(4).max(50),
+  outfitComposition: outfitCompositionSchema,
+  avatarCoordination: avatarCoordinationSchema,
+  qualitySignals: qualitySignalsSchema,
   editorInstructions: editorInstructionsSchema,
 }).strict();
 

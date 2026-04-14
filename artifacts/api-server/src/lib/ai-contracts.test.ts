@@ -6,10 +6,19 @@ const base = {
   title: "Neon Drift",
   itemType: "classic_shirt",
   style: "Cyberpunk",
+  styleIdentity: "cyber_streetwear",
   target: "roblox",
   theme: "neon racing",
   colorPalette: ["#111111", "#00AEEF", "#EEEEEE"],
-  designElements: ["stripes", "trim"],
+  paletteRoles: {
+    primary: "#111111",
+    secondary: "#00AEEF",
+    accent: "#EEEEEE",
+    neutral: "#1F2937",
+    contrastPair: ["#111111", "#EEEEEE"],
+    contrastLevel: "high",
+  },
+  designElements: ["stripes", "trim", "glyph logo"],
   placement: {
     front: "bold center stripe",
     back: "small logo-free panel",
@@ -18,7 +27,33 @@ const base = {
     leftLeg: "not_used",
     rightLeg: "not_used",
   },
-  modules: [],
+  modules: [
+    { id: "hero", type: "graphic", label: "Hero", color: "#EEEEEE", position: { x: 0.5, y: 0.35 }, scale: 1.02, rotation: 0, opacity: 1, layer: 0 },
+    { id: "trim", type: "trim", label: "Trim", color: "#00AEEF", position: { x: 0.5, y: 0.55 }, scale: 0.7, rotation: 0, opacity: 0.95, layer: 1 },
+    { id: "stripe", type: "stripe", label: "Stripe", color: "#111111", position: { x: 0.2, y: 0.5 }, scale: 0.5, rotation: 8, opacity: 0.9, layer: 2 },
+    { id: "symbol", type: "chest_symbol", label: "Symbol", color: "#00AEEF", position: { x: 0.5, y: 0.2 }, scale: 0.65, rotation: 0, opacity: 0.95, layer: 3 },
+  ],
+  outfitComposition: {
+    silhouette: "balanced",
+    vibe: "bold",
+    garmentFocus: "trim_work",
+    trimIntent: "Connect all seams with neon trim",
+    patternDensity: "light",
+    accessoryDensity: "medium",
+  },
+  avatarCoordination: {
+    faceMood: "confident",
+    hairMood: "edgy",
+    auraIntent: "energy",
+    accessoryIntent: ["hat", "neck"],
+    cohesionNotes: ["Use matching cyan metal accents", "Keep face expression assertive"],
+  },
+  qualitySignals: {
+    distinctiveness: 8,
+    paletteScore: 8,
+    coherenceScore: 8,
+    robloxReadability: 9,
+  },
   editorInstructions: {
     baseTemplate: "classic_shirt_default",
     recommendedPreset: "cyberpunk",
@@ -29,6 +64,7 @@ const base = {
 test("aiDesignSchema parses valid structured design", () => {
   const parsed = aiDesignSchema.parse(base);
   assert.equal(parsed.itemType, "classic_shirt");
+  assert.equal(parsed.styleIdentity, "cyber_streetwear");
 });
 
 test("placement validation rejects shirt with active legs", () => {
@@ -43,6 +79,7 @@ test("placement validation accepts pants with disabled sleeves", () => {
   const payload = aiDesignSchema.parse({
     ...base,
     itemType: "classic_pants",
+    avatarCoordination: { ...base.avatarCoordination, accessoryIntent: ["footwear", "back"] },
     placement: {
       front: "knee stripe",
       back: "rear stripe",
