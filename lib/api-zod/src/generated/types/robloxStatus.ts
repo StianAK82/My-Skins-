@@ -10,5 +10,7 @@ import type { RobloxStatusConnection } from "./robloxStatusConnection";
 export interface RobloxStatus {
   configured: boolean;
   connected: boolean;
+  connectionState: "connected" | "expired" | "disconnected";
+  reconnectRequired: boolean;
   connection: RobloxStatusConnection;
 }
