@@ -290,6 +290,49 @@ test("export operations are deterministic for representative layered designs", (
   assert.deepEqual(canvasA.context.ops, canvasB.context.ops);
 });
 
+test("export render excludes preview-only accessory overlays while preview keeps them", () => {
+  const previewCanvas = new FakeCanvas();
+  const exportCanvas = new FakeCanvas();
+  const state: DesignState = {
+    ...baseState,
+    layers: [
+      { id: "module", name: "Module", type: "moduleLayer", zone: "front", assetCategory: "module", transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, visible: true, locked: false } },
+      { id: "acc", name: "Accessory preview", type: "accessoryLayer", zone: "front", assetCategory: "accessory", transform: { x: 14, y: 8, scale: 1, rotation: 0, opacity: 1, visible: true, locked: false } },
+    ],
+  };
+
+  renderDesignToCanvas(state, previewCanvas as unknown as HTMLCanvasElement, { target: "preview" });
+  renderDesignToCanvas(state, exportCanvas as unknown as HTMLCanvasElement, { target: "export" });
+
+  const previewTranslates = previewCanvas.context.ops.filter((op) => op.name === "translate");
+  const exportTranslates = exportCanvas.context.ops.filter((op) => op.name === "translate");
+  assert.equal(previewTranslates.length >= 2, true);
+  assert.equal(exportTranslates.length, 1);
+});
+
+test("renderer clamps extreme transform values to deterministic bounds", () => {
+  const canvas = new FakeCanvas();
+  renderDesignToCanvas(
+    {
+      ...baseState,
+      layers: [
+        {
+          id: "wild",
+          name: "Wild",
+          type: "moduleLayer",
+          zone: "front",
+          assetCategory: "module",
+          transform: { x: 99999, y: -99999, scale: 99, rotation: 999, opacity: 9, visible: true, locked: false },
+        },
+      ],
+    },
+    canvas as unknown as HTMLCanvasElement,
+  );
+
+  const translate = canvas.context.ops.find((op) => op.name === "translate");
+  assert.deepEqual(translate?.args, [845, -377]);
+});
+
 test("renderer uses category-driven overlay sizing for trim assets to match export/editor framing", () => {
   const previousImage = globalThis.Image;
   class LoadedImage {

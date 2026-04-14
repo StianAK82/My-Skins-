@@ -45,6 +45,55 @@ test("v2 persistence migration upgrades version and defaults aiPlanPreview", () 
   const migrated = parseDesignState(v2);
   assert.equal(migrated.version, 4);
   assert.deepEqual(migrated.aiPlanPreview, []);
+  assert.equal(migrated.aiResultSummary, null);
+});
+
+test("save/load keeps rich AI summary and avatar slot details deterministic", () => {
+  const stateWithAi = {
+    ...baseState,
+    aiResultSummary: {
+      exportable: ["Classic shirt texture"],
+      previewOnly: ["hero aura: neon ring"],
+      appliedTargets: ["Applied to shirt/pants layers", "Resolved hero aura -> aura_neon_ring"],
+    },
+    aiAvatarPreview: {
+      pose: "hero" as const,
+      slots: {
+        aura: {
+          assetId: "aura_neon_ring",
+          color: "#22d3ee",
+          scale: 1.2,
+          visible: true,
+          offset: { x: 0.1, y: 0, z: -0.1 },
+          rotation: { x: 0, y: 30, z: 0 },
+        },
+      },
+    },
+  };
+
+  const serialized = serializeDesignState(stateWithAi);
+  const parsed = parseDesignState(serialized);
+  assert.deepEqual(parsed.aiResultSummary, stateWithAi.aiResultSummary);
+  assert.deepEqual(parsed.aiAvatarPreview, stateWithAi.aiAvatarPreview);
+});
+
+test("persistence migration normalizes missing transform fields on v3 snapshots", () => {
+  const v3 = JSON.stringify({
+    ...baseState,
+    version: 3,
+    layers: [{ id: "legacy", name: "Legacy layer", type: "moduleLayer", zone: "front", assetId: "module_pocket" }],
+  });
+
+  const migrated = parseDesignState(v3);
+  assert.deepEqual(migrated.layers[0]?.transform, {
+    x: 0,
+    y: 0,
+    scale: 1,
+    rotation: 0,
+    opacity: 1,
+    visible: true,
+    locked: false,
+  });
 });
 
 test("save/load rejects malformed design payload", () => {
