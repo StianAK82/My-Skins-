@@ -94,6 +94,18 @@ export type AvatarBaseModel = {
   bodyParts: AvatarBodyPart[];
 };
 
+export type AssetBrowserExportFilter = "all" | "exportable" | "previewOnly";
+
+type SharedAssetFilters = {
+  search?: string;
+  role?: AssetRole | "all";
+  styleTag?: string;
+  vibeTag?: string;
+  fantasyTag?: string;
+  importance?: AssetImportance | "all";
+  exportFilter?: AssetBrowserExportFilter;
+};
+
 const svgData = (svg: string) => `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
 
 const OVERLAY_IMAGES = {
@@ -252,6 +264,41 @@ export function getAssetsForTemplate(template: TemplateType) {
   return STUDIO_ASSETS.filter((asset) => asset.supportedTemplates.includes(template));
 }
 
+function hasTag(assetTags: string[] | undefined, tag?: string) {
+  if (!tag || tag === "all") return true;
+  return (assetTags ?? []).includes(tag);
+}
+
+function matchesExportFilter(previewOnly: boolean | undefined, exportable: boolean | undefined, filter: AssetBrowserExportFilter = "all") {
+  if (filter === "exportable") return exportable === true;
+  if (filter === "previewOnly") return previewOnly === true;
+  return true;
+}
+
+function matchesSearch(asset: { id: string; name: string }, search?: string) {
+  if (!search?.trim()) return true;
+  const normalized = search.trim().toLowerCase();
+  return asset.name.toLowerCase().includes(normalized) || asset.id.toLowerCase().includes(normalized);
+}
+
+export function filterStudioAssets(
+  assets: StudioAsset[],
+  filters: SharedAssetFilters & { category?: AssetCategory | "all"; zone?: string | "all" },
+) {
+  return assets.filter((asset) => {
+    if (filters.category && filters.category !== "all" && asset.category !== filters.category) return false;
+    if (filters.zone && filters.zone !== "all" && asset.preferredZone !== filters.zone) return false;
+    if (filters.role && filters.role !== "all" && asset.role !== filters.role) return false;
+    if (filters.importance && filters.importance !== "all" && asset.importance !== filters.importance) return false;
+    if (!hasTag(asset.styleTags, filters.styleTag)) return false;
+    if (!hasTag(asset.vibeTags, filters.vibeTag)) return false;
+    if (!hasTag(asset.fantasyTags, filters.fantasyTag)) return false;
+    if (!matchesExportFilter(asset.previewOnly, asset.exportable, filters.exportFilter)) return false;
+    if (!matchesSearch(asset, filters.search)) return false;
+    return true;
+  });
+}
+
 export function getAssetById(assetId?: string) {
   return assetId ? STUDIO_ASSET_MAP.get(assetId) : undefined;
 }
@@ -266,6 +313,40 @@ export function getAvatarAssetById(assetId?: string) {
 
 export function getAvatarAssetsForSlot(slot: AvatarCosmeticSlot) {
   return AVATAR_ASSETS.filter((asset) => asset.slot === slot);
+}
+
+export function filterAvatarAssets(
+  assets: AvatarAsset[],
+  filters: SharedAssetFilters & { slot?: AvatarCosmeticSlot | "all"; category?: AvatarAssetCategory | "all" },
+) {
+  return assets.filter((asset) => {
+    if (filters.slot && filters.slot !== "all" && asset.slot !== filters.slot) return false;
+    if (filters.category && filters.category !== "all" && asset.category !== filters.category) return false;
+    if (filters.role && filters.role !== "all" && asset.role !== filters.role) return false;
+    if (filters.importance && filters.importance !== "all" && asset.importance !== filters.importance) return false;
+    if (!hasTag(asset.styleTags, filters.styleTag)) return false;
+    if (!hasTag(asset.vibeTags, filters.vibeTag)) return false;
+    if (!hasTag(asset.fantasyTags, filters.fantasyTag)) return false;
+    if (!matchesExportFilter(asset.previewOnly, asset.exportable, filters.exportFilter)) return false;
+    if (!matchesSearch(asset, filters.search)) return false;
+    return true;
+  });
+}
+
+export function collectAssetTags(assets: Array<Pick<StudioAsset | AvatarAsset, "styleTags" | "vibeTags" | "fantasyTags">>) {
+  const styles = new Set<string>();
+  const vibes = new Set<string>();
+  const fantasy = new Set<string>();
+  for (const asset of assets) {
+    for (const tag of asset.styleTags ?? []) styles.add(tag);
+    for (const tag of asset.vibeTags ?? []) vibes.add(tag);
+    for (const tag of asset.fantasyTags ?? []) fantasy.add(tag);
+  }
+  return {
+    styleTags: [...styles].sort(),
+    vibeTags: [...vibes].sort(),
+    fantasyTags: [...fantasy].sort(),
+  };
 }
 
 export function getAvatarBaseModel(modelVariant: AvatarBaseModel["id"]) {

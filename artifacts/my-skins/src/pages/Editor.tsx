@@ -6,10 +6,24 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { AvatarPreview } from "@/components/editor/AvatarPreview";
 import { classicTextureAiSchema, parseClassicTextureAiPlan } from "@/lib/editor/ai-schema";
-import { useDesignStore, type ToolType } from "@/lib/editor/design-state";
+import { useDesignStore, type AvatarCosmeticSlot, type ToolType } from "@/lib/editor/design-state";
 import { preloadOverlayImages, renderDesignToCanvas } from "@/lib/editor/renderer";
 import { parseDesignState, serializeDesignState } from "@/lib/editor/persistence";
-import { getAssetsForTemplate, getAvatarAssetsForSlot, makeLayerFromAsset, type AssetCategory } from "@/lib/editor/assets";
+import {
+  AVATAR_ASSETS,
+  getAssetById,
+  getAssetsForTemplate,
+  getAvatarAssetById,
+  getAvatarAssetsForSlot,
+  makeLayerFromAsset,
+  type AssetBrowserExportFilter,
+  type AssetCategory,
+  type AvatarAssetCategory,
+  type AvatarAsset,
+  filterStudioAssets,
+  filterAvatarAssets,
+  collectAssetTags,
+} from "@/lib/editor/assets";
 import { buildAiAvatarLook } from "@/lib/editor/avatar-look";
 import { normalizeAiResponse } from "@/lib/ai/normalize-ai-response";
 import { resolveAvatarSlotAssets } from "@/lib/ai/asset-resolver";
@@ -27,6 +41,19 @@ const TOOLS: Array<{ key: ToolType; label: string; hint: string }> = [
 
 const SWATCHES = ["#ef4444", "#3b82f6", "#f59e0b", "#10b981", "#a855f7", "#f8fafc", "#111827"];
 const STYLE_PRESETS = ["Streetwear", "Esports", "Tactical", "Fantasy", "Minimal", "Anime"];
+const AVATAR_SLOTS: AvatarCosmeticSlot[] = ["face", "hair", "hat", "neck", "leftShoulder", "rightShoulder", "back", "leftFootwear", "rightFootwear", "aura"];
+
+const ROLE_OPTIONS = ["all", "graphic", "module", "trim", "face", "hair", "headwear", "neckwear", "armor", "wings", "aura", "footwear", "companion"] as const;
+
+function slotLabel(slot: AvatarCosmeticSlot) {
+  return slot.replace(/([A-Z])/g, " $1").replace(/^./, (char) => char.toUpperCase());
+}
+
+function assetStatusLabel(previewOnly?: boolean, exportable?: boolean) {
+  if (previewOnly) return "Preview-only";
+  if (exportable) return "Exportable";
+  return "Mixed";
+}
 
 function downloadPng(dataUrl: string, filename: string) {
   const a = document.createElement("a");
@@ -92,6 +119,17 @@ export default function Editor() {
   const [imageRenderNonce, setImageRenderNonce] = useState(0);
   const [saveStatus, setSaveStatus] = useState<string>("");
   const [previewFocus, setPreviewFocus] = useState<"clothing" | "avatar">("clothing");
+  const [assetSearch, setAssetSearch] = useState("");
+  const [avatarAssetSearch, setAvatarAssetSearch] = useState("");
+  const [assetCategoryFilter, setAssetCategoryFilter] = useState<AssetCategory | "all">("all");
+  const [avatarSlotFilter, setAvatarSlotFilter] = useState<AvatarCosmeticSlot | "all">("all");
+  const [avatarCategoryFilter, setAvatarCategoryFilter] = useState<AvatarAssetCategory | "all">("all");
+  const [roleFilter, setRoleFilter] = useState<(typeof ROLE_OPTIONS)[number]>("all");
+  const [importanceFilter, setImportanceFilter] = useState<"all" | "hero" | "support" | "decorative">("all");
+  const [exportFilter, setExportFilter] = useState<AssetBrowserExportFilter>("all");
+  const [styleTagFilter, setStyleTagFilter] = useState<string>("all");
+  const [vibeTagFilter, setVibeTagFilter] = useState<string>("all");
+  const [fantasyTagFilter, setFantasyTagFilter] = useState<string>("all");
 
   const {
     state,
@@ -121,6 +159,7 @@ export default function Editor() {
   const selectedLayer = state.layers.find((layer) => layer.id === state.selectedLayerId) ?? null;
   const zones = useMemo(() => getZonesForTemplate(state.template), [state.template]);
   const templateAssets = useMemo(() => getAssetsForTemplate(state.template), [state.template]);
+  const tagOptions = useMemo(() => collectAssetTags([...templateAssets, ...AVATAR_ASSETS]), [templateAssets]);
   const hasLayers = state.layers.length > 0;
   const storageKey = `design:${id}`;
   const hasSavedVersion = typeof window !== "undefined" && Boolean(localStorage.getItem(storageKey));
@@ -240,8 +279,60 @@ export default function Editor() {
     addLayer(makeLayerFromAsset(asset, state.activeZone));
   };
 
+  const assignAvatarSlotAsset = (slot: AvatarCosmeticSlot, asset: AvatarAsset) => {
+    setAvatarSlot(slot, {
+      assetId: asset.id,
+      color: asset.color,
+      scale: asset.defaultScale ?? 1,
+      offset: asset.defaultOffset ?? { x: 0, y: 0, z: 0 },
+      rotation: { x: 0, y: 0, z: 0 },
+      visible: true,
+    });
+  };
+
+  const replaceSelectedLayerAsset = (assetId: string) => {
+    if (!selectedLayer) return;
+    const asset = templateAssets.find((entry) => entry.id === assetId);
+    if (!asset) return;
+    patchLayer(selectedLayer.id, {
+      name: asset.name,
+      assetId: asset.id,
+      assetCategory: asset.category,
+      image: asset.overlayImage,
+      color: asset.defaultColor,
+      type: asset.category === "accessory" || asset.category === "hair" ? "accessoryLayer" : "moduleLayer",
+      zone: selectedLayer.zone,
+    });
+  };
+
   const activeCategory = (state.activeTool === "accessories" ? "accessory" : state.activeTool === "media" ? "module" : "pattern") as AssetCategory;
-  const libraryAssets = templateAssets.filter((asset) => activeCategory === "pattern" ? asset.category !== "hair" : asset.category === activeCategory || (activeCategory === "module" && asset.category === "graphic"));
+  const libraryAssets = useMemo(() => filterStudioAssets(templateAssets, {
+    category: assetCategoryFilter === "all" ? (activeCategory === "pattern" ? "all" : activeCategory) : assetCategoryFilter,
+    zone: state.activeZone,
+    role: roleFilter,
+    importance: importanceFilter,
+    exportFilter,
+    styleTag: styleTagFilter,
+    vibeTag: vibeTagFilter,
+    fantasyTag: fantasyTagFilter,
+    search: assetSearch,
+  }), [activeCategory, assetCategoryFilter, assetSearch, exportFilter, fantasyTagFilter, importanceFilter, roleFilter, state.activeZone, styleTagFilter, templateAssets, vibeTagFilter]);
+  const filteredAvatarAssets = useMemo(() => filterAvatarAssets(AVATAR_ASSETS, {
+    slot: avatarSlotFilter,
+    category: avatarCategoryFilter,
+    role: roleFilter,
+    importance: importanceFilter,
+    exportFilter,
+    styleTag: styleTagFilter,
+    vibeTag: vibeTagFilter,
+    fantasyTag: fantasyTagFilter,
+    search: avatarAssetSearch,
+  }), [avatarAssetSearch, avatarCategoryFilter, avatarSlotFilter, exportFilter, fantasyTagFilter, importanceFilter, roleFilter, styleTagFilter, vibeTagFilter]);
+  const layeredRoleSummary = useMemo(() => state.layers.reduce((acc, layer) => {
+    const role = getAssetById(layer.assetId)?.importance ?? "decorative";
+    acc[role] += 1;
+    return acc;
+  }, { hero: 0, support: 0, decorative: 0 }), [state.layers]);
   const activeToolMeta = TOOLS.find((tool) => tool.key === state.activeTool);
 
   return (
@@ -312,10 +403,54 @@ export default function Editor() {
 
           <div className="mt-4 space-y-2">
             <p className="text-xs uppercase text-slate-400">3) Asset Library</p>
+            <Input value={assetSearch} onChange={(event) => setAssetSearch(event.target.value)} placeholder="Search clothing asset..." />
+            <div className="grid grid-cols-2 gap-2 text-xs">
+              <select className="rounded border border-slate-700 bg-slate-950 px-2 py-1" value={assetCategoryFilter} onChange={(event) => setAssetCategoryFilter(event.target.value as AssetCategory | "all")}>
+                <option value="all">All categories</option>
+                <option value="pattern">Pattern</option>
+                <option value="graphic">Graphic</option>
+                <option value="trim">Trim</option>
+                <option value="patch">Patch</option>
+                <option value="accessory">Accessory</option>
+                <option value="module">Module</option>
+              </select>
+              <select className="rounded border border-slate-700 bg-slate-950 px-2 py-1" value={exportFilter} onChange={(event) => setExportFilter(event.target.value as AssetBrowserExportFilter)}>
+                <option value="all">All availability</option>
+                <option value="exportable">Exportable only</option>
+                <option value="previewOnly">Preview-only only</option>
+              </select>
+              <select className="rounded border border-slate-700 bg-slate-950 px-2 py-1" value={roleFilter} onChange={(event) => setRoleFilter(event.target.value as (typeof ROLE_OPTIONS)[number])}>
+                <option value="all">Any role</option>
+                {ROLE_OPTIONS.filter((role) => role !== "all").map((role) => <option key={role} value={role}>{role}</option>)}
+              </select>
+              <select className="rounded border border-slate-700 bg-slate-950 px-2 py-1" value={importanceFilter} onChange={(event) => setImportanceFilter(event.target.value as "all" | "hero" | "support" | "decorative")}>
+                <option value="all">Any weight</option>
+                <option value="hero">Hero</option>
+                <option value="support">Support</option>
+                <option value="decorative">Decorative</option>
+              </select>
+            </div>
+            <div className="grid grid-cols-3 gap-2 text-xs">
+              <select className="rounded border border-slate-700 bg-slate-950 px-2 py-1" value={styleTagFilter} onChange={(event) => setStyleTagFilter(event.target.value)}>
+                <option value="all">Style tag</option>
+                {tagOptions.styleTags.map((tag) => <option key={tag} value={tag}>{tag}</option>)}
+              </select>
+              <select className="rounded border border-slate-700 bg-slate-950 px-2 py-1" value={vibeTagFilter} onChange={(event) => setVibeTagFilter(event.target.value)}>
+                <option value="all">Vibe tag</option>
+                {tagOptions.vibeTags.map((tag) => <option key={tag} value={tag}>{tag}</option>)}
+              </select>
+              <select className="rounded border border-slate-700 bg-slate-950 px-2 py-1" value={fantasyTagFilter} onChange={(event) => setFantasyTagFilter(event.target.value)}>
+                <option value="all">Fantasy tag</option>
+                {tagOptions.fantasyTags.map((tag) => <option key={tag} value={tag}>{tag}</option>)}
+              </select>
+            </div>
             {libraryAssets.length > 0 ? (
               <div className="space-y-1 max-h-64 overflow-auto">
                 {libraryAssets.map((asset) => (
-                  <Button key={asset.id} variant="outline" className="w-full justify-start" onClick={() => insertAsset(asset.id)}>{asset.name}</Button>
+                  <Button key={asset.id} variant="outline" className="w-full justify-between" onClick={() => insertAsset(asset.id)}>
+                    <span>{asset.name}</span>
+                    <span className="text-[10px] text-slate-400">{asset.importance ?? "support"} · {assetStatusLabel(asset.previewOnly, asset.exportable)}</span>
+                  </Button>
                 ))}
               </div>
             ) : <p className="text-xs text-slate-400 rounded border border-dashed border-slate-700 p-2">No assets for this tool/template combo yet. Switch template or tool type.</p>}
@@ -384,6 +519,20 @@ export default function Editor() {
                     <p className="text-slate-400">Applied targets: {state.aiResultSummary.appliedTargets.join(", ")}</p>
                   </div>
                 ) : null}
+                <div className="rounded border border-slate-700/70 bg-slate-900/60 p-2 text-[11px] space-y-2">
+                  <p className="font-semibold text-slate-200">Refine after apply</p>
+                  <p className="text-slate-400">Layer mix: {layeredRoleSummary.hero} hero · {layeredRoleSummary.support} support · {layeredRoleSummary.decorative} decorative</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button size="sm" variant="outline" onClick={() => {
+                      const heroLayer = [...state.layers].reverse().find((layer) => getAssetById(layer.assetId)?.importance === "hero");
+                      if (heroLayer) selectLayer(heroLayer.id);
+                    }}>Select latest hero</Button>
+                    <Button size="sm" variant="outline" onClick={() => {
+                      const decorativeLayer = [...state.layers].reverse().find((layer) => (getAssetById(layer.assetId)?.importance ?? "decorative") === "decorative");
+                      if (decorativeLayer) deleteLayer(decorativeLayer.id);
+                    }}>Remove last decorative</Button>
+                  </div>
+                </div>
               </div>
             ) : <p className="text-xs text-slate-400 mt-2">No AI cards yet. Generate first, review cards, then apply.</p>}
           </div>
@@ -395,6 +544,10 @@ export default function Editor() {
             <div className="space-y-2">
               {state.layers.map((layer, index) => (
                 <div key={layer.id} className={`rounded border p-2 ${state.selectedLayerId === layer.id ? "border-cyan-400 bg-cyan-500/10 shadow-[0_0_0_1px_rgba(34,211,238,0.3)]" : "border-slate-700"}`}>
+                  {(() => {
+                    const meta = getAssetById(layer.assetId);
+                    return <p className="text-[10px] text-slate-400 mb-1">{meta?.importance ?? "decorative"} · {assetStatusLabel(meta?.previewOnly, meta?.exportable)}</p>;
+                  })()}
                   <button className="w-full text-left text-sm font-medium" onClick={() => { selectLayer(layer.id); setZone(layer.zone); }}>{layer.name}</button>
                   <p className="text-xs text-slate-400">{layer.type} · {layer.zone}{layer.transform.locked ? " · locked" : ""}</p>
                   <div className="flex gap-1 mt-2">
@@ -412,14 +565,27 @@ export default function Editor() {
           <h2 className="font-medium mt-4 mb-2">Properties</h2>
           {selectedLayer ? (
             <div className="space-y-2 text-xs">
+              <p className="rounded border border-slate-700 bg-slate-950 px-2 py-1 text-[11px] text-slate-300">
+                Target: {selectedLayer.zone} · {selectedLayer.type} · {assetStatusLabel(getAssetById(selectedLayer.assetId)?.previewOnly, getAssetById(selectedLayer.assetId)?.exportable)}
+              </p>
               <label className="text-slate-400">Layer Name</label>
               <Input value={selectedLayer.name} onChange={(event) => patchLayer(selectedLayer.id, { name: event.target.value })} />
+              {selectedLayer.assetId ? (
+                <>
+                  <label className="text-slate-400">Replace with clothing asset</label>
+                  <select className="rounded border border-slate-700 bg-slate-950 px-2 py-1" onChange={(event) => event.target.value && replaceSelectedLayerAsset(event.target.value)} value="">
+                    <option value="">Choose replacement...</option>
+                    {templateAssets.map((asset) => <option key={asset.id} value={asset.id}>{asset.name}</option>)}
+                  </select>
+                  <Button size="sm" variant="outline" onClick={() => deleteLayer(selectedLayer.id)}>Remove selected layer</Button>
+                </>
+              ) : null}
               <label className="text-slate-400">Opacity (0-1)</label>
-              <Input type="number" value={selectedLayer.transform.opacity} min={0} max={1} step={0.1} onChange={(event) => patchLayer(selectedLayer.id, { transform: { ...selectedLayer.transform, opacity: Number(event.target.value) } })} />
+              <Input type="number" value={selectedLayer.transform.opacity} min={0} max={1} step={0.1} onChange={(event) => patchLayer(selectedLayer.id, { transform: { ...selectedLayer.transform, opacity: clamp(Number(event.target.value), 0, 1) } })} />
               <label className="text-slate-400">Scale</label>
-              <Input type="number" value={selectedLayer.transform.scale} min={0.1} max={4} step={0.1} onChange={(event) => patchLayer(selectedLayer.id, { transform: { ...selectedLayer.transform, scale: Number(event.target.value) } })} />
+              <Input type="number" value={selectedLayer.transform.scale} min={0.1} max={4} step={0.1} onChange={(event) => patchLayer(selectedLayer.id, { transform: { ...selectedLayer.transform, scale: clamp(Number(event.target.value), 0.1, 4) } })} />
               <label className="text-slate-400">Rotation</label>
-              <Input type="number" value={selectedLayer.transform.rotation} min={-360} max={360} step={5} onChange={(event) => patchLayer(selectedLayer.id, { transform: { ...selectedLayer.transform, rotation: Number(event.target.value) } })} />
+              <Input type="number" value={selectedLayer.transform.rotation} min={-360} max={360} step={5} onChange={(event) => patchLayer(selectedLayer.id, { transform: { ...selectedLayer.transform, rotation: clamp(Number(event.target.value), -360, 360) } })} />
             </div>
           ) : <p className="text-sm text-slate-400 rounded border border-dashed border-slate-700 p-2">No layer selected. Click a layer card to edit transform and appearance.</p>}
 
@@ -455,13 +621,50 @@ export default function Editor() {
                 <Button size="sm" variant={state.avatar.pose === "idle" ? "default" : "outline"} onClick={() => setAvatarPatch({ pose: "idle" })}>Idle</Button>
                 <Button size="sm" variant={state.avatar.pose === "hero" ? "default" : "outline"} onClick={() => setAvatarPatch({ pose: "hero" })}>Hero</Button>
               </div>
-              <div className="space-y-1">
-                <p className="text-[11px] text-slate-400">Hair</p>
-                {getAvatarAssetsForSlot("hair").map((asset) => <Button key={asset.id} size="sm" variant={state.avatar.slots.hair?.assetId === asset.id ? "default" : "outline"} className="w-full justify-start" onClick={() => setAvatarSlot("hair", { assetId: asset.id, color: asset.color, scale: 1, offset: { x: 0, y: 0, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, visible: true })}>{asset.name}</Button>)}
+            </div>
+            <div className="space-y-2 rounded border border-slate-700 p-2">
+              <p className="text-xs uppercase text-slate-400">Avatar slot editor</p>
+              <Input value={avatarAssetSearch} onChange={(event) => setAvatarAssetSearch(event.target.value)} placeholder="Search avatar assets..." />
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <select className="rounded border border-slate-700 bg-slate-950 px-2 py-1" value={avatarSlotFilter} onChange={(event) => setAvatarSlotFilter(event.target.value as AvatarCosmeticSlot | "all")}>
+                  <option value="all">All slots</option>
+                  {AVATAR_SLOTS.map((slot) => <option key={slot} value={slot}>{slotLabel(slot)}</option>)}
+                </select>
+                <select className="rounded border border-slate-700 bg-slate-950 px-2 py-1" value={avatarCategoryFilter} onChange={(event) => setAvatarCategoryFilter(event.target.value as AvatarAssetCategory | "all")}>
+                  <option value="all">All categories</option>
+                  <option value="face">Face</option>
+                  <option value="hair">Hair</option>
+                  <option value="hat">Hat</option>
+                  <option value="neck">Neck</option>
+                  <option value="shoulder">Shoulder</option>
+                  <option value="back">Back</option>
+                  <option value="footwear">Footwear</option>
+                  <option value="aura">Aura</option>
+                </select>
               </div>
-              <div className="space-y-1">
-                <p className="text-[11px] text-slate-400">Aura</p>
-                <Button size="sm" variant={state.avatar.slots.aura ? "default" : "outline"} className="w-full" onClick={() => setAvatarSlot("aura", state.avatar.slots.aura ? null : { assetId: "aura_neon_ring", color: "#22d3ee", scale: 1, offset: { x: 0, y: 0, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, visible: true })}>{state.avatar.slots.aura ? "Disable Aura" : "Enable Aura"}</Button>
+              <div className="space-y-1 max-h-64 overflow-auto">
+                {AVATAR_SLOTS.filter((slot) => avatarSlotFilter === "all" || slot === avatarSlotFilter).map((slot) => {
+                  const current = state.avatar.slots[slot];
+                  const currentAsset = getAvatarAssetById(current?.assetId);
+                  const candidates = filteredAvatarAssets.filter((asset) => asset.slot === slot);
+                  return (
+                    <div key={slot} className="rounded border border-slate-700 p-2">
+                      <div className="flex items-center justify-between">
+                        <p className="text-[11px] text-slate-300">{slotLabel(slot)}</p>
+                        <span className="text-[10px] text-slate-400">{currentAsset ? assetStatusLabel(currentAsset.previewOnly, currentAsset.exportable) : "Empty"}</span>
+                      </div>
+                      <p className="text-[11px] text-slate-400">{currentAsset?.name ?? "No asset assigned"}</p>
+                      <div className="grid grid-cols-2 gap-1 mt-1">
+                        {candidates.slice(0, 2).map((asset) => (
+                          <Button key={asset.id} size="sm" variant={current?.assetId === asset.id ? "default" : "outline"} className="justify-start text-[11px]" onClick={() => assignAvatarSlotAsset(slot, asset)}>
+                            {asset.name}
+                          </Button>
+                        ))}
+                        <Button size="sm" variant="ghost" onClick={() => setAvatarSlot(slot, null)}>Remove</Button>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
             <p className="text-xs text-slate-400">Export captures this exact design state and layer stack.</p>

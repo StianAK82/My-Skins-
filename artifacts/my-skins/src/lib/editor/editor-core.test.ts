@@ -221,3 +221,33 @@ test("AI avatar preview patch applies into canonical avatar state", () => {
   assert.equal(state.avatar.slots.aura?.assetId, "aura_neon_ring");
   assert.equal(state.aiAvatarPreview, null);
 });
+
+test("avatar slot replace/remove stays deterministic for manual refinement", () => {
+  const store = useDesignStore.getState();
+  store.loadSnapshot({ ...baseState, aiPlanPreview: [], aiAvatarPreview: null });
+
+  store.setAvatarSlot("hat", { assetId: "hat_street_cap", scale: 1, visible: true, color: "#0f172a", offset: { x: 0, y: 0, z: 0 }, rotation: { x: 0, y: 0, z: 0 } });
+  store.setAvatarSlot("hat", { assetId: "hat_cyber_horns", scale: 1, visible: true, color: "#38bdf8", offset: { x: 0, y: 0, z: 0 }, rotation: { x: 0, y: 0, z: 0 } });
+  assert.equal(useDesignStore.getState().state.avatar.slots.hat?.assetId, "hat_cyber_horns");
+
+  store.setAvatarSlot("hat", null);
+  assert.equal(useDesignStore.getState().state.avatar.slots.hat, null);
+});
+
+test("module layer replace/remove keeps layer order deterministic", () => {
+  const store = useDesignStore.getState();
+  store.loadSnapshot({
+    ...baseState,
+    layers: [
+      { id: "hero", name: "Hero", type: "moduleLayer", zone: "front", assetId: "graphic_dragon", transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, visible: true, locked: false } },
+      { id: "support", name: "Support", type: "moduleLayer", zone: "front", assetId: "trim_neon", transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, visible: true, locked: false } },
+    ],
+  });
+
+  store.patchLayer("hero", { assetId: "graphic_skull", name: "Hero Replaced" });
+  assert.deepEqual(useDesignStore.getState().state.layers.map((layer) => layer.id), ["hero", "support"]);
+  assert.equal(useDesignStore.getState().state.layers[0]?.assetId, "graphic_skull");
+
+  store.deleteLayer("support");
+  assert.deepEqual(useDesignStore.getState().state.layers.map((layer) => layer.id), ["hero"]);
+});
