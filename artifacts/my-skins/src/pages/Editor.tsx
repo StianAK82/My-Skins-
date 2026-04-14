@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent } from "react";
 import { Link, useParams } from "wouter";
-import { ArrowLeft, Copy, Download, Eye, Layers, Lock, MoveDown, MoveUp, Sparkles, Trash2, Unlock, Wand2 } from "lucide-react";
+import { ArrowLeft, Check, Copy, Download, Eye, Layers, Lock, MoveDown, MoveUp, Palette, Sparkles, ToyBrick, Trash2, Unlock, UserRound, Wand2 } from "lucide-react";
 import { aiGenerateDesign } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -28,6 +28,7 @@ import { buildAiAvatarLook } from "@/lib/editor/avatar-look";
 import { normalizeAiResponse } from "@/lib/ai/normalize-ai-response";
 import { resolveAvatarSlotAssets } from "@/lib/ai/asset-resolver";
 import { TEMPLATE_SIZE, getZonesForTemplate } from "@/lib/editor/templates";
+import { getFriendlyEmptyState, getSimpleFlowStep, getVisibleSimplePanels, shouldShowAdvancedControls, type EditorExperienceMode, type SimpleCreationPath } from "@/lib/editor/experience-mode";
 
 const TOOLS: Array<{ key: ToolType; label: string; hint: string }> = [
   { key: "templates", label: "Templates", hint: "Choose your clothing base" },
@@ -41,6 +42,8 @@ const TOOLS: Array<{ key: ToolType; label: string; hint: string }> = [
 
 const SWATCHES = ["#ef4444", "#3b82f6", "#f59e0b", "#10b981", "#a855f7", "#f8fafc", "#111827"];
 const STYLE_PRESETS = ["Streetwear", "Esports", "Tactical", "Fantasy", "Minimal", "Anime"];
+const SIMPLE_STYLE_CARDS = ["Cute", "Dark", "Anime", "Dragon", "Cyber", "Sport", "Flame"];
+const SIMPLE_AI_HELPERS = ["make it darker", "add wings", "make it cute", "make it more Roblox", "show 3 ideas"];
 const AVATAR_SLOTS: AvatarCosmeticSlot[] = ["face", "hair", "hat", "neck", "leftShoulder", "rightShoulder", "back", "leftFootwear", "rightFootwear", "aura"];
 
 const ROLE_OPTIONS = ["all", "graphic", "module", "trim", "face", "hair", "headwear", "neckwear", "armor", "wings", "aura", "footwear", "companion"] as const;
@@ -130,6 +133,11 @@ export default function Editor() {
   const [styleTagFilter, setStyleTagFilter] = useState<string>("all");
   const [vibeTagFilter, setVibeTagFilter] = useState<string>("all");
   const [fantasyTagFilter, setFantasyTagFilter] = useState<string>("all");
+  const [experienceMode, setExperienceMode] = useState<EditorExperienceMode>("simple");
+  const [simpleCreationPath, setSimpleCreationPath] = useState<SimpleCreationPath>(null);
+  const [simpleStyleChoice, setSimpleStyleChoice] = useState<string | null>(null);
+  const [editorSurface, setEditorSurface] = useState<"clothes" | "avatar">("clothes");
+  const [simpleAdvancedOpen, setSimpleAdvancedOpen] = useState(false);
 
   const {
     state,
@@ -163,6 +171,15 @@ export default function Editor() {
   const hasLayers = state.layers.length > 0;
   const storageKey = `design:${id}`;
   const hasSavedVersion = typeof window !== "undefined" && Boolean(localStorage.getItem(storageKey));
+  const simpleStep = getSimpleFlowStep({ creationPath: simpleCreationPath, template: state.template, style: simpleStyleChoice, hasDraft: hasLayers });
+  const showAdvancedControls = shouldShowAdvancedControls(experienceMode, simpleAdvancedOpen);
+  const simplePanels = getVisibleSimplePanels({ step: simpleStep, surface: editorSurface, advancedOpen: simpleAdvancedOpen });
+  const friendlyEmptyMessage = getFriendlyEmptyState({
+    hasLayers,
+    selectedLayerId: state.selectedLayerId,
+    hasAiCards: state.aiPlanPreview.length > 0,
+    isRobloxConnected: false,
+  });
 
   const handleOverlayImageReady = useCallback(() => {
     setImageRenderNonce((current) => current + 1);
@@ -343,6 +360,10 @@ export default function Editor() {
           <h1 className="text-lg font-semibold">My Skins Studio — Project {id}</h1>
         </div>
         <div className="flex items-center gap-2">
+          <div className="rounded-lg border border-slate-700 bg-slate-900 p-1 flex gap-1">
+            <Button size="sm" variant={experienceMode === "simple" ? "default" : "ghost"} className="h-9 px-4" onClick={() => setExperienceMode("simple")}>Simple Mode</Button>
+            <Button size="sm" variant={experienceMode === "studio" ? "default" : "ghost"} className="h-9 px-4" onClick={() => setExperienceMode("studio")}>Studio Mode</Button>
+          </div>
           <Button variant="secondary" onClick={saveDesign}>Save</Button>
           <Button variant="secondary" onClick={loadDesign}>Load</Button>
           <Button onClick={() => void handleExportPng()} disabled={!hasLayers}><Download className="mr-2 h-4 w-4" />Export PNG</Button>
@@ -350,47 +371,117 @@ export default function Editor() {
       </div>
 
       <div className="mb-4 rounded-xl border border-slate-800 bg-slate-900/70 px-3 py-2 text-xs text-slate-300 flex items-center justify-between gap-3">
-        <p>Flow: Template → Build with assets/AI/tools → Check preview → Save → Export.</p>
+        <p>{experienceMode === "simple" ? `Simple flow: ${simpleStep === 1 ? "Choose how to create" : simpleStep === 2 ? "Pick shirt or pants" : simpleStep === 3 ? "Pick your style" : "Create and refine"}.` : "Studio flow: Template → Build with assets/AI/tools → Check preview → Save → Export."}</p>
         <p className="text-slate-400">{saveStatus || (hasSavedVersion ? "Saved version available for quick reload." : "No saved version yet for this project.")}</p>
+      </div>
+
+      <div className="mb-4 grid grid-cols-2 gap-3">
+        <Button
+          variant={editorSurface === "clothes" ? "default" : "outline"}
+          className="h-12 justify-start text-base"
+          onClick={() => setEditorSurface("clothes")}
+        >
+          <Palette className="mr-2 h-5 w-5" /> Clothes
+        </Button>
+        <Button
+          variant={editorSurface === "avatar" ? "default" : "outline"}
+          className="h-12 justify-start text-base"
+          onClick={() => setEditorSurface("avatar")}
+        >
+          <UserRound className="mr-2 h-5 w-5" /> Avatar
+        </Button>
       </div>
 
       <div className="grid grid-cols-[280px_1fr_360px] gap-4 h-[calc(100vh-132px)]">
         <aside className="rounded-xl border border-slate-800 bg-slate-900 p-3 overflow-auto">
-          <h2 className="font-medium mb-2">Studio Tools</h2>
-          <div className="grid grid-cols-2 gap-2">
-            {TOOLS.map((tool) => (
-              <Button key={tool.key} variant={state.activeTool === tool.key ? "default" : "outline"} className="justify-start text-xs" onClick={() => setTool(tool.key)}>{tool.label}</Button>
-            ))}
-          </div>
-          <p className="text-xs text-slate-400 mt-2">{activeToolMeta?.hint}</p>
+          {experienceMode === "simple" ? (
+            <div className="space-y-3">
+              <h2 className="font-semibold text-base">Guided Creator</h2>
+              <div className="rounded-lg border border-slate-700 bg-slate-950/60 p-3">
+                <p className="text-xs uppercase text-slate-400 mb-2">Step 1 · Choose how to create</p>
+                <div className="grid grid-cols-1 gap-2">
+                  {[
+                    { id: "ai" as const, label: "AI", icon: Sparkles },
+                    { id: "build" as const, label: "Build myself", icon: ToyBrick },
+                    { id: "remix" as const, label: "Remix", icon: Copy },
+                  ].map((path) => (
+                    <Button key={path.id} variant={simpleCreationPath === path.id ? "default" : "outline"} className="h-12 justify-start text-sm" onClick={() => setSimpleCreationPath(path.id)}>
+                      <path.icon className="mr-2 h-4 w-4" />{path.label}
+                      {simpleCreationPath === path.id ? <Check className="ml-auto h-4 w-4" /> : null}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+              <div className="rounded-lg border border-slate-700 bg-slate-950/60 p-3">
+                <p className="text-xs uppercase text-slate-400 mb-2">Step 2 · Choose what to make</p>
+                <div className="grid grid-cols-2 gap-2">
+                  <Button variant={state.template === "shirt" ? "default" : "outline"} className="h-12" onClick={() => setTemplate("shirt")}>👕 Shirt</Button>
+                  <Button variant={state.template === "pants" ? "default" : "outline"} className="h-12" onClick={() => setTemplate("pants")}>👖 Pants</Button>
+                </div>
+              </div>
+              <div className="rounded-lg border border-slate-700 bg-slate-950/60 p-3">
+                <p className="text-xs uppercase text-slate-400 mb-2">Step 3 · Choose style</p>
+                <div className="grid grid-cols-2 gap-2">
+                  {SIMPLE_STYLE_CARDS.map((style) => (
+                    <Button
+                      key={style}
+                      variant={simpleStyleChoice === style ? "default" : "outline"}
+                      className="h-11 justify-start"
+                      onClick={() => {
+                        setSimpleStyleChoice(style);
+                        setAiStyle(style);
+                        setAiPrompt(`${style.toLowerCase()} ${state.template} design for Roblox`);
+                      }}
+                    >
+                      {style}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+              <Button variant="secondary" className="w-full h-11" onClick={() => setSimpleAdvancedOpen((current) => !current)}>
+                {simpleAdvancedOpen ? "Hide More Tools" : "More Tools"}
+              </Button>
+              <Button className="w-full h-11" onClick={() => setExperienceMode("studio")}>Open Studio</Button>
+            </div>
+          ) : (
+            <>
+              <h2 className="font-medium mb-2">Studio Tools</h2>
+              <div className="grid grid-cols-2 gap-2">
+                {TOOLS.map((tool) => (
+                  <Button key={tool.key} variant={state.activeTool === tool.key ? "default" : "outline"} className="justify-start text-xs" onClick={() => setTool(tool.key)}>{tool.label}</Button>
+                ))}
+              </div>
+              <p className="text-xs text-slate-400 mt-2">{activeToolMeta?.hint}</p>
+            </>
+          )}
 
-          <div className="mt-4 space-y-2">
+          {(experienceMode === "studio" || showAdvancedControls) ? <div className="mt-4 space-y-2">
             <p className="text-xs uppercase text-slate-400">1) Start from Template</p>
             <div className="grid grid-cols-2 gap-2">
               <Button variant={state.template === "shirt" ? "default" : "outline"} onClick={() => setTemplate("shirt")}>Classic Shirt</Button>
               <Button variant={state.template === "pants" ? "default" : "outline"} onClick={() => setTemplate("pants")}>Classic Pants</Button>
             </div>
-          </div>
+          </div> : null}
 
-          <div className="mt-4 space-y-2">
+          {(experienceMode === "studio" || showAdvancedControls) ? <div className="mt-4 space-y-2">
             <p className="text-xs uppercase text-slate-400">2) Style Direction</p>
             <div className="grid grid-cols-2 gap-1">
               {STYLE_PRESETS.map((style) => (
                 <Button key={style} variant={aiStyle === style ? "default" : "outline"} size="sm" onClick={() => setAiStyle(style)}>{style}</Button>
               ))}
             </div>
-          </div>
+          </div> : null}
 
-          <div className="mt-4 space-y-2">
+          {(experienceMode === "studio" || showAdvancedControls || simplePanels.showBuilder) ? <div className="mt-4 space-y-2">
             <p className="text-xs uppercase text-slate-400">Quick Colors</p>
             <div className="grid grid-cols-4 gap-2">
               {SWATCHES.map((swatch) => (
                 <button key={swatch} className="h-8 rounded border border-slate-700" style={{ backgroundColor: swatch }} onClick={() => setPaintSwatch(swatch)} aria-label={`Set swatch ${swatch}`} />
               ))}
             </div>
-          </div>
+          </div> : null}
 
-          <div className="mt-4 space-y-2">
+          {(experienceMode === "studio" || showAdvancedControls || simplePanels.showBuilder) ? <div className="mt-4 space-y-2">
             <p className="text-xs uppercase text-slate-400">Manual Build</p>
             <Button className="w-full" onClick={() => addLayer({ name: "Base Fill", type: "paintLayerSet", zone: state.activeZone, color: state.paintSwatch })}>+ Fill Active Zone</Button>
             <Button className="w-full" onClick={() => addLayer({ name: "Text Label", type: "textLayer", zone: state.activeZone, text: "MY SKINS", color: state.paintSwatch, fontSize: 30, transform: { x: 220, y: 210 } })}>+ Add Text</Button>
@@ -399,9 +490,9 @@ export default function Editor() {
               const latest = useDesignStore.getState().state.layers.at(-1);
               setDrawActiveLayer(latest?.id ?? null);
             }}>+ Brush Layer</Button>
-          </div>
+          </div> : null}
 
-          <div className="mt-4 space-y-2">
+          {(experienceMode === "studio" || showAdvancedControls || (simplePanels.showBuilder && editorSurface === "clothes")) ? <div className="mt-4 space-y-2">
             <p className="text-xs uppercase text-slate-400">3) Asset Library</p>
             <Input value={assetSearch} onChange={(event) => setAssetSearch(event.target.value)} placeholder="Search clothing asset..." />
             <div className="grid grid-cols-2 gap-2 text-xs">
@@ -454,14 +545,14 @@ export default function Editor() {
                 ))}
               </div>
             ) : <p className="text-xs text-slate-400 rounded border border-dashed border-slate-700 p-2">No assets for this tool/template combo yet. Switch template or tool type.</p>}
-          </div>
+          </div> : null}
         </aside>
 
         <main className="rounded-xl border border-slate-800 bg-slate-900 p-3 grid grid-rows-[1fr_auto] gap-3">
           <div className={`grid gap-3 ${state.preview.mode === "split" ? "grid-cols-2" : "grid-cols-1"}`}>
             {(state.preview.mode === "2d" || state.preview.mode === "split") && (
               <div className="rounded-lg border border-slate-800 bg-slate-950 p-2 relative">
-                {!hasLayers ? <div className="absolute inset-3 z-10 rounded border border-dashed border-slate-700 bg-slate-900/80 p-3 text-xs text-slate-300">No layers yet. Start with <strong>Fill Active Zone</strong>, add an asset, or generate AI cards.</div> : null}
+                {!hasLayers ? <div className="absolute inset-3 z-10 rounded border border-dashed border-slate-700 bg-slate-900/80 p-3 text-sm text-slate-200">{friendlyEmptyMessage}</div> : null}
                 <canvas
                   ref={canvasRef}
                   width={TEMPLATE_SIZE.width}
@@ -491,7 +582,7 @@ export default function Editor() {
             )}
           </div>
 
-          <div className="rounded-lg border border-slate-800 bg-slate-950 p-3">
+          {(experienceMode === "studio" || simplePanels.showAi) ? <div className="rounded-lg border border-slate-800 bg-slate-950 p-3">
             <div className="flex gap-2 items-center mb-2">
               <Sparkles className="h-4 w-4" />
               <p className="text-sm font-medium">AI Suggestion Cards</p>
@@ -500,6 +591,15 @@ export default function Editor() {
               <p className="text-[11px] text-slate-400">{state.aiPlanPreview.length > 0 ? `Reviewing ${state.aiPlanPreview.length} card(s) and avatar look before apply.` : "Generate cards, review placement, then apply."}</p>
             </div>
             <Input value={aiPrompt} onChange={(event) => setAiPrompt(event.target.value)} placeholder="Describe your Roblox clothing design..." />
+            {experienceMode === "simple" ? (
+              <div className="mt-2 flex flex-wrap gap-2">
+                {SIMPLE_AI_HELPERS.map((chip) => (
+                  <Button key={chip} size="sm" variant="outline" className="h-9 rounded-full" onClick={() => setAiPrompt((current) => `${current}${current ? ", " : ""}${chip}`)}>
+                    {chip}
+                  </Button>
+                ))}
+              </div>
+            ) : null}
             {aiError ? <p className="text-xs text-red-400 mt-2">{aiError}</p> : null}
             {state.aiPlanPreview.length > 0 ? (
               <div className="space-y-2 mt-2">
@@ -535,12 +635,14 @@ export default function Editor() {
                 </div>
               </div>
             ) : <p className="text-xs text-slate-400 mt-2">No AI cards yet. Generate first, review cards, then apply.</p>}
-          </div>
+          </div> : null}
         </main>
 
         <aside className="rounded-xl border border-slate-800 bg-slate-900 p-3 overflow-auto">
-          <h2 className="font-medium mb-2 flex items-center gap-2"><Layers className="h-4 w-4" />Layers</h2>
-          {hasLayers ? (
+          {editorSurface === "clothes" ? (
+            <>
+          <h2 className="font-medium mb-2 flex items-center gap-2"><Layers className="h-4 w-4" />Clothes Layers</h2>
+          {(experienceMode === "studio" || simplePanels.showLayerStack) && hasLayers ? (
             <div className="space-y-2">
               {state.layers.map((layer, index) => (
                 <div key={layer.id} className={`rounded border p-2 ${state.selectedLayerId === layer.id ? "border-cyan-400 bg-cyan-500/10 shadow-[0_0_0_1px_rgba(34,211,238,0.3)]" : "border-slate-700"}`}>
@@ -560,9 +662,9 @@ export default function Editor() {
                 </div>
               ))}
             </div>
-          ) : <p className="text-xs text-slate-400 rounded border border-dashed border-slate-700 p-2">No layers added yet. Add one from Manual Build or Asset Library to unlock editing and export.</p>}
+          ) : <p className="text-xs text-slate-400 rounded border border-dashed border-slate-700 p-3">{friendlyEmptyMessage || "No layers added yet. Add one from Manual Build or Asset Library to unlock editing and export."}</p>}
 
-          <h2 className="font-medium mt-4 mb-2">Properties</h2>
+          {(experienceMode === "studio" || simplePanels.showLayerStack) ? <h2 className="font-medium mt-4 mb-2">Properties</h2> : null}
           {selectedLayer ? (
             <div className="space-y-2 text-xs">
               <p className="rounded border border-slate-700 bg-slate-950 px-2 py-1 text-[11px] text-slate-300">
@@ -587,7 +689,13 @@ export default function Editor() {
               <label className="text-slate-400">Rotation</label>
               <Input type="number" value={selectedLayer.transform.rotation} min={-360} max={360} step={5} onChange={(event) => patchLayer(selectedLayer.id, { transform: { ...selectedLayer.transform, rotation: clamp(Number(event.target.value), -360, 360) } })} />
             </div>
-          ) : <p className="text-sm text-slate-400 rounded border border-dashed border-slate-700 p-2">No layer selected. Click a layer card to edit transform and appearance.</p>}
+          ) : (experienceMode === "studio" || simplePanels.showLayerStack) ? <p className="text-sm text-slate-400 rounded border border-dashed border-slate-700 p-2">No layer selected. Click a layer card to edit transform and appearance.</p> : null}
+            </>
+          ) : (
+            <div className="rounded border border-dashed border-slate-700 p-3 text-sm text-slate-300">
+              Avatar editing is open. Pick avatar slots below to style face, hair, aura, and accessories.
+            </div>
+          )}
 
           <div className="mt-4 space-y-2">
             <p className="text-xs uppercase text-slate-400">Preview Studio</p>
@@ -622,7 +730,7 @@ export default function Editor() {
                 <Button size="sm" variant={state.avatar.pose === "hero" ? "default" : "outline"} onClick={() => setAvatarPatch({ pose: "hero" })}>Hero</Button>
               </div>
             </div>
-            <div className="space-y-2 rounded border border-slate-700 p-2">
+            {(experienceMode === "studio" || showAdvancedControls || editorSurface === "avatar") ? <div className="space-y-2 rounded border border-slate-700 p-2">
               <p className="text-xs uppercase text-slate-400">Avatar slot editor</p>
               <Input value={avatarAssetSearch} onChange={(event) => setAvatarAssetSearch(event.target.value)} placeholder="Search avatar assets..." />
               <div className="grid grid-cols-2 gap-2 text-xs">
@@ -666,7 +774,7 @@ export default function Editor() {
                   );
                 })}
               </div>
-            </div>
+            </div> : null}
             <p className="text-xs text-slate-400">Export captures this exact design state and layer stack.</p>
           </div>
         </aside>
