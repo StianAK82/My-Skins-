@@ -198,17 +198,20 @@ function BodyPart({ material, args, position, radius, smoothness, maps, skinTone
   skinTone: string;
 }) {
   if (material === "skin") {
-    return <RoundedBox args={args} radius={radius} smoothness={smoothness} position={position} castShadow><meshStandardMaterial color={skinTone} roughness={0.36} metalness={0.02} /></RoundedBox>;
+    return <RoundedBox args={args} radius={radius} smoothness={smoothness} position={position} castShadow><meshStandardMaterial color={skinTone} roughness={0.42} metalness={0.02} /></RoundedBox>;
   }
   const mapSet = material === "shirt" ? maps.shirt : maps.pants;
+  const baseColor = material === "shirt" ? "#f8fafc" : "#e2e8f0";
+  const topColor = material === "shirt" ? "#dbeafe" : "#cbd5e1";
+  const bottomColor = material === "shirt" ? "#e2e8f0" : "#bfdbfe";
   return (
     <RoundedBox args={args} radius={radius} smoothness={smoothness} position={position} castShadow>
-      <meshStandardMaterial attach="material-0" map={mapSet.side} roughness={0.58} metalness={0.03} />
-      <meshStandardMaterial attach="material-1" map={mapSet.side} roughness={0.58} metalness={0.03} />
-      <meshStandardMaterial attach="material-2" color="#111827" roughness={0.88} />
-      <meshStandardMaterial attach="material-3" color="#0f172a" roughness={0.88} />
-      <meshStandardMaterial attach="material-4" map={mapSet.front} roughness={0.56} metalness={0.03} />
-      <meshStandardMaterial attach="material-5" map={mapSet.back} roughness={0.56} metalness={0.03} />
+      <meshStandardMaterial attach="material-0" map={mapSet.side} color={baseColor} roughness={0.69} metalness={0.02} />
+      <meshStandardMaterial attach="material-1" map={mapSet.side} color={baseColor} roughness={0.69} metalness={0.02} />
+      <meshStandardMaterial attach="material-2" color={topColor} roughness={0.74} />
+      <meshStandardMaterial attach="material-3" color={bottomColor} roughness={0.74} />
+      <meshStandardMaterial attach="material-4" map={mapSet.front} color={baseColor} roughness={0.66} metalness={0.02} />
+      <meshStandardMaterial attach="material-5" map={mapSet.back} color={baseColor} roughness={0.66} metalness={0.02} />
     </RoundedBox>
   );
 }
@@ -220,6 +223,11 @@ function RobloxAvatar({ maps, view, itemType, avatar, mode }: { maps: ClothingMa
   const baseModel = getAvatarBaseModel(avatar.modelVariant);
   const presetScale = avatar.scalePreset === "slender" ? [0.94, 1.05, 0.92] : avatar.scalePreset === "stocky" ? [1.1, 0.98, 1.1] : [1, 1, 1];
   const poseRotY = avatar.pose === "hero" ? 0.15 : avatar.pose === "walk" ? 0.06 : 0;
+  const partScaleForId = (partId: string): [number, number, number] => {
+    if (partId.includes("head")) return [avatar.bodyScale.head, avatar.bodyScale.head, avatar.bodyScale.head];
+    if (partId.includes("Leg")) return [1, avatar.bodyScale.legs, 1];
+    return [1, 1, 1];
+  };
 
   return (
     <group rotation-y={view === "back" ? Math.PI : 0} scale={[
@@ -229,7 +237,9 @@ function RobloxAvatar({ maps, view, itemType, avatar, mode }: { maps: ClothingMa
     ]}>
       <group rotation-y={poseRotY}>
         {baseModel.bodyParts.map((part) => (
-          <BodyPart key={part.id} material={part.material} args={part.args} position={part.position} radius={part.radius} smoothness={part.smoothness} maps={{ shirt: shirtMaps, pants: pantsMaps }} skinTone={avatar.skinTone} />
+          <group key={part.id} position={part.position} scale={partScaleForId(part.id)}>
+            <BodyPart material={part.material} args={part.args} position={[0, 0, 0]} radius={part.radius} smoothness={part.smoothness} maps={{ shirt: shirtMaps, pants: pantsMaps }} skinTone={avatar.skinTone} />
+          </group>
         ))}
       </group>
       {(["face", "hair", "hat", "neck", "leftShoulder", "rightShoulder", "back", "leftFootwear", "rightFootwear", "aura"] as AvatarCosmeticSlot[]).map((slot) => <AvatarCosmetic key={slot} slot={slot} avatar={avatar} mode={mode} />)}

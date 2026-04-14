@@ -5,6 +5,7 @@ import { getAttachmentPoint, resolveSlotPosition } from "./avatar-slots.ts";
 
 test("attachment points are deterministic for avatar slots", () => {
   const avatar = defaultAvatarState();
+  assert.equal(avatar.slots.hair, null);
   const first = getAttachmentPoint("hair", avatar);
   const second = getAttachmentPoint("hair", avatar);
   assert.deepEqual(first, second);

@@ -22,6 +22,17 @@ test("base avatar models expose asset-driven body definitions", () => {
   assert.equal(heroic.bodyParts.length >= 8, true);
 });
 
+test("default proportioned base uses segmented limbs for roblox-like silhouette", () => {
+  const neutralBase = getAvatarBaseModel("proportioned_r15");
+  const ids = neutralBase.bodyParts.map((part) => part.id);
+  assert.equal(ids.includes("upperTorso"), true);
+  assert.equal(ids.includes("lowerTorso"), true);
+  assert.equal(ids.includes("leftLowerArm"), true);
+  assert.equal(ids.includes("rightLowerArm"), true);
+  assert.equal(ids.includes("leftLowerLeg"), true);
+  assert.equal(ids.includes("rightLowerLeg"), true);
+});
+
 test("asset browser filters studio assets by role/tag/exportability", () => {
   const filtered = filterStudioAssets(STUDIO_ASSETS, {
     category: "all",
