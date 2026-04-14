@@ -21,11 +21,18 @@ import {
   toRobloxItemType,
   type RobloxUploadStatus,
 } from "../lib/roblox-upload";
+import {
+  buildProcessingAttempt,
+  MAX_UPLOAD_RETRIES,
+  parseUploadExecutionMode,
+  resolveLatestCanonicalExportArtifact,
+  validateRetryEligibility,
+  type CanonicalExportArtifactCandidate,
+} from "../lib/roblox-publish-pipeline";
 
 const router: IRouter = Router();
 
 const LOGIN_STATE_TTL_MS = 10 * 60 * 1000;
-const MAX_UPLOAD_RETRIES = 3;
 type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
 const uploadSchema = z.object({ projectId: z.string().uuid() });
@@ -49,6 +56,7 @@ function robloxConfig() {
     tokenUrl: process.env.ROBLOX_OAUTH_TOKEN_URL ?? "https://apis.roblox.com/oauth/v1/token",
     classicUploadUrl: process.env.ROBLOX_CLASSIC_UPLOAD_URL,
     uploadMode: process.env.ROBLOX_UPLOAD_MODE ?? "auto",
+    executionMode: parseUploadExecutionMode(process.env.ROBLOX_UPLOAD_EXECUTION_MODE),
   };
 }
 
@@ -178,13 +186,16 @@ function isPreviewOnlyProject(project: { tags: string[] }) {
 }
 
 async function resolveCanonicalArtifact(userId: string, projectId: string) {
-  const [artifact] = await db
+  const artifacts = await db
     .select({
       exportJobId: exportJobsTable.id,
+      exportJobCreatedAt: exportJobsTable.createdAt,
       artifactId: exportArtifactsTable.id,
       artifactUrl: exportArtifactsTable.url,
       width: exportArtifactsTable.width,
       height: exportArtifactsTable.height,
+      size: exportArtifactsTable.size,
+      artifactCreatedAt: exportArtifactsTable.createdAt,
     })
     .from(exportJobsTable)
     .innerJoin(exportArtifactsTable, eq(exportArtifactsTable.exportJobId, exportJobsTable.id))
@@ -194,13 +205,12 @@ async function resolveCanonicalArtifact(userId: string, projectId: string) {
       eq(exportJobsTable.status, "completed"),
       eq(exportJobsTable.format, "png"),
     ))
-    .orderBy(desc(exportJobsTable.createdAt))
-    .limit(1);
+    .orderBy(desc(exportJobsTable.createdAt), desc(exportArtifactsTable.createdAt))
+    .limit(20);
 
-  if (!artifact) return null;
-  if (!artifact.artifactUrl || !artifact.artifactUrl.startsWith("http")) return null;
-  if (artifact.width !== 585 || artifact.height !== 559) return null;
-  return artifact;
+  const resolution = resolveLatestCanonicalExportArtifact(artifacts as CanonicalExportArtifactCandidate[]);
+  if (!resolution.ok) return null;
+  return resolution.artifact;
 }
 
 async function submitClassicUpload(input: {
@@ -269,6 +279,169 @@ async function submitClassicUpload(input: {
     uploadId: typeof rawBody.uploadId === "string" ? rawBody.uploadId : null,
     raw: rawBody,
   };
+}
+
+async function processUploadJobNow(input: {
+  uploadJobId: string;
+  userId: string;
+  projectId: string;
+  projectType: "shirt" | "pants";
+  projectTitle: string;
+  connection: typeof robloxConnectionsTable.$inferSelect | undefined;
+  cfg: ReturnType<typeof robloxConfig>;
+  req: RequestLogLike;
+}) {
+  const now = new Date();
+  const attempt = await db.update(robloxUploadJobsTable).set({ status: "processing", completedAt: null })
+    .where(and(eq(robloxUploadJobsTable.id, input.uploadJobId), eq(robloxUploadJobsTable.status, "queued")))
+    .returning({ id: robloxUploadJobsTable.id, retryCount: robloxUploadJobsTable.retryCount });
+
+  if (!attempt.length) {
+    input.req.log.warn({ uploadJobId: input.uploadJobId }, "roblox.upload.processing_skipped");
+    return;
+  }
+
+  const attemptNumber = buildProcessingAttempt(attempt[0].retryCount);
+  await db.transaction(async (tx: DbTransaction) => {
+    await appendUploadEvent(tx, {
+      uploadJobId: input.uploadJobId,
+      status: "processing",
+      code: "UPLOAD_PROCESSING",
+      message: "Upload request is being processed.",
+      detail: { attempt: attemptNumber },
+    });
+  });
+  input.req.log.info({ uploadJobId: input.uploadJobId, projectId: input.projectId, attempt: attemptNumber }, "roblox.upload.processing_started");
+
+  const connectionState = resolveRobloxConnectionState(input.connection, now);
+  if (!input.connection || connectionState === "disconnected") {
+    await db.transaction(async (tx: DbTransaction) => {
+      await transitionUploadJob(tx, { uploadJobId: input.uploadJobId, from: "processing", to: "failed", data: { lastErrorCode: "MISSING_CONNECTION", lastErrorMessage: "No active Roblox OAuth connection." } });
+      await appendUploadEvent(tx, {
+        uploadJobId: input.uploadJobId,
+        status: "failed",
+        code: "MISSING_CONNECTION",
+        message: "No active Roblox OAuth connection.",
+      });
+    });
+    return;
+  }
+
+  const artifact = await resolveCanonicalArtifact(input.userId, input.projectId);
+  if (!artifact) {
+    await db.transaction(async (tx: DbTransaction) => {
+      await transitionUploadJob(tx, { uploadJobId: input.uploadJobId, from: "processing", to: "failed", data: { lastErrorCode: "CANONICAL_EXPORT_MISSING", lastErrorMessage: "No valid canonical PNG export artifact was found." } });
+      await appendUploadEvent(tx, {
+        uploadJobId: input.uploadJobId,
+        status: "failed",
+        code: "CANONICAL_EXPORT_MISSING",
+        message: "No valid canonical PNG export artifact found.",
+        detail: { projectId: input.projectId },
+      });
+    });
+    return;
+  }
+
+  let accessToken = input.connection.accessToken;
+  if (connectionState === "expired") {
+    const refresh = await refreshRobloxAccessToken(input.connection, input.cfg, input.req);
+    if (!refresh.ok) {
+      await db.transaction(async (tx: DbTransaction) => {
+        await transitionUploadJob(tx, { uploadJobId: input.uploadJobId, from: "processing", to: "failed", data: { lastErrorCode: refresh.code, lastErrorMessage: refresh.message } });
+        await appendUploadEvent(tx, {
+          uploadJobId: input.uploadJobId,
+          status: "failed",
+          code: refresh.code,
+          message: "Roblox token refresh failed. Reconnect your Roblox account.",
+          detail: { attempt: attemptNumber },
+        });
+      });
+      return;
+    }
+    accessToken = refresh.accessToken;
+  }
+
+  if (!accessToken) {
+    await db.transaction(async (tx: DbTransaction) => {
+      await transitionUploadJob(tx, { uploadJobId: input.uploadJobId, from: "processing", to: "failed", data: { lastErrorCode: "MISSING_ACCESS_TOKEN", lastErrorMessage: "No Roblox access token available for upload." } });
+      await appendUploadEvent(tx, {
+        uploadJobId: input.uploadJobId,
+        status: "failed",
+        code: "MISSING_ACCESS_TOKEN",
+        message: "No Roblox access token available for upload.",
+      });
+    });
+    return;
+  }
+
+  const uploadResult = await submitClassicUpload({
+    cfg: input.cfg,
+    accessToken,
+    projectId: input.projectId,
+    projectType: input.projectType,
+    artifactUrl: artifact.artifactUrl!,
+    title: input.projectTitle,
+    req: input.req,
+  });
+
+  if ("ok" in uploadResult && !uploadResult.ok) {
+    if (uploadResult.status === 401 || uploadResult.status === 403) {
+      await db.update(robloxConnectionsTable).set({
+        accessToken: null,
+        tokenInvalidatedAt: new Date(),
+        lastErrorCode: "TOKEN_REJECTED_BY_UPLOAD_API",
+        lastErrorMessage: uploadResult.errorMessage,
+      }).where(eq(robloxConnectionsTable.userId, input.userId));
+    }
+    await db.transaction(async (tx: DbTransaction) => {
+      await transitionUploadJob(tx, {
+        uploadJobId: input.uploadJobId,
+        from: "processing",
+        to: "failed",
+        data: {
+          exportJobId: artifact.exportJobId,
+          exportArtifactId: artifact.artifactId,
+          exportArtifactUrl: artifact.artifactUrl,
+          lastErrorCode: uploadResult.errorCode,
+          lastErrorMessage: uploadResult.errorMessage,
+        },
+      });
+      await appendUploadEvent(tx, {
+        uploadJobId: input.uploadJobId,
+        status: "failed",
+        code: uploadResult.errorCode,
+        message: uploadResult.errorMessage ?? "Roblox upload failed.",
+        detail: { status: uploadResult.status, raw: uploadResult.raw, attempt: attemptNumber, exportArtifactId: artifact.artifactId },
+      });
+    });
+    input.req.log.error({ projectId: input.projectId, uploadJobId: input.uploadJobId, error: uploadResult.errorCode, status: uploadResult.status, attempt: attemptNumber }, "roblox.upload.submit_failed");
+    return;
+  }
+
+  await db.transaction(async (tx: DbTransaction) => {
+    await transitionUploadJob(tx, {
+      uploadJobId: input.uploadJobId,
+      from: "processing",
+      to: "completed",
+      data: {
+        exportJobId: artifact.exportJobId,
+        exportArtifactId: artifact.artifactId,
+        exportArtifactUrl: artifact.artifactUrl,
+        robloxAssetId: uploadResult.assetId,
+        robloxUploadId: uploadResult.uploadId,
+        lastErrorCode: null,
+        lastErrorMessage: null,
+      },
+    });
+    await appendUploadEvent(tx, {
+      uploadJobId: input.uploadJobId,
+      status: "completed",
+      code: uploadResult.mode === "mock" ? "MOCK_UPLOAD_COMPLETED" : "UPLOAD_COMPLETED",
+      message: uploadResult.mode === "mock" ? "Upload completed using explicit mock fallback." : "Roblox upload completed.",
+      detail: { raw: uploadResult.raw, robloxAssetId: uploadResult.assetId, mode: uploadResult.mode, attempt: attemptNumber, exportArtifactId: artifact.artifactId },
+    });
+  });
+  input.req.log.info({ projectId: input.projectId, uploadJobId: input.uploadJobId, robloxAssetId: uploadResult.assetId, mode: uploadResult.mode, attempt: attemptNumber }, "roblox.upload.completed");
 }
 
 router.get("/credits", async (req, res): Promise<void> => {
@@ -481,7 +654,6 @@ router.post("/roblox/upload", async (req, res): Promise<void> => {
     .where(eq(robloxConnectionsTable.userId, req.user.id));
 
   const uploadJobId = randomUUID();
-  const now = new Date();
 
   await db.transaction(async (tx: DbTransaction) => {
     await tx.insert(robloxUploadJobsTable).values({
@@ -511,148 +683,27 @@ router.post("/roblox/upload", async (req, res): Promise<void> => {
         message: "Roblox upload is not configured on this environment.",
       });
     });
+  } else if (cfg.executionMode === "inline") {
+    await processUploadJobNow({
+      uploadJobId,
+      userId: req.user.id,
+      projectId,
+      projectType: project.type,
+      projectTitle: project.title,
+      connection,
+      cfg,
+      req,
+    });
   } else {
+    req.log.info({ uploadJobId, projectId }, "roblox.upload.deferred_execution_enqueued");
     await db.transaction(async (tx: DbTransaction) => {
-      await transitionUploadJob(tx, { uploadJobId, from: "queued", to: "processing" });
       await appendUploadEvent(tx, {
         uploadJobId,
-        status: "processing",
-        code: "UPLOAD_PROCESSING",
-        message: "Upload request is being processed.",
+        status: "queued",
+        code: "WORKER_DEFERRED",
+        message: "Upload queued for worker/deferred processing.",
       });
     });
-
-    const connectionState = resolveRobloxConnectionState(connection, now);
-    if (!connection || connectionState === "disconnected") {
-      await db.transaction(async (tx: DbTransaction) => {
-        await transitionUploadJob(tx, { uploadJobId, from: "processing", to: "failed", data: { lastErrorCode: "MISSING_CONNECTION", lastErrorMessage: "No active Roblox OAuth connection." } });
-        await appendUploadEvent(tx, {
-          uploadJobId,
-          status: "failed",
-          code: "MISSING_CONNECTION",
-          message: "No active Roblox OAuth connection.",
-        });
-      });
-    } else {
-      const artifact = await resolveCanonicalArtifact(req.user.id, projectId);
-      if (!artifact) {
-        await db.transaction(async (tx: DbTransaction) => {
-          await transitionUploadJob(tx, { uploadJobId, from: "processing", to: "failed", data: { lastErrorCode: "CANONICAL_EXPORT_MISSING", lastErrorMessage: "No valid canonical PNG export artifact was found." } });
-          await appendUploadEvent(tx, {
-            uploadJobId,
-            status: "failed",
-            code: "CANONICAL_EXPORT_MISSING",
-            message: "No valid canonical PNG export artifact found.",
-            detail: { projectId },
-          });
-        });
-      } else {
-        let accessToken = connection.accessToken;
-        if (connectionState === "expired") {
-          const refresh = await refreshRobloxAccessToken(connection, cfg, req);
-          if (!refresh.ok) {
-            await db.transaction(async (tx: DbTransaction) => {
-              await transitionUploadJob(tx, { uploadJobId, from: "processing", to: "failed", data: { lastErrorCode: refresh.code, lastErrorMessage: refresh.message } });
-              await appendUploadEvent(tx, {
-                uploadJobId,
-                status: "failed",
-                code: refresh.code,
-                message: "Roblox token refresh failed. Reconnect your Roblox account.",
-              });
-            });
-            res.status(202).json({
-              uploadJobId,
-              projectId,
-              status: "failed",
-              reconnectRequired: true,
-            });
-            return;
-          }
-          accessToken = refresh.accessToken;
-        }
-
-        if (!accessToken) {
-          await db.transaction(async (tx: DbTransaction) => {
-            await transitionUploadJob(tx, { uploadJobId, from: "processing", to: "failed", data: { lastErrorCode: "MISSING_ACCESS_TOKEN", lastErrorMessage: "No Roblox access token available for upload." } });
-            await appendUploadEvent(tx, {
-              uploadJobId,
-              status: "failed",
-              code: "MISSING_ACCESS_TOKEN",
-              message: "No Roblox access token available for upload.",
-            });
-          });
-        } else {
-          const uploadResult = await submitClassicUpload({
-            cfg,
-            accessToken,
-            projectId,
-            projectType: project.type,
-            artifactUrl: artifact.artifactUrl,
-            title: project.title,
-            req,
-          });
-
-          if ("ok" in uploadResult && !uploadResult.ok) {
-            if (uploadResult.status === 401 || uploadResult.status === 403) {
-              await db.update(robloxConnectionsTable).set({
-                accessToken: null,
-                tokenInvalidatedAt: new Date(),
-                lastErrorCode: "TOKEN_REJECTED_BY_UPLOAD_API",
-                lastErrorMessage: uploadResult.errorMessage,
-              }).where(eq(robloxConnectionsTable.userId, req.user.id));
-            }
-            await db.transaction(async (tx: DbTransaction) => {
-              await transitionUploadJob(tx, {
-                uploadJobId,
-                from: "processing",
-                to: "failed",
-                data: {
-                  retryCount: 1,
-                  exportJobId: artifact.exportJobId,
-                  exportArtifactId: artifact.artifactId,
-                  exportArtifactUrl: artifact.artifactUrl,
-                  lastErrorCode: uploadResult.errorCode,
-                  lastErrorMessage: uploadResult.errorMessage,
-                },
-              });
-              await appendUploadEvent(tx, {
-                uploadJobId,
-                status: "failed",
-                code: uploadResult.errorCode,
-                message: uploadResult.errorMessage ?? "Roblox upload failed.",
-                detail: { status: uploadResult.status, raw: uploadResult.raw },
-              });
-            });
-            req.log.error({ projectId, uploadJobId, error: uploadResult.errorCode, status: uploadResult.status }, "roblox.upload.submit_failed");
-          } else {
-            await db.transaction(async (tx: DbTransaction) => {
-              await transitionUploadJob(tx, {
-                uploadJobId,
-                from: "processing",
-                to: "completed",
-                data: {
-                  exportJobId: artifact.exportJobId,
-                  exportArtifactId: artifact.artifactId,
-                  exportArtifactUrl: artifact.artifactUrl,
-                  robloxAssetId: uploadResult.assetId,
-                  robloxUploadId: uploadResult.uploadId,
-                  lastErrorCode: null,
-                  lastErrorMessage: null,
-                },
-              });
-              await appendUploadEvent(tx, {
-                uploadJobId,
-                status: "completed",
-                code: uploadResult.mode === "mock" ? "MOCK_UPLOAD_COMPLETED" : "UPLOAD_COMPLETED",
-                message: uploadResult.mode === "mock" ? "Upload completed using explicit mock fallback." : "Roblox upload completed.",
-                detail: { raw: uploadResult.raw, robloxAssetId: uploadResult.assetId, mode: uploadResult.mode },
-              });
-            });
-            req.log.info({ projectId, uploadJobId, robloxAssetId: uploadResult.assetId, mode: uploadResult.mode }, "roblox.upload.completed");
-          }
-        }
-      }
-    }
   }
 
   const [job] = await db.select().from(robloxUploadJobsTable).where(eq(robloxUploadJobsTable.id, uploadJobId));
@@ -685,23 +736,31 @@ router.post("/roblox/upload/:uploadJobId/retry", async (req, res): Promise<void>
     return;
   }
 
-  if (job.status !== "failed") {
-    res.status(409).json({ error: "RETRY_NOT_ALLOWED", message: "Only failed jobs can be retried." });
+  const retryValidation = validateRetryEligibility({ status: job.status, retryCount: job.retryCount, maxRetries: MAX_UPLOAD_RETRIES });
+  if (!retryValidation.ok) {
+    res.status(409).json({ error: retryValidation.error, message: retryValidation.message });
     return;
   }
 
-  if (job.retryCount >= MAX_UPLOAD_RETRIES) {
-    res.status(409).json({ error: "RETRY_LIMIT_REACHED", message: "Upload retry limit reached." });
+  const [project] = await db
+    .select()
+    .from(projectsTable)
+    .where(and(eq(projectsTable.id, job.projectId), eq(projectsTable.userId, req.user.id)));
+  if (!project || !isSupportedUploadProjectType(project.type)) {
+    res.status(409).json({ error: "RETRY_NOT_ALLOWED", message: "Retry is not allowed for unsupported project types." });
     return;
   }
+
+  const [connection] = await db
+    .select()
+    .from(robloxConnectionsTable)
+    .where(eq(robloxConnectionsTable.userId, req.user.id));
 
   await db.transaction(async (tx: DbTransaction) => {
     await tx.update(robloxUploadJobsTable).set({
       status: "queued",
       retryCount: job.retryCount + 1,
       completedAt: null,
-      lastErrorCode: null,
-      lastErrorMessage: null,
     }).where(eq(robloxUploadJobsTable.id, job.id));
 
     await appendUploadEvent(tx, {
@@ -709,11 +768,30 @@ router.post("/roblox/upload/:uploadJobId/retry", async (req, res): Promise<void>
       status: "queued",
       code: "RETRY_REQUESTED",
       message: "Upload retry requested.",
-      detail: { retryCount: job.retryCount + 1 },
+      detail: {
+        retryCount: job.retryCount + 1,
+        previousErrorCode: job.lastErrorCode,
+        previousErrorMessage: job.lastErrorMessage,
+      },
     });
   });
 
-  res.status(202).json({ success: true, uploadJobId: job.id, status: "queued" });
+  const cfg = robloxConfig();
+  if (cfg.executionMode === "inline") {
+    await processUploadJobNow({
+      uploadJobId: job.id,
+      userId: req.user.id,
+      projectId: job.projectId,
+      projectType: project.type,
+      projectTitle: project.title,
+      connection,
+      cfg,
+      req,
+    });
+  }
+
+  const [updatedJob] = await db.select().from(robloxUploadJobsTable).where(eq(robloxUploadJobsTable.id, job.id));
+  res.status(202).json({ success: true, uploadJobId: job.id, status: updatedJob?.status ?? "queued" });
 });
 
 router.get("/roblox/upload/:uploadJobId", async (req, res): Promise<void> => {
