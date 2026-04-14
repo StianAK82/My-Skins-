@@ -12,5 +12,6 @@ export interface RobloxUploadEvent {
   uploadJobId: string;
   status: RobloxUploadStatus;
   message: string;
+  errorCode?: string | null;
   createdAt: Date;
 }

@@ -357,11 +357,10 @@ export type RobloxUploadStatus =
   (typeof RobloxUploadStatus)[keyof typeof RobloxUploadStatus];
 
 export const RobloxUploadStatus = {
-  queued: "queued",
+  pending: "pending",
   processing: "processing",
-  completed: "completed",
+  succeeded: "succeeded",
   failed: "failed",
-  blocked: "blocked",
 } as const;
 
 export interface RobloxUploadEvent {
@@ -369,6 +368,7 @@ export interface RobloxUploadEvent {
   uploadJobId: string;
   status: RobloxUploadStatus;
   message: string;
+  errorCode?: string | null;
   createdAt: string;
 }
 
@@ -380,6 +380,10 @@ export interface RobloxUploadJob {
   uploadJobId: string;
   projectId: string;
   status: RobloxUploadStatus;
+  robloxAssetId?: string | null;
+  errorCode?: string | null;
+  errorMessage?: string | null;
+  retryCount: number;
   events: RobloxUploadEvent[];
 }
 

@@ -12,5 +12,9 @@ export interface RobloxUploadJob {
   uploadJobId: string;
   projectId: string;
   status: RobloxUploadStatus;
+  robloxAssetId?: string | null;
+  errorCode?: string | null;
+  errorMessage?: string | null;
+  retryCount: number;
   events: RobloxUploadEvent[];
 }

@@ -847,19 +847,45 @@ export const GetRobloxUploadParams = zod.object({
 export const GetRobloxUploadResponse = zod.object({
   uploadJobId: zod.string(),
   projectId: zod.string(),
-  status: zod.enum(["queued", "processing", "completed", "failed", "blocked"]),
+  status: zod.enum(["pending", "processing", "succeeded", "failed"]),
+  robloxAssetId: zod.string().nullish(),
+  errorCode: zod.string().nullish(),
+  errorMessage: zod.string().nullish(),
+  retryCount: zod.number(),
   events: zod.array(
     zod.object({
       id: zod.string(),
       uploadJobId: zod.string(),
-      status: zod.enum([
-        "queued",
-        "processing",
-        "completed",
-        "failed",
-        "blocked",
-      ]),
+      status: zod.enum(["pending", "processing", "succeeded", "failed"]),
       message: zod.string(),
+      errorCode: zod.string().nullish(),
+      createdAt: zod.coerce.date(),
+    }),
+  ),
+});
+
+/**
+ * @summary Retry a failed Roblox upload job
+ */
+export const RetryRobloxUploadParams = zod.object({
+  uploadJobId: zod.coerce.string().uuid(),
+});
+
+export const RetryRobloxUploadResponse = zod.object({
+  uploadJobId: zod.string(),
+  projectId: zod.string(),
+  status: zod.enum(["pending", "processing", "succeeded", "failed"]),
+  robloxAssetId: zod.string().nullish(),
+  errorCode: zod.string().nullish(),
+  errorMessage: zod.string().nullish(),
+  retryCount: zod.number(),
+  events: zod.array(
+    zod.object({
+      id: zod.string(),
+      uploadJobId: zod.string(),
+      status: zod.enum(["pending", "processing", "succeeded", "failed"]),
+      message: zod.string(),
+      errorCode: zod.string().nullish(),
       createdAt: zod.coerce.date(),
     }),
   ),

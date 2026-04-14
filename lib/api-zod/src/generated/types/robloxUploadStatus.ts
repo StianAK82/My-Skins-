@@ -10,9 +10,8 @@ export type RobloxUploadStatus =
   (typeof RobloxUploadStatus)[keyof typeof RobloxUploadStatus];
 
 export const RobloxUploadStatus = {
-  queued: "queued",
+  pending: "pending",
   processing: "processing",
-  completed: "completed",
+  succeeded: "succeeded",
   failed: "failed",
-  blocked: "blocked",
 } as const;

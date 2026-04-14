@@ -1,16 +1,23 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { deriveRobloxUploadTerminalState, resolveCreatorIdentity, resolveExportDimensions, resolveRobloxUploadBlockedReason, toExportJobResponse } from "./lifecycle.ts";
+import {
+  canTransitionRobloxUploadStatus,
+  deriveRobloxUploadTerminalState,
+  isRobloxUploadableProjectType,
+  resolveCreatorIdentity,
+  resolveExportDimensions,
+  resolveRobloxUploadBlockedReason,
+  toExportJobResponse,
+} from "./lifecycle.ts";
 
 test("resolveExportDimensions returns canonical classic template dimensions", () => {
   assert.deepEqual(resolveExportDimensions("shirt"), { width: 585, height: 559 });
   assert.deepEqual(resolveExportDimensions("pants"), { width: 585, height: 559 });
 });
 
-test("deriveRobloxUploadTerminalState uses explicit non-simulated statuses", () => {
+test("deriveRobloxUploadTerminalState uses explicit failure statuses", () => {
   assert.deepEqual(deriveRobloxUploadTerminalState("not_configured").status, "failed");
   assert.deepEqual(deriveRobloxUploadTerminalState("missing_connection").status, "failed");
-  assert.deepEqual(deriveRobloxUploadTerminalState("activation_pending").status, "blocked");
 });
 
 test("resolveCreatorIdentity prefers profile fields then user fallback", () => {
@@ -61,22 +68,34 @@ test("toExportJobResponse returns artifact as null when missing and includes lif
   assert.equal(failed.artifact, null);
 });
 
-test("resolveRobloxUploadBlockedReason handles not configured, not connected, activation pending", () => {
+test("resolveRobloxUploadBlockedReason handles not configured and not connected", () => {
   assert.equal(resolveRobloxUploadBlockedReason({
     configured: false,
     hasConnectionToken: false,
-    activationReady: true,
   }), "not_configured");
 
   assert.equal(resolveRobloxUploadBlockedReason({
     configured: true,
     hasConnectionToken: false,
-    activationReady: true,
   }), "missing_connection");
 
   assert.equal(resolveRobloxUploadBlockedReason({
     configured: true,
     hasConnectionToken: true,
-    activationReady: true,
-  }), "activation_pending");
+  }), null);
+});
+
+test("uploadable project type guard only allows classic shirt and pants", () => {
+  assert.equal(isRobloxUploadableProjectType("shirt"), true);
+  assert.equal(isRobloxUploadableProjectType("pants"), true);
+  assert.equal(isRobloxUploadableProjectType("wings"), false);
+  assert.equal(isRobloxUploadableProjectType("hat"), false);
+});
+
+test("roblox upload status transitions are monotonic and terminal-safe", () => {
+  assert.equal(canTransitionRobloxUploadStatus("pending", "processing"), true);
+  assert.equal(canTransitionRobloxUploadStatus("processing", "succeeded"), true);
+  assert.equal(canTransitionRobloxUploadStatus("processing", "failed"), true);
+  assert.equal(canTransitionRobloxUploadStatus("succeeded", "processing"), false);
+  assert.equal(canTransitionRobloxUploadStatus("failed", "processing"), false);
 });

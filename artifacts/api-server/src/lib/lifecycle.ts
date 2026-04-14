@@ -1,6 +1,13 @@
 export type ProjectType = "shirt" | "pants" | string;
 export type ExportLifecycleStatus = "queued" | "processing" | "completed" | "failed";
-export type RobloxUploadLifecycleStatus = "queued" | "processing" | "completed" | "failed" | "blocked";
+export type RobloxUploadLifecycleStatus = "pending" | "processing" | "succeeded" | "failed";
+
+export const ROBLOX_UPLOADABLE_PROJECT_TYPES = ["shirt", "pants"] as const;
+export type RobloxUploadableProjectType = (typeof ROBLOX_UPLOADABLE_PROJECT_TYPES)[number];
+
+export function isRobloxUploadableProjectType(projectType: string): projectType is RobloxUploadableProjectType {
+  return ROBLOX_UPLOADABLE_PROJECT_TYPES.includes(projectType as RobloxUploadableProjectType);
+}
 
 export function resolveExportDimensions(projectType: ProjectType): { width: number; height: number } {
   if (projectType === "shirt" || projectType === "pants") {
@@ -9,16 +16,13 @@ export function resolveExportDimensions(projectType: ProjectType): { width: numb
   return { width: 585, height: 559 };
 }
 
-export type RobloxUploadTerminalReason = "not_configured" | "missing_connection" | "activation_pending";
+export type RobloxUploadTerminalReason = "not_configured" | "missing_connection";
 
-export function deriveRobloxUploadTerminalState(reason: RobloxUploadTerminalReason): { status: "failed" | "blocked"; message: string } {
+export function deriveRobloxUploadTerminalState(reason: RobloxUploadTerminalReason): { status: "failed"; message: string; errorCode: string } {
   if (reason === "not_configured") {
-    return { status: "failed", message: "Roblox upload is not configured on this environment." };
+    return { status: "failed", message: "Roblox upload is not configured on this environment.", errorCode: "ROBLOX_NOT_CONFIGURED" };
   }
-  if (reason === "missing_connection") {
-    return { status: "failed", message: "No active Roblox OAuth connection." };
-  }
-  return { status: "blocked", message: "Upload provider integration is activation-ready but publishing endpoint is not enabled." };
+  return { status: "failed", message: "No active Roblox OAuth connection.", errorCode: "ROBLOX_CONNECTION_REQUIRED" };
 }
 
 export function resolveCreatorIdentity(input: {
@@ -37,12 +41,23 @@ export function resolveCreatorIdentity(input: {
 export function resolveRobloxUploadBlockedReason(input: {
   configured: boolean;
   hasConnectionToken: boolean;
-  activationReady: boolean;
 }): RobloxUploadTerminalReason | null {
   if (!input.configured) return "not_configured";
   if (!input.hasConnectionToken) return "missing_connection";
-  if (input.activationReady) return "activation_pending";
   return null;
+}
+
+const ROBLOX_UPLOAD_STATUS_ORDER: RobloxUploadLifecycleStatus[] = ["pending", "processing", "succeeded", "failed"];
+
+export function canTransitionRobloxUploadStatus(
+  currentStatus: RobloxUploadLifecycleStatus,
+  nextStatus: RobloxUploadLifecycleStatus,
+): boolean {
+  if (currentStatus === nextStatus) return true;
+  if (currentStatus === "succeeded" || currentStatus === "failed") return false;
+  const currentIndex = ROBLOX_UPLOAD_STATUS_ORDER.indexOf(currentStatus);
+  const nextIndex = ROBLOX_UPLOAD_STATUS_ORDER.indexOf(nextStatus);
+  return nextIndex >= currentIndex;
 }
 
 export type ExportJobRecord = {

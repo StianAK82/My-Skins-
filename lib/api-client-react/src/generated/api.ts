@@ -2545,6 +2545,90 @@ export function useGetRobloxUpload<
 }
 
 /**
+ * @summary Retry a failed Roblox upload job
+ */
+export const getRetryRobloxUploadUrl = (uploadJobId: string) => {
+  return `/api/roblox/upload/${uploadJobId}/retry`;
+};
+
+export const retryRobloxUpload = async (
+  uploadJobId: string,
+  options?: RequestInit,
+): Promise<RobloxUploadJob> => {
+  return customFetch<RobloxUploadJob>(getRetryRobloxUploadUrl(uploadJobId), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getRetryRobloxUploadMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof retryRobloxUpload>>,
+    TError,
+    { uploadJobId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof retryRobloxUpload>>,
+  TError,
+  { uploadJobId: string },
+  TContext
+> => {
+  const mutationKey = ["retryRobloxUpload"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof retryRobloxUpload>>,
+    { uploadJobId: string }
+  > = (props) => {
+    const { uploadJobId } = props ?? {};
+
+    return retryRobloxUpload(uploadJobId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type RetryRobloxUploadMutationResult = NonNullable<
+  Awaited<ReturnType<typeof retryRobloxUpload>>
+>;
+
+export type RetryRobloxUploadMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Retry a failed Roblox upload job
+ */
+export const useRetryRobloxUpload = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof retryRobloxUpload>>,
+    TError,
+    { uploadJobId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof retryRobloxUpload>>,
+  TError,
+  { uploadJobId: string },
+  TContext
+> => {
+  return useMutation(getRetryRobloxUploadMutationOptions(options));
+};
+
+/**
  * @summary Disconnect Roblox account
  */
 export const getDisconnectRobloxUrl = () => {

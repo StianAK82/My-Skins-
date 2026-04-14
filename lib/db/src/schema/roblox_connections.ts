@@ -8,9 +8,13 @@ export const robloxConnectionsTable = pgTable("roblox_connections", {
   robloxUsername: text("roblox_username").notNull(),
   accessToken: text("access_token"),
   refreshToken: text("refresh_token"),
+  tokenType: text("token_type"),
+  scope: text("scope"),
+  tokenExpiresAt: timestamp("token_expires_at", { withTimezone: true }),
   connectedAt: timestamp("connected_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });
 
-export const insertRobloxConnectionSchema = createInsertSchema(robloxConnectionsTable).omit({ connectedAt: true });
+export const insertRobloxConnectionSchema = createInsertSchema(robloxConnectionsTable).omit({ connectedAt: true, updatedAt: true });
 export type InsertRobloxConnection = typeof robloxConnectionsTable.$inferInsert;
 export type RobloxConnection = typeof robloxConnectionsTable.$inferSelect;

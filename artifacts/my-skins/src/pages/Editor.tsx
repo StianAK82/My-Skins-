@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent } from "react";
 import { Link, useParams } from "wouter";
-import { ArrowLeft, Copy, Download, Eye, Layers, Lock, MoveDown, MoveUp, Sparkles, Trash2, Unlock, Wand2 } from "lucide-react";
+import { ArrowLeft, Copy, Download, Eye, Layers, Lock, MoveDown, MoveUp, Sparkles, Trash2, Unlock, Upload, Wand2 } from "lucide-react";
 import { aiGenerateDesign } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,6 +14,9 @@ import { buildAiAvatarLook } from "@/lib/editor/avatar-look";
 import { normalizeAiResponse } from "@/lib/ai/normalize-ai-response";
 import { resolveAvatarSlotAssets } from "@/lib/ai/asset-resolver";
 import { TEMPLATE_SIZE, getZonesForTemplate } from "@/lib/editor/templates";
+import { useToast } from "@/hooks/use-toast";
+import { exportClient } from "@/lib/export/export-client";
+import { getRobloxLoginUrl, getRobloxStatus, getRobloxUploadStatus, retryRobloxUpload, uploadToRoblox } from "@/lib/roblox/upload-client";
 
 const TOOLS: Array<{ key: ToolType; label: string; hint: string }> = [
   { key: "templates", label: "Templates", hint: "Choose your clothing base" },
@@ -82,6 +85,7 @@ function mapAiModuleToLayer(module: {
 
 export default function Editor() {
   const { id = "local" } = useParams<{ id?: string }>();
+  const { toast } = useToast();
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [previewTexture, setPreviewTexture] = useState<string>("");
   const [drawActiveLayer, setDrawActiveLayer] = useState<string | null>(null);
@@ -92,6 +96,9 @@ export default function Editor() {
   const [imageRenderNonce, setImageRenderNonce] = useState(0);
   const [saveStatus, setSaveStatus] = useState<string>("");
   const [previewFocus, setPreviewFocus] = useState<"clothing" | "avatar">("clothing");
+  const [robloxStatus, setRobloxStatus] = useState<{ configured: boolean; connected: boolean; connection: { robloxUsername: string } | null } | null>(null);
+  const [uploadJob, setUploadJob] = useState<{ uploadJobId: string; status: string; robloxAssetId?: string | null; events?: Array<{ id: string; message?: string | null }> } | null>(null);
+  const [robloxBusy, setRobloxBusy] = useState(false);
 
   const {
     state,
@@ -124,10 +131,41 @@ export default function Editor() {
   const hasLayers = state.layers.length > 0;
   const storageKey = `design:${id}`;
   const hasSavedVersion = typeof window !== "undefined" && Boolean(localStorage.getItem(storageKey));
+  const isUploadableTemplate = state.template === "shirt" || state.template === "pants";
+  const latestUploadMessage = uploadJob?.events?.at(-1)?.message ?? "";
+
+  const refreshRobloxStatus = useCallback(async () => {
+    try {
+      const status = await getRobloxStatus();
+      setRobloxStatus({
+        configured: status.configured,
+        connected: status.connected,
+        connection: status.connection ? { robloxUsername: status.connection.robloxUsername } : null,
+      });
+    } catch {
+      setRobloxStatus({ configured: false, connected: false, connection: null });
+    }
+  }, []);
 
   const handleOverlayImageReady = useCallback(() => {
     setImageRenderNonce((current) => current + 1);
   }, []);
+
+  useEffect(() => {
+    if (id === "local") return;
+    void refreshRobloxStatus();
+  }, [id, refreshRobloxStatus]);
+
+  useEffect(() => {
+    if (!uploadJob || (uploadJob.status !== "pending" && uploadJob.status !== "processing")) return;
+    const timer = window.setInterval(() => {
+      void getRobloxUploadStatus(uploadJob.uploadJobId).then((next) => {
+        setUploadJob(next as unknown as { uploadJobId: string; status: string; robloxAssetId?: string | null; events?: Array<{ id: string; message?: string | null }> });
+      }).catch(() => undefined);
+    }, 2500);
+
+    return () => window.clearInterval(timer);
+  }, [uploadJob]);
 
   const handleExportPng = useCallback(async () => {
     const canvas = canvasRef.current;
@@ -138,6 +176,48 @@ export default function Editor() {
     downloadPng(nextTexture, `${state.template}.png`);
     setSaveStatus("Exported PNG from current design state.");
   }, [handleOverlayImageReady, hasLayers, state]);
+
+  const handleConnectRoblox = useCallback(async () => {
+    setRobloxBusy(true);
+    try {
+      const data = await getRobloxLoginUrl();
+      window.location.href = data.authorizeUrl;
+    } catch {
+      toast({ title: "Roblox connection failed", description: "Could not start Roblox OAuth.", variant: "destructive" });
+    } finally {
+      setRobloxBusy(false);
+    }
+  }, [toast]);
+
+  const handleUploadRoblox = useCallback(async () => {
+    if (id === "local") return;
+    setRobloxBusy(true);
+    try {
+      await exportClient.create({ projectId: id, format: "png" });
+      const job = await uploadToRoblox(id);
+      setUploadJob(job as unknown as { uploadJobId: string; status: string; robloxAssetId?: string | null; events?: Array<{ id: string; message?: string | null }> });
+      toast({ title: "Upload started", description: "Roblox upload job created." });
+    } catch (error) {
+      const description = error instanceof Error ? error.message : "Could not upload to Roblox.";
+      toast({ title: "Upload failed", description, variant: "destructive" });
+    } finally {
+      setRobloxBusy(false);
+    }
+  }, [id, toast]);
+
+  const handleRetryUpload = useCallback(async () => {
+    if (!uploadJob?.uploadJobId) return;
+    setRobloxBusy(true);
+    try {
+      const retried = await retryRobloxUpload(uploadJob.uploadJobId);
+      setUploadJob(retried);
+      toast({ title: "Retry started", description: "Upload job moved back to pending." });
+    } catch {
+      toast({ title: "Retry failed", description: "Could not retry upload.", variant: "destructive" });
+    } finally {
+      setRobloxBusy(false);
+    }
+  }, [toast, uploadJob?.uploadJobId]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -255,12 +335,38 @@ export default function Editor() {
           <Button variant="secondary" onClick={saveDesign}>Save</Button>
           <Button variant="secondary" onClick={loadDesign}>Load</Button>
           <Button onClick={() => void handleExportPng()} disabled={!hasLayers}><Download className="mr-2 h-4 w-4" />Export PNG</Button>
+          <Button
+            variant="outline"
+            onClick={() => void handleConnectRoblox()}
+            disabled={robloxBusy || id === "local" || Boolean(robloxStatus?.connected)}
+          >
+            {robloxStatus?.connected ? `Connected: ${robloxStatus.connection?.robloxUsername ?? "Roblox"}` : "Connect Roblox"}
+          </Button>
+          <Button
+            onClick={() => void handleUploadRoblox()}
+            disabled={robloxBusy || id === "local" || !isUploadableTemplate || !robloxStatus?.connected}
+          >
+            <Upload className="mr-2 h-4 w-4" />
+            Upload to Roblox
+          </Button>
         </div>
       </div>
 
       <div className="mb-4 rounded-xl border border-slate-800 bg-slate-900/70 px-3 py-2 text-xs text-slate-300 flex items-center justify-between gap-3">
         <p>Flow: Template → Build with assets/AI/tools → Check preview → Save → Export.</p>
         <p className="text-slate-400">{saveStatus || (hasSavedVersion ? "Saved version available for quick reload." : "No saved version yet for this project.")}</p>
+      </div>
+      <div className="mb-4 rounded-xl border border-slate-800 bg-slate-900/70 px-3 py-2 text-xs text-slate-300 flex items-center justify-between gap-3">
+        <p>
+          Roblox: {robloxStatus?.configured ? (robloxStatus.connected ? `Connected as ${robloxStatus.connection?.robloxUsername ?? "Roblox user"}` : "Not connected") : "OAuth not configured"}.
+          {isUploadableTemplate ? " Classic shirt/pants upload is supported." : " This item is preview-only for now."}
+        </p>
+        <div className="text-slate-400 flex items-center">
+          {uploadJob ? `Upload ${uploadJob.status}${uploadJob.robloxAssetId ? ` • Asset ${uploadJob.robloxAssetId}` : ""}${latestUploadMessage ? ` • ${latestUploadMessage}` : ""}` : "No Roblox upload started yet."}
+          {uploadJob?.status === "failed" ? (
+            <Button size="sm" variant="outline" className="ml-2" onClick={() => void handleRetryUpload()} disabled={robloxBusy}>Retry</Button>
+          ) : null}
+        </div>
       </div>
 
       <div className="grid grid-cols-[280px_1fr_360px] gap-4 h-[calc(100vh-132px)]">

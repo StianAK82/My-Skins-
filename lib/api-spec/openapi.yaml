@@ -577,6 +577,25 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/RobloxUploadJob"
+  /roblox/upload/{uploadJobId}/retry:
+    post:
+      operationId: retryRobloxUpload
+      tags: [roblox]
+      summary: Retry a failed Roblox upload job
+      parameters:
+        - name: uploadJobId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Roblox upload lifecycle job retried
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RobloxUploadJob"
 
   /roblox/disconnect:
     delete:
@@ -1185,7 +1204,7 @@ components:
 
     RobloxUploadStatus:
       type: string
-      enum: [queued, processing, completed, failed, blocked]
+      enum: [pending, processing, succeeded, failed]
 
     RobloxUploadEvent:
       type: object
@@ -1195,6 +1214,7 @@ components:
         status:
           $ref: "#/components/schemas/RobloxUploadStatus"
         message: { type: string }
+        errorCode: { type: string, nullable: true }
         createdAt:
           type: string
           format: date-time
@@ -1216,11 +1236,22 @@ components:
           type: string
         status:
           $ref: "#/components/schemas/RobloxUploadStatus"
+        robloxAssetId:
+          type: string
+          nullable: true
+        errorCode:
+          type: string
+          nullable: true
+        errorMessage:
+          type: string
+          nullable: true
+        retryCount:
+          type: integer
         events:
           type: array
           items:
             $ref: "#/components/schemas/RobloxUploadEvent"
-      required: [uploadJobId, projectId, status, events]
+      required: [uploadJobId, projectId, status, retryCount, events]
 
     CreateShareRequest:
       type: object
