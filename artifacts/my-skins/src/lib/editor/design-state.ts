@@ -78,7 +78,7 @@ export const defaultAvatarState = (): AvatarState => ({
   bodyScale: { height: 1, width: 1, head: 1, legs: 1 },
   slots: {
     face: { assetId: "face_confident", scale: 1, visible: true, offset: { x: 0, y: 0, z: 0 }, rotation: { x: 0, y: 0, z: 0 } },
-    hair: { assetId: "hair_spiky_ember", scale: 1, visible: true, offset: { x: 0, y: 0, z: 0 }, rotation: { x: 0, y: 0, z: 0 } },
+    hair: null,
     hat: null,
     neck: null,
     leftShoulder: null,
