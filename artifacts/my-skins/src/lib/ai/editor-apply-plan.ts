@@ -17,6 +17,6 @@ export function buildEditorApplyPlan(ai: NormalizedAiResponse): EditorApplyPlan 
       ...(ai.result.exportablePlan.classicShirt ? ["classic_shirt"] : []),
       ...(ai.result.exportablePlan.classicPants ? ["classic_pants"] : []),
     ],
-    previewOnly: ai.result.previewOnlyPlan.cosmetics.map((entry) => `${entry.slot}:${entry.label}`),
+    previewOnly: ai.result.previewOnlyPlan.cosmetics.map((entry) => `${entry.role}:${entry.slot}:${entry.label}`),
   };
 }

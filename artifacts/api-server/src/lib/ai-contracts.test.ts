@@ -32,10 +32,10 @@ const base = {
     aura: "energy ring",
   },
   accessoryPlan: {
-    items: [{ name: "micro wings", slot: "back", detail: "small tech wings", exportStatus: "preview_only" }],
+    items: [{ name: "micro wings", slot: "back", detail: "small tech wings", role: "hero", exportStatus: "preview_only" }],
   },
   previewOnlyPlan: {
-    cosmetics: [{ category: "accessory", label: "micro_wings", slot: "back" }],
+    cosmetics: [{ category: "accessory", label: "micro_wings", slot: "back", role: "hero" }],
   },
   exportablePlan: {
     classicShirt: true,
@@ -43,8 +43,8 @@ const base = {
     notes: ["Classic layers export now", "Avatar extras are preview only"],
   },
   avatarSlotPlan: [
-    { slot: "face", assetHint: "face_stylized", color: "#EEEEEE" },
-    { slot: "back", assetHint: "micro_wings", color: "#00AEEF" },
+    { slot: "face", assetHint: "face_stylized", role: "support", rationale: "Maintain readable expression", color: "#EEEEEE" },
+    { slot: "back", assetHint: "micro_wings", role: "hero", rationale: "Primary silhouette cue", color: "#00AEEF" },
   ],
   placement: {
     front: "bold center stripe",

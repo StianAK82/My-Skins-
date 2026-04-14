@@ -21,13 +21,13 @@ function chooseBundle(style: string): AvatarBundle {
   const lower = style.toLowerCase();
   if (lower.includes("dragon")) {
     return {
-      face: "face_demon_glow",
+      face: "face_stoic",
       hair: "hair_wavy_midnight",
       hat: "hat_cyber_horns",
       neck: "neck_chain_gold",
       leftShoulder: "shoulder_guard_left",
       rightShoulder: "shoulder_guard_right",
-      back: "back_dragon_wings",
+      back: "back_blade_rig",
       leftFootwear: "footwear_tech_boot_l",
       rightFootwear: "footwear_tech_boot_r",
       aura: "aura_flame_orbit",
@@ -37,11 +37,11 @@ function chooseBundle(style: string): AvatarBundle {
     return {
       face: "face_anime_glint",
       hair: "hair_twin_tail_pop",
-      hat: "hat_halo_ring",
+      hat: "hat_beanie_soft",
       neck: "neck_scarf_neo",
       leftShoulder: null,
       rightShoulder: null,
-      back: "back_angel_wings",
+      back: "back_jetpack_mini",
       leftFootwear: "footwear_runner_black",
       rightFootwear: "footwear_runner_black_right",
       aura: "aura_neon_ring",

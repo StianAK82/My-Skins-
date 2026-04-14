@@ -69,6 +69,13 @@ function toPreviewSlot(name: string): "face" | "hair" | "hat" | "neck" | "leftSh
   return "neck";
 }
 
+function roleForTerm(name: string): "hero" | "support" | "decorative" {
+  const text = name.toLowerCase();
+  if (text.includes("wing") || text.includes("horn") || text.includes("halo") || text.includes("dragon") || text.includes("demon")) return "hero";
+  if (text.includes("aura") || text.includes("spark") || text.includes("glow") || text.includes("flame")) return "decorative";
+  return "support";
+}
+
 export class AiGenerationService {
   private buildPrompt(input: GenerateInput, mode: string): string {
     const placementRule = input.itemType === "classic_shirt"
@@ -217,6 +224,7 @@ export class AiGenerationService {
         name: term,
         slot: toPreviewSlot(term),
         detail: `Preview cosmetic inspired by ${term}`,
+        role: roleForTerm(term),
         exportStatus: "preview_only" as const,
       }))
       .slice(0, 8);
@@ -224,17 +232,19 @@ export class AiGenerationService {
     const avatarSlotPlan = accessoryItems.map((item, idx) => ({
       slot: item.slot,
       assetHint: `${item.name.replace(/\s+/g, "_")}_${idx + 1}`,
+      role: item.role,
+      rationale: `Mapped from prompt accessory term "${item.name}"`,
       color: colorPalette[idx % colorPalette.length],
     }));
 
     if (intent.includesAvatarLook && !avatarSlotPlan.some((slot) => slot.slot === "face")) {
-      avatarSlotPlan.push({ slot: "face", assetHint: intent.fantasyArchetype ? `face_${intent.fantasyArchetype}_eyes` : "face_stylized", color: colorPalette[0] });
+      avatarSlotPlan.push({ slot: "face", assetHint: intent.fantasyArchetype ? `face_${intent.fantasyArchetype}_eyes` : "face_stylized", role: "support", rationale: "Face clarity for avatar identity", color: colorPalette[0] });
     }
     if (intent.includesAvatarLook && !avatarSlotPlan.some((slot) => slot.slot === "hair")) {
-      avatarSlotPlan.push({ slot: "hair", assetHint: intent.styleVibes.includes("anime") ? "hair_anime_layered" : "hair_wavy_midnight", color: colorPalette[1] });
+      avatarSlotPlan.push({ slot: "hair", assetHint: intent.styleVibes.includes("anime") ? "hair_anime_layered" : "hair_wavy_midnight", role: "support", rationale: "Hair establishes style silhouette", color: colorPalette[1] });
     }
     if (intent.includesEffects && !avatarSlotPlan.some((slot) => slot.slot === "aura")) {
-      avatarSlotPlan.push({ slot: "aura", assetHint: "aura_energy_ring", color: colorPalette[0] });
+      avatarSlotPlan.push({ slot: "aura", assetHint: "aura_energy_ring", role: "decorative", rationale: "Requested VFX or glow effects", color: colorPalette[0] });
     }
 
     return {
@@ -266,6 +276,7 @@ export class AiGenerationService {
           category: slot.slot === "aura" ? "effect" : "accessory",
           label: slot.assetHint,
           slot: slot.slot,
+          role: slot.role,
         })),
       },
       exportablePlan: {
