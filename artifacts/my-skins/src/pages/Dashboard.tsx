@@ -459,7 +459,7 @@ export default function Dashboard() {
           avatarType={avatarType}
           bodyType={bodyType}
           itemType={currentItemType.roblox as "shirt" | "pants"}
-          previewMode="classic_2d"
+          previewMode="clothing"
           studioMode={true}
         />
 

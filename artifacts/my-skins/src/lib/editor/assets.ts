@@ -13,26 +13,29 @@ export type StudioAsset = {
   overlayImage?: string;
 };
 
-export type AvatarMeshType =
-  | "box"
-  | "face_decal"
-  | "hair_layered"
-  | "hair_bob"
-  | "hair_twintail"
-  | "hat_cap"
-  | "hat_beanie"
-  | "hat_horns"
-  | "neck_chain"
-  | "neck_scarf"
-  | "shoulder_pet"
-  | "shoulder_armor"
-  | "back_pack"
-  | "back_sword"
-  | "footwear_sneaker"
-  | "footwear_boot"
-  | "aura_ring"
-  | "aura_flame"
-  | "aura_pixels";
+export type AvatarPrimitiveType = "roundedBox" | "box" | "cylinder" | "cone" | "sphere" | "torus" | "plane";
+
+export type AvatarRenderPart = {
+  primitive: AvatarPrimitiveType;
+  args: number[];
+  position?: [number, number, number];
+  rotation?: [number, number, number];
+  scale?: [number, number, number];
+  radius?: number;
+  smoothness?: number;
+  color?: string;
+  emissive?: string;
+  emissiveIntensity?: number;
+  opacity?: number;
+  transparent?: boolean;
+  metalness?: number;
+  roughness?: number;
+  useAssetColor?: boolean;
+  texture?: string;
+  alphaTest?: number;
+};
+
+export type AvatarRenderMode = "decal" | "part_kit";
 
 export type AvatarAsset = {
   id: string;
@@ -40,7 +43,33 @@ export type AvatarAsset = {
   category: AvatarAssetCategory;
   slot: AvatarCosmeticSlot;
   color: string;
-  mesh: AvatarMeshType;
+  renderMode: AvatarRenderMode;
+  modelPath?: string;
+  decalTexture?: string;
+  styleTags?: string[];
+  defaultScale?: number;
+  defaultOffset?: { x: number; y: number; z: number };
+  parts?: AvatarRenderPart[];
+};
+
+export type AvatarBodyPartMaterial = "skin" | "shirt" | "pants";
+
+export type AvatarBodyPart = {
+  id: string;
+  primitive: "roundedBox";
+  args: [number, number, number];
+  position: [number, number, number];
+  radius: number;
+  smoothness: number;
+  material: AvatarBodyPartMaterial;
+};
+
+export type AvatarBaseModel = {
+  id: "classic_blocky" | "proportioned_r15" | "heroic";
+  label: string;
+  modelPath: string;
+  proportions: { x: number; y: number; z: number };
+  bodyParts: AvatarBodyPart[];
 };
 
 const svgData = (svg: string) => `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
@@ -58,6 +87,92 @@ const OVERLAY_IMAGES = {
   hair_preview_spiky: svgData('<svg xmlns="http://www.w3.org/2000/svg" width="160" height="160" viewBox="0 0 160 160"><path d="M20 92c4-30 20-42 36-54l8 18 14-26 16 22 18-16 14 34 14-8 0 50z" fill="#4b2e1f"/></svg>'),
 } as const;
 
+const FACE_DECALS = {
+  face_confident: svgData('<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256"><circle cx="86" cy="112" r="14" fill="#111827"/><circle cx="170" cy="112" r="14" fill="#111827"/><path d="M88 182c20 18 60 18 80 0" stroke="#111827" stroke-width="11" fill="none" stroke-linecap="round"/><path d="M62 86h40M154 86h40" stroke="#334155" stroke-width="8" stroke-linecap="round"/></svg>'),
+  face_smiley: svgData('<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256"><circle cx="84" cy="114" r="13" fill="#0f172a"/><circle cx="172" cy="114" r="13" fill="#0f172a"/><path d="M76 166c22 34 82 34 104 0" stroke="#0f172a" stroke-width="12" fill="none" stroke-linecap="round"/></svg>'),
+  face_stoic: svgData('<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256"><path d="M60 108h44M152 108h44M102 182h52" stroke="#0f172a" stroke-width="11" stroke-linecap="round"/></svg>'),
+  face_anime_glint: svgData('<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256"><ellipse cx="88" cy="124" rx="28" ry="34" fill="#60a5fa"/><ellipse cx="168" cy="124" rx="28" ry="34" fill="#60a5fa"/><ellipse cx="90" cy="128" rx="14" ry="18" fill="#0f172a"/><ellipse cx="166" cy="128" rx="14" ry="18" fill="#0f172a"/><circle cx="96" cy="116" r="6" fill="#dbeafe"/><circle cx="172" cy="116" r="6" fill="#dbeafe"/><path d="M96 186c15 13 49 13 64 0" stroke="#0f172a" stroke-width="9" fill="none" stroke-linecap="round"/></svg>'),
+  face_wink_star: svgData('<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256"><path d="M64 116h48" stroke="#0f172a" stroke-width="11" stroke-linecap="round"/><circle cx="176" cy="114" r="13" fill="#0f172a"/><path d="M88 172c20 24 62 24 82 0" stroke="#0f172a" stroke-width="11" fill="none" stroke-linecap="round"/><path d="M204 76l6 12 13 2-10 9 3 13-12-7-11 7 2-13-10-9 13-2z" fill="#facc15"/></svg>'),
+} as const;
+
+const makePart = (primitive: AvatarPrimitiveType, args: number[], options: Omit<AvatarRenderPart, "primitive" | "args"> = {}): AvatarRenderPart => ({ primitive, args, ...options });
+
+const hairSpikyParts = [
+  makePart("roundedBox", [0.68, 0.3, 0.62], { radius: 0.16, position: [0, -0.02, -0.01], useAssetColor: true }),
+  makePart("cone", [0.14, 0.34, 12], { position: [-0.24, 0.18, 0.06], rotation: [0.2, 0, -0.32], useAssetColor: true }),
+  makePart("cone", [0.16, 0.38, 12], { position: [0.04, 0.22, 0.07], rotation: [0.28, 0, 0], useAssetColor: true }),
+  makePart("cone", [0.14, 0.3, 12], { position: [0.24, 0.16, 0.05], rotation: [0.2, 0, 0.32], useAssetColor: true }),
+];
+
+const hairBobParts = [
+  makePart("roundedBox", [0.7, 0.28, 0.64], { radius: 0.16, position: [0, 0.05, 0], useAssetColor: true }),
+  makePart("roundedBox", [0.2, 0.33, 0.2], { radius: 0.09, position: [-0.3, -0.1, -0.03], useAssetColor: true }),
+  makePart("roundedBox", [0.2, 0.33, 0.2], { radius: 0.09, position: [0.3, -0.1, -0.03], useAssetColor: true }),
+];
+
+const hairTwinTailParts = [
+  makePart("roundedBox", [0.62, 0.24, 0.56], { radius: 0.15, position: [0, 0.09, 0], useAssetColor: true }),
+  makePart("cylinder", [0.07, 0.09, 0.42, 14], { position: [-0.33, -0.16, 0], rotation: [0.05, 0, 0.2], useAssetColor: true }),
+  makePart("cylinder", [0.07, 0.09, 0.42, 14], { position: [0.33, -0.16, 0], rotation: [0.05, 0, -0.2], useAssetColor: true }),
+];
+
+const AVATAR_BASE_MODELS: AvatarBaseModel[] = [
+  {
+    id: "classic_blocky",
+    label: "Classic Block Rig",
+    modelPath: "/avatar/base/classic-blocky.glb",
+    proportions: { x: 1.04, y: 0.98, z: 1.04 },
+    bodyParts: [
+      { id: "head", primitive: "roundedBox", args: [0.68, 0.64, 0.6], position: [0, 2.02, 0], radius: 0.14, smoothness: 6, material: "skin" },
+      { id: "neck", primitive: "roundedBox", args: [0.28, 0.16, 0.28], position: [0, 1.71, 0], radius: 0.07, smoothness: 5, material: "skin" },
+      { id: "torso", primitive: "roundedBox", args: [0.98, 0.84, 0.58], position: [0, 1.31, 0], radius: 0.11, smoothness: 6, material: "shirt" },
+      { id: "hips", primitive: "roundedBox", args: [0.86, 0.44, 0.55], position: [0, 0.82, 0], radius: 0.08, smoothness: 5, material: "pants" },
+      { id: "leftUpperArm", primitive: "roundedBox", args: [0.34, 0.64, 0.34], position: [-0.66, 1.24, 0], radius: 0.1, smoothness: 5, material: "shirt" },
+      { id: "rightUpperArm", primitive: "roundedBox", args: [0.34, 0.64, 0.34], position: [0.66, 1.24, 0], radius: 0.1, smoothness: 5, material: "shirt" },
+      { id: "leftHand", primitive: "roundedBox", args: [0.24, 0.25, 0.24], position: [-0.64, 0.73, 0], radius: 0.07, smoothness: 5, material: "skin" },
+      { id: "rightHand", primitive: "roundedBox", args: [0.24, 0.25, 0.24], position: [0.64, 0.73, 0], radius: 0.07, smoothness: 5, material: "skin" },
+      { id: "leftLeg", primitive: "roundedBox", args: [0.35, 0.88, 0.37], position: [-0.23, 0.44, 0], radius: 0.08, smoothness: 5, material: "pants" },
+      { id: "rightLeg", primitive: "roundedBox", args: [0.35, 0.88, 0.37], position: [0.23, 0.44, 0], radius: 0.08, smoothness: 5, material: "pants" },
+    ],
+  },
+  {
+    id: "proportioned_r15",
+    label: "Proportioned R15 Rig",
+    modelPath: "/avatar/base/proportioned-r15.glb",
+    proportions: { x: 1, y: 1.03, z: 0.98 },
+    bodyParts: [
+      { id: "head", primitive: "roundedBox", args: [0.64, 0.6, 0.56], position: [0, 2.04, 0], radius: 0.16, smoothness: 7, material: "skin" },
+      { id: "neck", primitive: "roundedBox", args: [0.26, 0.14, 0.25], position: [0, 1.73, 0], radius: 0.07, smoothness: 6, material: "skin" },
+      { id: "torso", primitive: "roundedBox", args: [0.92, 0.86, 0.54], position: [0, 1.33, 0], radius: 0.15, smoothness: 8, material: "shirt" },
+      { id: "hips", primitive: "roundedBox", args: [0.78, 0.42, 0.5], position: [0, 0.82, 0], radius: 0.11, smoothness: 6, material: "pants" },
+      { id: "leftUpperArm", primitive: "roundedBox", args: [0.3, 0.66, 0.3], position: [-0.61, 1.25, 0], radius: 0.12, smoothness: 7, material: "shirt" },
+      { id: "rightUpperArm", primitive: "roundedBox", args: [0.3, 0.66, 0.3], position: [0.61, 1.25, 0], radius: 0.12, smoothness: 7, material: "shirt" },
+      { id: "leftHand", primitive: "roundedBox", args: [0.22, 0.25, 0.22], position: [-0.6, 0.73, 0], radius: 0.1, smoothness: 6, material: "skin" },
+      { id: "rightHand", primitive: "roundedBox", args: [0.22, 0.25, 0.22], position: [0.6, 0.73, 0], radius: 0.1, smoothness: 6, material: "skin" },
+      { id: "leftLeg", primitive: "roundedBox", args: [0.33, 0.9, 0.34], position: [-0.21, 0.45, 0], radius: 0.1, smoothness: 7, material: "pants" },
+      { id: "rightLeg", primitive: "roundedBox", args: [0.33, 0.9, 0.34], position: [0.21, 0.45, 0], radius: 0.1, smoothness: 7, material: "pants" },
+    ],
+  },
+  {
+    id: "heroic",
+    label: "Heroic Rig",
+    modelPath: "/avatar/base/heroic-r15.glb",
+    proportions: { x: 1.1, y: 0.99, z: 1.08 },
+    bodyParts: [
+      { id: "head", primitive: "roundedBox", args: [0.7, 0.66, 0.62], position: [0, 2.03, 0], radius: 0.15, smoothness: 7, material: "skin" },
+      { id: "neck", primitive: "roundedBox", args: [0.3, 0.16, 0.28], position: [0, 1.72, 0], radius: 0.08, smoothness: 5, material: "skin" },
+      { id: "torso", primitive: "roundedBox", args: [1.02, 0.84, 0.6], position: [0, 1.32, 0], radius: 0.12, smoothness: 7, material: "shirt" },
+      { id: "hips", primitive: "roundedBox", args: [0.88, 0.43, 0.56], position: [0, 0.82, 0], radius: 0.08, smoothness: 5, material: "pants" },
+      { id: "leftUpperArm", primitive: "roundedBox", args: [0.36, 0.67, 0.36], position: [-0.68, 1.24, 0], radius: 0.1, smoothness: 6, material: "shirt" },
+      { id: "rightUpperArm", primitive: "roundedBox", args: [0.36, 0.67, 0.36], position: [0.68, 1.24, 0], radius: 0.1, smoothness: 6, material: "shirt" },
+      { id: "leftHand", primitive: "roundedBox", args: [0.25, 0.26, 0.25], position: [-0.66, 0.73, 0], radius: 0.08, smoothness: 6, material: "skin" },
+      { id: "rightHand", primitive: "roundedBox", args: [0.25, 0.26, 0.25], position: [0.66, 0.73, 0], radius: 0.08, smoothness: 6, material: "skin" },
+      { id: "leftLeg", primitive: "roundedBox", args: [0.36, 0.88, 0.4], position: [-0.23, 0.44, 0], radius: 0.08, smoothness: 6, material: "pants" },
+      { id: "rightLeg", primitive: "roundedBox", args: [0.36, 0.88, 0.4], position: [0.23, 0.44, 0], radius: 0.08, smoothness: 6, material: "pants" },
+    ],
+  },
+];
+
 export const STUDIO_ASSETS: StudioAsset[] = [
   { id: "pattern_houndstooth", name: "Houndstooth Pattern", category: "pattern", defaultColor: "#cbd5e1", supportedTemplates: ["shirt", "pants"], preferredZone: "front", overlayImage: OVERLAY_IMAGES.pattern_houndstooth },
   { id: "graphic_dragon", name: "Dragon Graphic", category: "graphic", defaultColor: "#f97316", supportedTemplates: ["shirt"], preferredZone: "front", overlayImage: OVERLAY_IMAGES.graphic_dragon },
@@ -72,42 +187,44 @@ export const STUDIO_ASSETS: StudioAsset[] = [
 ];
 
 export const AVATAR_ASSETS: AvatarAsset[] = [
-  { id: "face_confident", name: "Confident Face", category: "face", slot: "face", color: "#111827", mesh: "face_decal" },
-  { id: "face_smiley", name: "Smiley Face", category: "face", slot: "face", color: "#1f2937", mesh: "face_decal" },
-  { id: "face_stoic", name: "Stoic Face", category: "face", slot: "face", color: "#0f172a", mesh: "face_decal" },
-  { id: "face_anime_glint", name: "Anime Glint Face", category: "face", slot: "face", color: "#111827", mesh: "face_decal" },
+  { id: "face_confident", name: "Confident Face", category: "face", slot: "face", color: "#111827", renderMode: "decal", modelPath: "/avatar/face/confident.png", decalTexture: FACE_DECALS.face_confident, styleTags: ["street", "sport", "hero"] },
+  { id: "face_smiley", name: "Smiley Face", category: "face", slot: "face", color: "#1f2937", renderMode: "decal", modelPath: "/avatar/face/smiley.png", decalTexture: FACE_DECALS.face_smiley, styleTags: ["casual", "friendly"] },
+  { id: "face_stoic", name: "Stoic Face", category: "face", slot: "face", color: "#0f172a", renderMode: "decal", modelPath: "/avatar/face/stoic.png", decalTexture: FACE_DECALS.face_stoic, styleTags: ["dark", "tactical"] },
+  { id: "face_anime_glint", name: "Anime Glint Face", category: "face", slot: "face", color: "#111827", renderMode: "decal", modelPath: "/avatar/face/anime-glint.png", decalTexture: FACE_DECALS.face_anime_glint, styleTags: ["anime", "vibrant"] },
+  { id: "face_wink_star", name: "Wink Star Face", category: "face", slot: "face", color: "#111827", renderMode: "decal", modelPath: "/avatar/face/wink-star.png", decalTexture: FACE_DECALS.face_wink_star, styleTags: ["cute", "pop", "anime"] },
 
-  { id: "hair_spiky_ember", name: "Spiky Ember Hair", category: "hair", slot: "hair", color: "#3b2a1d", mesh: "hair_layered" },
-  { id: "hair_wavy_midnight", name: "Wavy Midnight Hair", category: "hair", slot: "hair", color: "#111827", mesh: "hair_bob" },
-  { id: "hair_twin_tail_pop", name: "Twin Tail Pop", category: "hair", slot: "hair", color: "#1f2937", mesh: "hair_twintail" },
+  { id: "hair_spiky_ember", name: "Spiky Ember Hair", category: "hair", slot: "hair", color: "#3b2a1d", renderMode: "part_kit", modelPath: "/avatar/hair/spiky-ember.glb", parts: hairSpikyParts, styleTags: ["street", "flame"], defaultOffset: { x: 0, y: 0.02, z: 0 } },
+  { id: "hair_wavy_midnight", name: "Wavy Midnight Hair", category: "hair", slot: "hair", color: "#111827", renderMode: "part_kit", modelPath: "/avatar/hair/wavy-midnight.glb", parts: hairBobParts, styleTags: ["dark", "minimal"] },
+  { id: "hair_twin_tail_pop", name: "Twin Tail Pop", category: "hair", slot: "hair", color: "#1f2937", renderMode: "part_kit", modelPath: "/avatar/hair/twin-tail-pop.glb", parts: hairTwinTailParts, styleTags: ["anime", "cute"] },
 
-  { id: "hat_street_cap", name: "Street Cap", category: "hat", slot: "hat", color: "#0f172a", mesh: "hat_cap" },
-  { id: "hat_beanie_soft", name: "Soft Beanie", category: "hat", slot: "hat", color: "#334155", mesh: "hat_beanie" },
-  { id: "hat_cyber_horns", name: "Cyber Horns", category: "hat", slot: "hat", color: "#38bdf8", mesh: "hat_horns" },
+  { id: "hat_street_cap", name: "Street Cap", category: "hat", slot: "hat", color: "#0f172a", renderMode: "part_kit", modelPath: "/avatar/hat/street-cap.glb", parts: [makePart("roundedBox", [0.65, 0.22, 0.6], { radius: 0.15, useAssetColor: true }), makePart("roundedBox", [0.38, 0.05, 0.23], { radius: 0.03, position: [0, -0.03, 0.37], useAssetColor: true })], styleTags: ["street", "sport"] },
+  { id: "hat_beanie_soft", name: "Soft Beanie", category: "hat", slot: "hat", color: "#334155", renderMode: "part_kit", modelPath: "/avatar/hat/soft-beanie.glb", parts: [makePart("roundedBox", [0.62, 0.32, 0.58], { radius: 0.17, useAssetColor: true }), makePart("roundedBox", [0.66, 0.09, 0.62], { radius: 0.05, position: [0, -0.14, 0], color: "#0f172a" })], styleTags: ["dark", "winter"] },
+  { id: "hat_cyber_horns", name: "Cyber Horns", category: "hat", slot: "hat", color: "#38bdf8", renderMode: "part_kit", modelPath: "/avatar/hat/cyber-horns.glb", parts: [makePart("cone", [0.06, 0.34, 16], { position: [-0.2, 0.1, -0.1], rotation: [0, 0, 0.35], useAssetColor: true, emissive: "#38bdf8", emissiveIntensity: 0.28 }), makePart("cone", [0.06, 0.34, 16], { position: [0.2, 0.1, -0.1], rotation: [0, 0, -0.35], useAssetColor: true, emissive: "#38bdf8", emissiveIntensity: 0.28 })], styleTags: ["cyber", "tech"] },
 
-  { id: "neck_chain_gold", name: "Gold Chain", category: "neck", slot: "neck", color: "#facc15", mesh: "neck_chain" },
-  { id: "neck_scarf_neo", name: "Neo Scarf", category: "neck", slot: "neck", color: "#22c55e", mesh: "neck_scarf" },
+  { id: "neck_chain_gold", name: "Gold Chain", category: "neck", slot: "neck", color: "#facc15", renderMode: "part_kit", modelPath: "/avatar/neck/gold-chain.glb", parts: [makePart("torus", [0.2, 0.03, 16, 36], { rotation: [Math.PI / 2, 0, 0], useAssetColor: true, metalness: 0.74, roughness: 0.35 }), makePart("sphere", [0.05, 12, 12], { position: [0, -0.12, 0.08], color: "#fde68a", metalness: 0.66, roughness: 0.3 })], styleTags: ["street", "luxury"] },
+  { id: "neck_scarf_neo", name: "Neo Scarf", category: "neck", slot: "neck", color: "#22c55e", renderMode: "part_kit", modelPath: "/avatar/neck/neo-scarf.glb", parts: [makePart("torus", [0.24, 0.06, 12, 30], { rotation: [Math.PI / 2, 0, 0], useAssetColor: true }), makePart("roundedBox", [0.12, 0.3, 0.08], { radius: 0.03, position: [0.1, -0.2, 0.2], useAssetColor: true })], styleTags: ["cyber", "winter"] },
 
-  { id: "shoulder_orb_left", name: "Left Shoulder Pet", category: "shoulder", slot: "leftShoulder", color: "#60a5fa", mesh: "shoulder_pet" },
-  { id: "shoulder_orb_right", name: "Right Shoulder Pet", category: "shoulder", slot: "rightShoulder", color: "#60a5fa", mesh: "shoulder_pet" },
-  { id: "shoulder_guard_left", name: "Left Shoulder Guard", category: "shoulder", slot: "leftShoulder", color: "#94a3b8", mesh: "shoulder_armor" },
-  { id: "shoulder_guard_right", name: "Right Shoulder Guard", category: "shoulder", slot: "rightShoulder", color: "#94a3b8", mesh: "shoulder_armor" },
+  { id: "shoulder_orb_left", name: "Left Shoulder Pet", category: "shoulder", slot: "leftShoulder", color: "#60a5fa", renderMode: "part_kit", modelPath: "/avatar/shoulder/orb-left.glb", parts: [makePart("sphere", [0.13, 18, 18], { useAssetColor: true, roughness: 0.45 }), makePart("sphere", [0.07, 12, 12], { position: [0, -0.04, 0.1], color: "#f8fafc" }), makePart("sphere", [0.01, 8, 8], { position: [-0.035, 0.03, 0.12], color: "#0f172a" }), makePart("sphere", [0.01, 8, 8], { position: [0.035, 0.03, 0.12], color: "#0f172a" })] },
+  { id: "shoulder_orb_right", name: "Right Shoulder Pet", category: "shoulder", slot: "rightShoulder", color: "#60a5fa", renderMode: "part_kit", modelPath: "/avatar/shoulder/orb-right.glb", parts: [makePart("sphere", [0.13, 18, 18], { useAssetColor: true, roughness: 0.45 }), makePart("sphere", [0.07, 12, 12], { position: [0, -0.04, 0.1], color: "#f8fafc" }), makePart("sphere", [0.01, 8, 8], { position: [-0.035, 0.03, 0.12], color: "#0f172a" }), makePart("sphere", [0.01, 8, 8], { position: [0.035, 0.03, 0.12], color: "#0f172a" })] },
+  { id: "shoulder_guard_left", name: "Left Shoulder Guard", category: "shoulder", slot: "leftShoulder", color: "#94a3b8", renderMode: "part_kit", modelPath: "/avatar/shoulder/guard-left.glb", parts: [makePart("roundedBox", [0.24, 0.17, 0.3], { radius: 0.08, useAssetColor: true, metalness: 0.55, roughness: 0.5 }), makePart("roundedBox", [0.26, 0.08, 0.08], { radius: 0.02, position: [0, -0.08, 0.08], color: "#cbd5e1", metalness: 0.66, roughness: 0.45 })], styleTags: ["cyber", "tactical"] },
+  { id: "shoulder_guard_right", name: "Right Shoulder Guard", category: "shoulder", slot: "rightShoulder", color: "#94a3b8", renderMode: "part_kit", modelPath: "/avatar/shoulder/guard-right.glb", parts: [makePart("roundedBox", [0.24, 0.17, 0.3], { radius: 0.08, useAssetColor: true, metalness: 0.55, roughness: 0.5 }), makePart("roundedBox", [0.26, 0.08, 0.08], { radius: 0.02, position: [0, -0.08, 0.08], color: "#cbd5e1", metalness: 0.66, roughness: 0.45 })], styleTags: ["cyber", "tactical"] },
 
-  { id: "back_jetpack_mini", name: "Mini Jetpack", category: "back", slot: "back", color: "#334155", mesh: "back_pack" },
-  { id: "back_blade_rig", name: "Blade Rig", category: "back", slot: "back", color: "#64748b", mesh: "back_sword" },
+  { id: "back_jetpack_mini", name: "Mini Jetpack", category: "back", slot: "back", color: "#334155", renderMode: "part_kit", modelPath: "/avatar/back/jetpack-mini.glb", parts: [makePart("roundedBox", [0.44, 0.54, 0.2], { radius: 0.08, useAssetColor: true }), makePart("roundedBox", [0.14, 0.2, 0.08], { radius: 0.03, position: [0, -0.08, 0.14], color: "#94a3b8" }), makePart("roundedBox", [0.08, 0.55, 0.05], { radius: 0.02, position: [-0.18, 0, 0.09], color: "#1e293b" }), makePart("roundedBox", [0.08, 0.55, 0.05], { radius: 0.02, position: [0.18, 0, 0.09], color: "#1e293b" })], styleTags: ["cyber", "tech"] },
+  { id: "back_blade_rig", name: "Blade Rig", category: "back", slot: "back", color: "#64748b", renderMode: "part_kit", modelPath: "/avatar/back/blade-rig.glb", parts: [makePart("box", [0.05, 0.65, 0.08], { position: [-0.12, 0.2, 0.1], rotation: [0.2, 0, -0.5], color: "#e2e8f0", metalness: 0.7, roughness: 0.34 }), makePart("box", [0.05, 0.65, 0.08], { position: [0.1, 0.14, 0.06], rotation: [0.2, 0, 0.5], color: "#cbd5e1", metalness: 0.72, roughness: 0.36 }), makePart("roundedBox", [0.25, 0.18, 0.14], { radius: 0.03, position: [0, -0.06, 0], useAssetColor: true })], styleTags: ["dark", "flame", "tactical"] },
 
-  { id: "footwear_runner_black", name: "Runner Black", category: "footwear", slot: "leftFootwear", color: "#111111", mesh: "footwear_sneaker" },
-  { id: "footwear_runner_black_right", name: "Runner Black (Right)", category: "footwear", slot: "rightFootwear", color: "#111111", mesh: "footwear_sneaker" },
-  { id: "footwear_tech_boot_l", name: "Tech Boot (Left)", category: "footwear", slot: "leftFootwear", color: "#1e293b", mesh: "footwear_boot" },
-  { id: "footwear_tech_boot_r", name: "Tech Boot (Right)", category: "footwear", slot: "rightFootwear", color: "#1e293b", mesh: "footwear_boot" },
+  { id: "footwear_runner_black", name: "Runner Black", category: "footwear", slot: "leftFootwear", color: "#111111", renderMode: "part_kit", modelPath: "/avatar/footwear/runner-left.glb", parts: [makePart("roundedBox", [0.27, 0.18, 0.4], { radius: 0.06, useAssetColor: true }), makePart("roundedBox", [0.25, 0.05, 0.42], { radius: 0.02, position: [0, -0.08, 0], color: "#e2e8f0" })], styleTags: ["street", "sport"] },
+  { id: "footwear_runner_black_right", name: "Runner Black (Right)", category: "footwear", slot: "rightFootwear", color: "#111111", renderMode: "part_kit", modelPath: "/avatar/footwear/runner-right.glb", parts: [makePart("roundedBox", [0.27, 0.18, 0.4], { radius: 0.06, useAssetColor: true }), makePart("roundedBox", [0.25, 0.05, 0.42], { radius: 0.02, position: [0, -0.08, 0], color: "#e2e8f0" })], styleTags: ["street", "sport"] },
+  { id: "footwear_tech_boot_l", name: "Tech Boot (Left)", category: "footwear", slot: "leftFootwear", color: "#1e293b", renderMode: "part_kit", modelPath: "/avatar/footwear/tech-boot-left.glb", parts: [makePart("roundedBox", [0.28, 0.28, 0.36], { radius: 0.06, useAssetColor: true, metalness: 0.2 }), makePart("roundedBox", [0.29, 0.08, 0.38], { radius: 0.02, position: [0, -0.12, 0], color: "#334155" })], styleTags: ["cyber", "tactical"] },
+  { id: "footwear_tech_boot_r", name: "Tech Boot (Right)", category: "footwear", slot: "rightFootwear", color: "#1e293b", renderMode: "part_kit", modelPath: "/avatar/footwear/tech-boot-right.glb", parts: [makePart("roundedBox", [0.28, 0.28, 0.36], { radius: 0.06, useAssetColor: true, metalness: 0.2 }), makePart("roundedBox", [0.29, 0.08, 0.38], { radius: 0.02, position: [0, -0.12, 0], color: "#334155" })], styleTags: ["cyber", "tactical"] },
 
-  { id: "aura_neon_ring", name: "Neon Aura", category: "aura", slot: "aura", color: "#22d3ee", mesh: "aura_ring" },
-  { id: "aura_flame_orbit", name: "Flame Orbit", category: "aura", slot: "aura", color: "#f97316", mesh: "aura_flame" },
-  { id: "aura_pixel_spark", name: "Pixel Spark", category: "aura", slot: "aura", color: "#a855f7", mesh: "aura_pixels" },
+  { id: "aura_neon_ring", name: "Neon Aura", category: "aura", slot: "aura", color: "#22d3ee", renderMode: "part_kit", modelPath: "/avatar/aura/neon-ring.glb", parts: [makePart("torus", [0.78, 0.05, 16, 40], { rotation: [Math.PI / 2, 0, 0], useAssetColor: true, emissive: "#22d3ee", emissiveIntensity: 0.5, transparent: true, opacity: 0.72 })], styleTags: ["street", "cyber"] },
+  { id: "aura_flame_orbit", name: "Flame Orbit", category: "aura", slot: "aura", color: "#f97316", renderMode: "part_kit", modelPath: "/avatar/aura/flame-orbit.glb", parts: [makePart("torus", [0.78, 0.03, 10, 36], { rotation: [Math.PI / 2, 0, 0], useAssetColor: true, emissive: "#f97316", emissiveIntensity: 0.65, transparent: true, opacity: 0.65 }), makePart("cone", [0.08, 0.28, 10], { position: [-0.55, 0.1, 0], color: "#fb923c", emissive: "#f97316", emissiveIntensity: 0.45, transparent: true, opacity: 0.78 }), makePart("cone", [0.08, 0.28, 10], { position: [-0.25, 0.14, 0], color: "#fb923c", emissive: "#f97316", emissiveIntensity: 0.45, transparent: true, opacity: 0.78 }), makePart("cone", [0.08, 0.28, 10], { position: [0, 0.1, 0], color: "#fb923c", emissive: "#f97316", emissiveIntensity: 0.45, transparent: true, opacity: 0.78 }), makePart("cone", [0.08, 0.28, 10], { position: [0.25, 0.14, 0], color: "#fb923c", emissive: "#f97316", emissiveIntensity: 0.45, transparent: true, opacity: 0.78 }), makePart("cone", [0.08, 0.28, 10], { position: [0.55, 0.1, 0], color: "#fb923c", emissive: "#f97316", emissiveIntensity: 0.45, transparent: true, opacity: 0.78 })], styleTags: ["flame", "hero"] },
+  { id: "aura_pixel_spark", name: "Pixel Spark", category: "aura", slot: "aura", color: "#a855f7", renderMode: "part_kit", modelPath: "/avatar/aura/pixel-spark.glb", parts: [makePart("box", [0.08, 0.08, 0.08], { position: [-0.55, -0.03, -0.12], useAssetColor: true, emissive: "#a855f7", emissiveIntensity: 0.44 }), makePart("box", [0.08, 0.08, 0.08], { position: [-0.25, 0.1, 0.12], useAssetColor: true, emissive: "#a855f7", emissiveIntensity: 0.44 }), makePart("box", [0.08, 0.08, 0.08], { position: [0.05, -0.03, -0.12], useAssetColor: true, emissive: "#a855f7", emissiveIntensity: 0.44 }), makePart("box", [0.08, 0.08, 0.08], { position: [0.3, 0.1, 0.12], useAssetColor: true, emissive: "#a855f7", emissiveIntensity: 0.44 }), makePart("box", [0.08, 0.08, 0.08], { position: [0.6, -0.03, -0.12], useAssetColor: true, emissive: "#a855f7", emissiveIntensity: 0.44 })], styleTags: ["cyber", "pixel"] },
 ];
 
 const STUDIO_ASSET_MAP = new Map(STUDIO_ASSETS.map((asset) => [asset.id, asset] as const));
 const AVATAR_ASSET_MAP = new Map(AVATAR_ASSETS.map((asset) => [asset.id, asset] as const));
+const AVATAR_BASE_MAP = new Map(AVATAR_BASE_MODELS.map((model) => [model.id, model] as const));
 
 export function getAssetsForTemplate(template: TemplateType) {
   return STUDIO_ASSETS.filter((asset) => asset.supportedTemplates.includes(template));
@@ -127,6 +244,10 @@ export function getAvatarAssetById(assetId?: string) {
 
 export function getAvatarAssetsForSlot(slot: AvatarCosmeticSlot) {
   return AVATAR_ASSETS.filter((asset) => asset.slot === slot);
+}
+
+export function getAvatarBaseModel(modelVariant: AvatarBaseModel["id"]) {
+  return AVATAR_BASE_MAP.get(modelVariant) ?? AVATAR_BASE_MODELS[1];
 }
 
 export function getLayerOverlayImage(layer: Pick<DesignLayer, "assetId" | "image">) {
