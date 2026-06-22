@@ -46,6 +46,8 @@ const SWATCHES = ["#ef4444", "#3b82f6", "#f59e0b", "#10b981", "#a855f7", "#f8faf
 const STYLE_PRESETS = ["Streetwear", "Esports", "Tactical", "Fantasy", "Minimal", "Anime"];
 const SIMPLE_STYLE_CARDS = ["Cute", "Dark", "Anime", "Dragon", "Cyber", "Sport", "Flame"];
 const SIMPLE_AI_HELPERS = ["make it darker", "add wings", "make it cute", "make it more Roblox", "show 3 ideas"];
+const GUEST_AI_LIMIT = 1;
+const GUEST_AI_KEY = "guestAiUses";
 const AVATAR_SLOTS: AvatarCosmeticSlot[] = ["face", "hair", "hat", "neck", "leftShoulder", "rightShoulder", "back", "leftFootwear", "rightFootwear", "aura"];
 
 const ROLE_OPTIONS = ["all", "graphic", "module", "trim", "face", "hair", "headwear", "neckwear", "armor", "wings", "aura", "footwear", "companion"] as const;
@@ -140,7 +142,7 @@ export default function Editor() {
   const [simpleStyleChoice, setSimpleStyleChoice] = useState<string | null>(null);
   const [editorSurface, setEditorSurface] = useState<"clothes" | "avatar">("clothes");
   const [simpleAdvancedOpen, setSimpleAdvancedOpen] = useState(false);
-  const [loginPrompt, setLoginPrompt] = useState<null | "save" | "export">(null);
+  const [loginPrompt, setLoginPrompt] = useState<null | "save" | "export" | "ai">(null);
 
   const { language } = useLanguage();
   const isNo = language === "no";
@@ -247,6 +249,14 @@ export default function Editor() {
   };
 
   const generateAiPlan = async () => {
+    if (aiLoading) return;
+    if (!isAuthed) {
+      const used = Number(localStorage.getItem(GUEST_AI_KEY) || "0");
+      if (used >= GUEST_AI_LIMIT) {
+        setLoginPrompt("ai");
+        return;
+      }
+    }
     setAiLoading(true);
     setAiError("");
     try {
@@ -296,11 +306,22 @@ export default function Editor() {
         ],
       });
       if (parsed.palette[0]) setPaintSwatch(parsed.palette[0]);
+      if (!isAuthed) {
+        const used = Number(localStorage.getItem(GUEST_AI_KEY) || "0");
+        localStorage.setItem(GUEST_AI_KEY, String(used + 1));
+      }
     } catch (error) {
       setAiPlanPreview([]);
       setAiAvatarPreview(null);
       setAiResultSummary(null);
-      setAiError(error instanceof Error ? error.message : "AI output rejected by schema");
+      const status = (error as { status?: number })?.status;
+      const code = (error as { data?: { code?: string } })?.data?.code;
+      if (!isAuthed && (status === 401 || code === "guest_ai_limit")) {
+        localStorage.setItem(GUEST_AI_KEY, String(GUEST_AI_LIMIT));
+        setLoginPrompt("ai");
+      } else {
+        setAiError(error instanceof Error ? error.message : "AI output rejected by schema");
+      }
     } finally {
       setAiLoading(false);
     }
@@ -611,7 +632,12 @@ export default function Editor() {
               <Button size="sm" onClick={applyAiPlan} disabled={state.aiPlanPreview.length === 0}><Wand2 className="h-3 w-3 mr-1" />Apply to Design</Button>
               <p className="text-[11px] text-slate-400">{state.aiPlanPreview.length > 0 ? `Reviewing ${state.aiPlanPreview.length} card(s) and avatar look before apply.` : "Generate cards, review placement, then apply."}</p>
             </div>
-            <Input value={aiPrompt} onChange={(event) => setAiPrompt(event.target.value)} placeholder="Describe your Roblox clothing design..." />
+            <Input value={aiPrompt} onChange={(event) => setAiPrompt(event.target.value)} placeholder={isNo ? "Beskriv klærne og utstyret du ønsker..." : "Describe your clothing and gear..."} />
+            {!isAuthed ? (
+              <p className="text-[11px] text-amber-300 mt-1">
+                {isNo ? "✨ 1 gratis AI-generering uten konto. Logg inn for å lage mer." : "✨ 1 free AI generation without an account. Log in to create more."}
+              </p>
+            ) : null}
             {experienceMode === "simple" ? (
               <div className="mt-2 flex flex-wrap gap-2">
                 {SIMPLE_AI_HELPERS.map((chip) => (
@@ -806,7 +832,11 @@ export default function Editor() {
           <DialogHeader>
             <DialogTitle>{isNo ? "Logg inn for å fortsette" : "Log in to continue"}</DialogTitle>
             <DialogDescription className="text-slate-400">
-              {loginPrompt === "export"
+              {loginPrompt === "ai"
+                ? (isNo
+                    ? "Du har brukt din gratis AI-generering. Logg inn for å lage mer med AI."
+                    : "You've used your free AI generation. Log in to create more with AI.")
+                : loginPrompt === "export"
                 ? (isNo
                     ? "Du kan designe helt gratis uten konto. For å eksportere den Roblox-klare PNG-en må du logge inn."
                     : "You can design for free without an account. To export the Roblox-ready PNG, please log in.")

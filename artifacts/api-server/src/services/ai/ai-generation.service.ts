@@ -346,12 +346,14 @@ export class AiGenerationService {
     return generationId;
   }
 
-  async generateDesign(userId: string, input: GenerateInput) {
+  async generateDesign(userId: string | null, input: GenerateInput) {
     const modelResult = await this.askModel(this.buildPrompt(input, "generate"));
     this.logRawSchemaDiff(modelResult, input);
     const normalized = this.normalizeDesignPayload(input, modelResult);
     const design = aiValidationService.ensureDesign(normalized);
-    const generationId = await this.saveGeneration(userId, input.prompt, "generate", design, input.style ?? null);
+    const generationId = userId
+      ? await this.saveGeneration(userId, input.prompt, "generate", design, input.style ?? null)
+      : randomUUID();
 
     return aiDesignResponseSchema.parse({
       meta: { generationId, status: "completed", warnings: [] },

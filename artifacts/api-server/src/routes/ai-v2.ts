@@ -6,6 +6,15 @@ import { aiHistoryService } from "../services/ai/ai-history.service";
 
 const router: IRouter = Router();
 
+const GUEST_AI_COOKIE = "guestAiUses";
+const GUEST_AI_LIMIT = 1;
+const GUEST_AI_COOKIE_MAX_AGE = 30 * 24 * 60 * 60 * 1000;
+
+function readGuestAiUses(req: any): number {
+  const raw = Number(req.cookies?.[GUEST_AI_COOKIE] ?? "0");
+  return Number.isFinite(raw) && raw > 0 ? raw : 0;
+}
+
 function ensureAuthenticated(req: any, res: any): boolean {
   if (!req.isAuthenticated()) {
     res.status(401).json({ error: "Unauthorized" });
@@ -31,7 +40,11 @@ function schema422(req: any, res: any, err: z.ZodError | SyntaxError) {
 }
 
 router.post("/ai/generate", async (req, res): Promise<void> => {
-  if (!ensureAuthenticated(req, res)) return;
+  const authed = req.isAuthenticated();
+  if (!authed && readGuestAiUses(req) >= GUEST_AI_LIMIT) {
+    res.status(401).json({ error: "Guest AI limit reached", code: "guest_ai_limit" });
+    return;
+  }
   const parsed = aiGenerateRequestSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: "Invalid request", details: parsed.error.flatten() });
@@ -39,7 +52,16 @@ router.post("/ai/generate", async (req, res): Promise<void> => {
   }
 
   try {
-    res.json(await aiGenerationService.generateDesign(getUserId(req), parsed.data));
+    const result = await aiGenerationService.generateDesign(authed ? getUserId(req) : null, parsed.data);
+    if (!authed) {
+      res.cookie(GUEST_AI_COOKIE, String(readGuestAiUses(req) + 1), {
+        httpOnly: true,
+        sameSite: "lax",
+        path: "/",
+        maxAge: GUEST_AI_COOKIE_MAX_AGE,
+      });
+    }
+    res.json(result);
   } catch (err) {
     if (err instanceof z.ZodError) {
       req.log.error({ issues: err.issues }, "ai.v2.generate.schema_invalid");

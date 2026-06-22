@@ -1,0 +1,3 @@
+- [my-skins 3D editor & auth model](my-skins-3d-editor.md) — 3D/WebGL rendering, public editor, save/export/AI login gating.
+- [my-skins DB schema push](my-skins-db-schema.md) — app uses its own DATABASE_URL (heliumdb), NOT the executeSql tool DB; empty schema = login 500s, fix with drizzle-kit push.
+- [Guest AI free-use gate](my-skins-guest-ai-gate.md) — 1 free guest AI gen via HttpOnly cookie; soft per-browser gate, real money gate stays on save/export/deploy.
