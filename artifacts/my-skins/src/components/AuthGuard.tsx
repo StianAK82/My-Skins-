@@ -2,6 +2,8 @@ import { useEffect } from "react";
 import { useLocation } from "wouter";
 import { useGetMe } from "@workspace/api-client-react";
 
+const DEV_PREVIEW = import.meta.env.DEV;
+
 export function AuthGuard({ children }: { children: React.ReactNode }) {
   const [, setLocation] = useLocation();
   const { data: user, isLoading, isError } = useGetMe({
@@ -9,7 +11,7 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
   });
 
   useEffect(() => {
-    if (!isLoading && isError) {
+    if (!DEV_PREVIEW && !isLoading && isError) {
       setLocation("/");
     }
   }, [isLoading, isError, setLocation]);
@@ -23,6 +25,9 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
   }
 
   if (isError || !user) {
+    if (DEV_PREVIEW) {
+      return <>{children}</>;
+    }
     return null;
   }
 

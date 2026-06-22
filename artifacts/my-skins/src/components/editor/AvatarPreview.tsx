@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { Component, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Canvas } from "@react-three/fiber";
-import { OrbitControls, RoundedBox } from "@react-three/drei";
+import { OrbitControls, RoundedBox, Environment, Lightformer, ContactShadows, SoftShadows } from "@react-three/drei";
 import * as THREE from "three";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -247,22 +247,91 @@ function RobloxAvatar({ maps, view, itemType, avatar, mode }: { maps: ClothingMa
   );
 }
 
+function StudioEnvironment() {
+  return (
+    <Environment resolution={256} frames={1}>
+      <color attach="background" args={["#10131c"]} />
+      <Lightformer intensity={2.4} rotation-x={Math.PI / 2} position={[0, 5, -2]} scale={[12, 12, 1]} color="#ffffff" />
+      <Lightformer intensity={1.1} rotation-y={Math.PI / 2} position={[-5, 1.5, 0]} scale={[6, 8, 1]} color="#bcd4ff" />
+      <Lightformer intensity={1.1} rotation-y={-Math.PI / 2} position={[5, 1.5, 0]} scale={[6, 8, 1]} color="#ffe6c2" />
+      <Lightformer intensity={1.6} rotation-y={Math.PI} position={[0, 2, 4]} scale={[8, 6, 1]} color="#ffffff" />
+    </Environment>
+  );
+}
+
 function SceneContent({ maps, view, itemType, rotation, avatar, mode }: { maps: ClothingMaps | null; view: "front" | "back"; itemType: "shirt" | "pants"; rotation: number; avatar: AvatarState; mode: PreviewMode }) {
   const cameraTarget: [number, number, number] = mode === "clothing" ? [0, 1.2, 0] : [0, 1.05, 0];
   return (
     <>
-      <color attach="background" args={["#0a1020"]} />
-      <fog attach="fog" args={["#0a1020", 6.2, 13.8]} />
-      <ambientLight intensity={mode === "clothing" ? 0.58 : 0.44} />
-      <hemisphereLight intensity={mode === "clothing" ? 0.85 : 0.65} color="#f8fafc" groundColor="#111827" />
-      <directionalLight position={[4.8, 7.2, 4.6]} intensity={mode === "clothing" ? 1.95 : 1.55} castShadow shadow-mapSize-width={2048} shadow-mapSize-height={2048} shadow-bias={-0.0003} />
-      <directionalLight position={[-3.8, 3, -3.6]} intensity={0.62} color="#93c5fd" />
-      <pointLight position={[0, 3.5, 2.8]} intensity={0.28} color="#fde68a" />
+      <color attach="background" args={["#0b0f1a"]} />
+      <fog attach="fog" args={["#0b0f1a", 7.5, 16]} />
+      <SoftShadows size={26} samples={14} focus={0.85} />
+      <StudioEnvironment />
+      <ambientLight intensity={mode === "clothing" ? 0.32 : 0.26} />
+      <hemisphereLight intensity={0.45} color="#f1f5ff" groundColor="#0b0f1a" />
+      <directionalLight
+        position={[4.8, 8.2, 5.2]}
+        intensity={mode === "clothing" ? 2.5 : 2.1}
+        color="#fff6e8"
+        castShadow
+        shadow-mapSize-width={2048}
+        shadow-mapSize-height={2048}
+        shadow-bias={-0.00035}
+        shadow-normalBias={0.02}
+        shadow-camera-near={1}
+        shadow-camera-far={24}
+        shadow-camera-left={-4}
+        shadow-camera-right={4}
+        shadow-camera-top={5}
+        shadow-camera-bottom={-2}
+      />
+      <directionalLight position={[-5, 3.4, -3.2]} intensity={0.9} color="#8fb6ff" />
+      <pointLight position={[0, 1.6, -3]} intensity={0.7} color="#cfe0ff" />
       <group rotation-y={rotation}><RobloxAvatar maps={maps} view={view} itemType={itemType} avatar={avatar} mode={mode} /></group>
-      <mesh rotation-x={-Math.PI / 2} position={[0, -0.4, 0]} receiveShadow><circleGeometry args={[3.2, 64]} /><meshStandardMaterial color="#0f172a" roughness={0.92} /></mesh>
-      <mesh rotation-x={-Math.PI / 2} position={[0, -0.395, 0]}><ringGeometry args={[0.94, 2.4, 64]} /><meshBasicMaterial color="#475569" transparent opacity={0.3} /></mesh>
-      <OrbitControls enablePan={false} minDistance={2.2} maxDistance={6.2} target={cameraTarget} />
+      <ContactShadows position={[0, -0.4, 0]} scale={6} far={4} blur={2.6} opacity={0.6} resolution={1024} color="#05070d" />
+      <mesh rotation-x={-Math.PI / 2} position={[0, -0.402, 0]}><ringGeometry args={[1.0, 2.6, 80]} /><meshBasicMaterial color="#38507a" transparent opacity={0.22} /></mesh>
+      <OrbitControls enablePan={false} enableDamping dampingFactor={0.08} minPolarAngle={0.35} maxPolarAngle={Math.PI / 1.75} minDistance={2.2} maxDistance={6.2} target={cameraTarget} />
     </>
+  );
+}
+
+function detectWebGL(): boolean {
+  if (typeof document === "undefined") return false;
+  try {
+    const canvas = document.createElement("canvas");
+    const gl = canvas.getContext("webgl2") || canvas.getContext("webgl") || canvas.getContext("experimental-webgl");
+    return Boolean(gl);
+  } catch {
+    return false;
+  }
+}
+
+function useWebGLAvailable(): boolean {
+  const [available] = useState(() => detectWebGL());
+  return available;
+}
+
+class WebGLBoundary extends Component<{ fallback: ReactNode; children: ReactNode }, { failed: boolean }> {
+  state = { failed: false };
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+  render() {
+    if (this.state.failed) return this.props.fallback;
+    return this.props.children;
+  }
+}
+
+function PreviewFallback({ textureUrl }: { textureUrl?: string }) {
+  return (
+    <div className="w-full h-full flex flex-col items-center justify-center gap-3 bg-slate-950 rounded-lg p-4 text-center">
+      {textureUrl ? (
+        <img src={textureUrl} alt="Flat design preview" className="max-h-[70%] max-w-[80%] rounded-md border border-white/10 object-contain" />
+      ) : (
+        <div className="h-24 w-24 rounded-full border-2 border-dashed border-white/20" />
+      )}
+      <p className="text-xs text-white/60 max-w-[16rem]">3D preview needs WebGL. Showing your flat design — open in a browser with hardware acceleration to view it on the avatar.</p>
+    </div>
   );
 }
 
@@ -276,8 +345,23 @@ export function AvatarPreview({ textureUrl, className, avatarType = "neutral", v
   const view = controlledView ?? internalView;
   const setView = (next: "front" | "back") => { if (!controlledView) setInternalView(next); onViewChange?.(next); };
   const subtitle = resolvedMode === "clothing" ? "Clothing Preview" : "Avatar Look Preview";
+  const webglAvailable = useWebGLAvailable();
 
-  const scene = <Canvas shadows camera={{ position: [0, 1.3, zoom], fov: resolvedMode === "clothing" ? 34 : 38 }} className="w-full h-full"><SceneContent maps={maps} view={view} itemType={itemType} rotation={rotation} avatar={effectiveAvatar} mode={resolvedMode} /></Canvas>;
+  const scene = !webglAvailable ? (
+    <PreviewFallback textureUrl={textureUrl} />
+  ) : (
+    <WebGLBoundary fallback={<PreviewFallback textureUrl={textureUrl} />}>
+      <Canvas
+        shadows
+        dpr={[1, 2]}
+        gl={{ antialias: true, alpha: false, powerPreference: "high-performance", toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.05 }}
+        camera={{ position: [0, 1.3, zoom], fov: resolvedMode === "clothing" ? 34 : 38 }}
+        className="w-full h-full"
+      >
+        <SceneContent maps={maps} view={view} itemType={itemType} rotation={rotation} avatar={effectiveAvatar} mode={resolvedMode} />
+      </Canvas>
+    </WebGLBoundary>
+  );
 
   if (studioMode) {
     return <div className="relative w-full h-full">{scene}<div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-2 bg-black/60 backdrop-blur rounded-full px-4 py-2 border border-white/10"><button onClick={() => setView("front")} className={`text-xs px-3 py-1 rounded-full ${view === "front" ? "bg-white/20 text-white" : "text-white/50 hover:text-white"}`}>Front</button><button onClick={() => setView("back")} className={`text-xs px-3 py-1 rounded-full ${view === "back" ? "bg-white/20 text-white" : "text-white/50 hover:text-white"}`}>Back</button><button onClick={() => setRotation((p) => p + 0.3)} className="text-white/60 hover:text-white p-1" title="Rotate"><RotateCw className="w-3.5 h-3.5" /></button><button onClick={() => setZoom((p) => Math.min(6, p + 0.4))} className="text-white/60 hover:text-white p-1" title="Zoom out"><ZoomOut className="w-3.5 h-3.5" /></button><button onClick={() => setZoom((p) => Math.max(2.2, p - 0.4))} className="text-white/60 hover:text-white p-1" title="Zoom in"><ZoomIn className="w-3.5 h-3.5" /></button></div><div className="absolute top-4 left-4 text-[10px] uppercase tracking-widest text-white/35 font-medium">{avatarType} · {subtitle}</div></div>;
