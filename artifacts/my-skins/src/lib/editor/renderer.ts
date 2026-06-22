@@ -316,7 +316,7 @@ export function renderDesignToCanvas(state: DesignState, canvas: HTMLCanvasEleme
   if (!ctx) return "";
 
   ctx.clearRect(0, 0, canvas.width, canvas.height);
-  ctx.fillStyle = "#0f172a";
+  ctx.fillStyle = state.baseColor ?? "#0f172a";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
   state.layers.forEach((layer) => {

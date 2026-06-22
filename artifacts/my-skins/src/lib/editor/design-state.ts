@@ -57,6 +57,7 @@ export type DesignState = {
   layers: DesignLayer[];
   preview: { split: boolean; mode: "2d" | "3d" | "split"; bodyType: "blocky" | "boy" | "girl"; view: "front" | "back" };
   avatar: AvatarState;
+  baseColor?: string;
   paintSwatch: string;
   aiPlanPreview: DesignLayer[];
   aiAvatarPreview: AvatarStatePatch | null;
@@ -70,7 +71,7 @@ export type DesignState = {
 const defaultTransform = (): LayerTransform => ({ x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, visible: true, locked: false });
 
 export const defaultAvatarState = (): AvatarState => ({
-  modelVariant: "proportioned_r15",
+  modelVariant: "classic_blocky",
   presentation: "neutral",
   skinTone: "#f1c27d",
   pose: "idle",
@@ -99,6 +100,7 @@ const initialState: DesignState = {
   layers: [],
   preview: { split: true, mode: "split", bodyType: "blocky", view: "front" },
   avatar: defaultAvatarState(),
+  baseColor: undefined,
   paintSwatch: "#ef4444",
   aiPlanPreview: [],
   aiAvatarPreview: null,
@@ -116,6 +118,7 @@ type DesignStore = {
   setAvatarPatch: (patch: AvatarStatePatch) => void;
   setAvatarSlot: (slot: AvatarCosmeticSlot, item: AvatarSlotItem | null) => void;
   setPaintSwatch: (hex: string) => void;
+  setBaseColor: (hex: string) => void;
   addLayer: (layer: Omit<DesignLayer, "id" | "transform"> & { id?: string; transform?: Partial<LayerTransform> }) => void;
   patchLayer: (id: string, patch: Partial<DesignLayer>) => void;
   reorderLayer: (id: string, direction: "up" | "down") => void;
@@ -151,6 +154,7 @@ export const designStateSchema = z.object({
   activeTool: z.enum(["templates", "uploads", "media", "aiMedia", "accessories", "text", "draw"]),
   activeZone: z.string(),
   selectedLayerId: z.string().nullable(),
+  baseColor: z.string().optional(),
   paintSwatch: z.string(),
   preview: z.object({ split: z.boolean(), mode: z.enum(["2d", "3d", "split"]), bodyType: z.enum(["blocky", "boy", "girl"]), view: z.enum(["front", "back"]) }),
   avatar: z.object({
@@ -223,6 +227,7 @@ export const useDesignStore = create<DesignStore>((set) => ({
   setAvatarPatch: (patch) => set((s) => ({ state: { ...s.state, avatar: { ...s.state.avatar, ...patch, slots: { ...s.state.avatar.slots, ...patch.slots } } } })),
   setAvatarSlot: (slot, item) => set((s) => ({ state: { ...s.state, avatar: { ...s.state.avatar, slots: { ...s.state.avatar.slots, [slot]: item } } } })),
   setPaintSwatch: (hex) => set((s) => ({ state: { ...s.state, paintSwatch: hex } })),
+  setBaseColor: (hex) => set((s) => ({ state: { ...s.state, baseColor: hex, paintSwatch: hex } })),
   addLayer: (layer) => set((s) => {
     const newLayer = { ...layer, id: layer.id ?? uid("layer"), transform: { ...defaultTransform(), ...layer.transform } };
     return { state: { ...s.state, layers: [...s.state.layers, newLayer], selectedLayerId: newLayer.id } };

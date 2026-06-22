@@ -1,0 +1,13 @@
+---
+name: My Skins AI design generation (gpt-5.2)
+description: Why AI design generation returned HTTP 422, and how the token budget + JSON parsing are hardened.
+---
+
+## Reasoning-model token budget must be generous or JSON truncates
+AI design generation (`api-server` ai-generation.service.ts, model `gpt-5.2` via the OpenAI integration) failed with HTTP 422 "AI returned non-JSON content". Root cause: `max_completion_tokens` was 1400. gpt-5.2 is a reasoning model — reasoning tokens count against that budget, so the visible JSON got cut off mid-string and `JSON.parse` threw.
+**Why:** completion budget is shared between hidden reasoning and the actual output; a verbose schema (modules array + placement + editorInstructions) overruns a small budget.
+**How to apply:** keep the budget generous (currently 6000) for this structured schema, and tell the model to stay compact (≤8 modules, ≤3 notes). If you add fields to the schema, re-check the budget.
+
+## parseStrictJson is layered + tolerant of truncation
+`parseStrictJson` tries: direct parse → fenced ```json``` block → first-brace..last-brace slice → `closeTruncatedJson` repair (closes open strings/brackets) as a last resort. Repaired output still must pass `JSON.parse` and is then sanitised by `normalizeDesignPayload` + `aiValidationService.ensureDesign` (which fill defaults for every field), so a partial salvage is safe.
+**How to apply:** the budget fix is the real cure; the repair is a safety net. Don't rely on the repair for correctness — if you see the repair path firing often, the token budget is too low again.

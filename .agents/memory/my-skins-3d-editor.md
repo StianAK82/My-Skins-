@@ -16,6 +16,12 @@ R3F creates the WebGLRenderer inside an async effect, so a React error boundary 
 
 ## Avatar = procedural blocky Roblox rig (correct for the product)
 Avatar is built from rounded boxes (R6/R15 style) in `assets.ts` AVATAR_BASE_MODELS; clothing "merge" = slicing the 585x559 2D design texture into UV zones (SHIRT_FRONT etc. in AvatarPreview.tsx) mapped onto box faces, live. This blocky look is intentional — custommuse also previews on the real Roblox avatar. Quality levers are lighting/materials/shadows, not de-blocking.
+Default rig is `classic_blocky` (the iconic R6 silhouette) — users read R15/proportioned as "not Roblox", so prefer the blocky rig as the face of the product.
+
+## Cosmetic attachment points are hardcoded — keep head at y≈2.02
+`avatar-slots.ts` BASE_POINTS hardcodes face/hair/hat/neck/etc world positions (headFront y=2.02, headTop y=2.3) independent of which rig is active. **Any change to a rig's head position in `assets.ts` will desync face decals / hair / hats** — they float off the head.
+**Why:** slot anchors are global constants, not derived from the rig's actual head box.
+**How to apply:** when retuning a rig, keep the head centered at y≈2.02. If you must move it, update BASE_POINTS in lockstep.
 
 ## Auth model: design free, save/export gated (kids-first)
 The editor route `/editor/:id` is intentionally PUBLIC (no AuthGuard) — children create without an account.

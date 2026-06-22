@@ -164,6 +164,7 @@ export default function Editor() {
     setBodyType,
     setView,
     setPaintSwatch,
+    setBaseColor,
     addBrushPoint,
     setAvatarPatch,
     setAvatarSlot,
@@ -179,6 +180,7 @@ export default function Editor() {
   const templateAssets = useMemo(() => getAssetsForTemplate(state.template), [state.template]);
   const tagOptions = useMemo(() => collectAssetTags([...templateAssets, ...AVATAR_ASSETS]), [templateAssets]);
   const hasLayers = state.layers.length > 0;
+  const hasDesign = hasLayers || Boolean(state.baseColor);
   const storageKey = `design:${id}`;
   const hasSavedVersion = typeof window !== "undefined" && Boolean(localStorage.getItem(storageKey));
   const simpleStep = getSimpleFlowStep({ creationPath: simpleCreationPath, template: state.template, style: simpleStyleChoice, hasDraft: hasLayers });
@@ -197,7 +199,7 @@ export default function Editor() {
 
   const handleExportPng = useCallback(async () => {
     const canvas = canvasRef.current;
-    if (!canvas || !hasLayers) return;
+    if (!canvas || !hasDesign) return;
     if (!isAuthed) {
       setLoginPrompt("export");
       return;
@@ -408,7 +410,7 @@ export default function Editor() {
           ) : null}
           <Button variant="secondary" onClick={saveDesign}>{!isAuthed ? <Lock className="mr-2 h-4 w-4" /> : null}Save</Button>
           <Button variant="secondary" onClick={loadDesign}>Load</Button>
-          <Button onClick={() => void handleExportPng()} disabled={!hasLayers}>{!isAuthed ? <Lock className="mr-2 h-4 w-4" /> : <Download className="mr-2 h-4 w-4" />}Export PNG</Button>
+          <Button onClick={() => void handleExportPng()} disabled={!hasDesign}>{!isAuthed ? <Lock className="mr-2 h-4 w-4" /> : <Download className="mr-2 h-4 w-4" />}Export PNG</Button>
         </div>
       </div>
 
@@ -480,6 +482,29 @@ export default function Editor() {
                   ))}
                 </div>
               </div>
+              <div className="rounded-lg border border-slate-700 bg-slate-950/60 p-3">
+                <p className="text-xs uppercase text-slate-400 mb-2">{isNo ? "Velg farge" : "Pick a color"}</p>
+                <div className="grid grid-cols-6 gap-2">
+                  {SWATCHES.map((swatch) => (
+                    <button
+                      key={swatch}
+                      className={`h-9 rounded-md border transition ${state.baseColor === swatch ? "border-cyan-400 ring-2 ring-cyan-400/60 scale-105" : "border-slate-700 hover:scale-105"}`}
+                      style={{ backgroundColor: swatch }}
+                      onClick={() => (selectedLayer ? patchLayer(selectedLayer.id, { color: swatch }) : setBaseColor(swatch))}
+                      aria-label={`${isNo ? "Sett farge" : "Set color"} ${swatch}`}
+                    />
+                  ))}
+                </div>
+                <label className="mt-3 flex items-center gap-2 text-xs text-slate-300">
+                  <span>{isNo ? "Egen farge" : "Custom"}</span>
+                  <input
+                    type="color"
+                    value={state.baseColor ?? state.paintSwatch}
+                    onChange={(event) => (selectedLayer ? patchLayer(selectedLayer.id, { color: event.target.value }) : setBaseColor(event.target.value))}
+                    className="h-8 w-12 cursor-pointer rounded border border-slate-700 bg-transparent"
+                  />
+                </label>
+              </div>
               <Button variant="secondary" className="w-full h-11" onClick={() => setSimpleAdvancedOpen((current) => !current)}>
                 {simpleAdvancedOpen ? "Hide More Tools" : "More Tools"}
               </Button>
@@ -518,7 +543,7 @@ export default function Editor() {
             <p className="text-xs uppercase text-slate-400">Quick Colors</p>
             <div className="grid grid-cols-4 gap-2">
               {SWATCHES.map((swatch) => (
-                <button key={swatch} className="h-8 rounded border border-slate-700" style={{ backgroundColor: swatch }} onClick={() => setPaintSwatch(swatch)} aria-label={`Set swatch ${swatch}`} />
+                <button key={swatch} className={`h-8 rounded border ${state.baseColor === swatch ? "border-cyan-400 ring-2 ring-cyan-400/50" : "border-slate-700"}`} style={{ backgroundColor: swatch }} onClick={() => (selectedLayer ? patchLayer(selectedLayer.id, { color: swatch }) : setBaseColor(swatch))} aria-label={`Set swatch ${swatch}`} />
               ))}
             </div>
           </div> : null}
@@ -594,7 +619,7 @@ export default function Editor() {
           <div className={`grid gap-3 ${state.preview.mode === "split" ? "grid-cols-2" : "grid-cols-1"}`}>
             {(state.preview.mode === "2d" || state.preview.mode === "split") && (
               <div className="rounded-lg border border-slate-800 bg-slate-950 p-2 relative">
-                {!hasLayers ? <div className="absolute inset-3 z-10 rounded border border-dashed border-slate-700 bg-slate-900/80 p-3 text-sm text-slate-200">{friendlyEmptyMessage}</div> : null}
+                {!hasDesign ? <div className="absolute inset-3 z-10 rounded border border-dashed border-slate-700 bg-slate-900/80 p-3 text-sm text-slate-200">{friendlyEmptyMessage}</div> : null}
                 <canvas
                   ref={canvasRef}
                   width={TEMPLATE_SIZE.width}

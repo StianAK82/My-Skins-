@@ -16,17 +16,65 @@ import { aiValidationService } from "./ai-validation.service";
 type GenerateInput = z.infer<typeof aiGenerateRequestSchema>;
 type StylizedInput = { prompt: string; avatarType?: string; bodyType?: string; style?: string };
 
+function closeTruncatedJson(input: string): string {
+  let inStr = false;
+  let esc = false;
+  const stack: string[] = [];
+  for (let i = 0; i < input.length; i += 1) {
+    const ch = input[i];
+    if (inStr) {
+      if (esc) esc = false;
+      else if (ch === "\\") esc = true;
+      else if (ch === '"') inStr = false;
+      continue;
+    }
+    if (ch === '"') inStr = true;
+    else if (ch === "{") stack.push("}");
+    else if (ch === "[") stack.push("]");
+    else if (ch === "}" || ch === "]") stack.pop();
+  }
+
+  let result = input;
+  if (inStr) {
+    const lastQuote = result.lastIndexOf('"');
+    if (lastQuote >= 0) result = result.slice(0, lastQuote);
+  }
+  result = result.replace(/\s*[,:]?\s*$/g, "");
+  result = result.replace(/"[^"]*"\s*:\s*$/g, "");
+  result = result.replace(/,\s*$/g, "");
+  while (stack.length) result += stack.pop();
+  return result;
+}
+
 function parseStrictJson(content: string): unknown {
   try {
     return JSON.parse(content);
   } catch {
     const fenced = content.match(/```(?:json)?\s*([\s\S]*?)\s*```/i)?.[1];
-    if (fenced) return JSON.parse(fenced);
+    if (fenced) {
+      try {
+        return JSON.parse(fenced);
+      } catch {
+        /* fall through to brace slicing */
+      }
+    }
 
     const firstBrace = content.indexOf("{");
     const lastBrace = content.lastIndexOf("}");
     if (firstBrace >= 0 && lastBrace > firstBrace) {
-      return JSON.parse(content.slice(firstBrace, lastBrace + 1));
+      try {
+        return JSON.parse(content.slice(firstBrace, lastBrace + 1));
+      } catch {
+        /* fall through to truncation repair */
+      }
+    }
+
+    if (firstBrace >= 0) {
+      try {
+        return JSON.parse(closeTruncatedJson(content.slice(firstBrace)));
+      } catch {
+        /* repair failed */
+      }
     }
     throw new SyntaxError("AI returned non-JSON content");
   }
@@ -130,6 +178,7 @@ export class AiGenerationService {
       "Placement rule (strict):",
       placementRule,
       "Every module must include a valid `type` enum value and a six-char hex color.",
+      "Keep the response compact so it is never truncated: at most 8 modules, at most 3 short notes, and concise one-sentence strings. Output the complete JSON object only.",
     ].filter(Boolean).join("\n");
   }
 
@@ -308,7 +357,7 @@ export class AiGenerationService {
     for (let attempt = 1; attempt <= 2; attempt += 1) {
       const completion = await openai.chat.completions.create({
         model: "gpt-5.2",
-        max_completion_tokens: 1400,
+        max_completion_tokens: 6000,
         response_format: { type: "json_object" },
         messages: [
           { role: "system", content: "You are the My Skins structured Roblox design engine. Always return JSON only." },
