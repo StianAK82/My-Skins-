@@ -117,6 +117,7 @@ function mapAiModuleToLayer(module: {
 export default function Editor() {
   const { id = "local" } = useParams<{ id?: string }>();
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const offscreenCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const [previewTexture, setPreviewTexture] = useState<string>("");
   const [drawActiveLayer, setDrawActiveLayer] = useState<string | null>(null);
   const [aiPrompt, setAiPrompt] = useState("clean competitive jersey with side trims");
@@ -198,7 +199,8 @@ export default function Editor() {
   }, []);
 
   const handleExportPng = useCallback(async () => {
-    const canvas = canvasRef.current;
+    if (!offscreenCanvasRef.current) offscreenCanvasRef.current = document.createElement("canvas");
+    const canvas = canvasRef.current ?? offscreenCanvasRef.current;
     if (!canvas || !hasDesign) return;
     if (!isAuthed) {
       setLoginPrompt("export");
@@ -212,10 +214,17 @@ export default function Editor() {
   }, [handleOverlayImageReady, hasLayers, state, isAuthed]);
 
   useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
+    if (!offscreenCanvasRef.current) offscreenCanvasRef.current = document.createElement("canvas");
+    const offscreen = offscreenCanvasRef.current;
     const idHandle = window.setTimeout(() => {
-      setPreviewTexture(renderDesignToCanvas(state, canvas, { onOverlayImageReady: handleOverlayImageReady }));
+      setPreviewTexture(renderDesignToCanvas(state, offscreen, { onOverlayImageReady: handleOverlayImageReady }));
+      const visible = canvasRef.current;
+      if (visible) {
+        visible.width = offscreen.width;
+        visible.height = offscreen.height;
+        const ctx = visible.getContext("2d");
+        if (ctx) ctx.drawImage(offscreen, 0, 0);
+      }
     }, 20);
     return () => window.clearTimeout(idHandle);
   }, [handleOverlayImageReady, imageRenderNonce, state]);
