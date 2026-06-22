@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent } from "react";
 import { Link, useParams } from "wouter";
-import { ArrowLeft, Check, Copy, Download, Eye, Layers, Lock, LogIn, MoveDown, MoveUp, Palette, Sparkles, ToyBrick, Trash2, Unlock, UserRound, Wand2 } from "lucide-react";
+import { ArrowLeft, Check, Copy, Download, Eye, Layers, Lock, LogIn, MoveDown, MoveUp, Palette, PanelLeft, Sparkles, ToyBrick, Trash2, Unlock, UserRound, Wand2 } from "lucide-react";
 import { aiGenerateDesign, useGetMe } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { useLanguage } from "@/hooks/use-language";
 import { AvatarPreview } from "@/components/editor/AvatarPreview";
 import { classicTextureAiSchema, parseClassicTextureAiPlan } from "@/lib/editor/ai-schema";
@@ -119,6 +120,7 @@ export default function Editor() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const offscreenCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const [previewTexture, setPreviewTexture] = useState<string>("");
+  const [menuOpen, setMenuOpen] = useState(false);
   const [drawActiveLayer, setDrawActiveLayer] = useState<string | null>(null);
   const [aiPrompt, setAiPrompt] = useState("clean competitive jersey with side trims");
   const [aiStyle, setAiStyle] = useState("Streetwear");
@@ -183,7 +185,6 @@ export default function Editor() {
   const hasLayers = state.layers.length > 0;
   const hasDesign = hasLayers || Boolean(state.baseColor);
   const storageKey = `design:${id}`;
-  const hasSavedVersion = typeof window !== "undefined" && Boolean(localStorage.getItem(storageKey));
   const simpleStep = getSimpleFlowStep({ creationPath: simpleCreationPath, template: state.template, style: simpleStyleChoice, hasDraft: hasLayers });
   const showAdvancedControls = shouldShowAdvancedControls(experienceMode, simpleAdvancedOpen);
   const simplePanels = getVisibleSimplePanels({ step: simpleStep, surface: editorSurface, advancedOpen: simpleAdvancedOpen });
@@ -423,29 +424,115 @@ export default function Editor() {
         </div>
       </div>
 
-      <div className="mb-4 rounded-xl border border-slate-800 bg-slate-900/70 px-3 py-2 text-xs text-slate-300 flex items-center justify-between gap-3">
-        <p>{experienceMode === "simple" ? `Simple flow: ${simpleStep === 1 ? "Choose how to create" : simpleStep === 2 ? "Pick shirt or pants" : simpleStep === 3 ? "Pick your style" : "Create and refine"}.` : "Studio flow: Template → Build with assets/AI/tools → Check preview → Save → Export."}</p>
-        <p className="text-slate-400">{saveStatus || (hasSavedVersion ? "Saved version available for quick reload." : "No saved version yet for this project.")}</p>
+      {saveStatus ? <p className="mb-3 text-xs text-slate-400">{saveStatus}</p> : null}
+
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <Button variant="outline" onClick={() => setMenuOpen(true)}><PanelLeft className="mr-2 h-4 w-4" />{isNo ? "Verktøy & lag" : "Tools & layers"}</Button>
       </div>
 
-      <div className="mb-4 grid grid-cols-2 gap-3">
-        <Button
-          variant={editorSurface === "clothes" ? "default" : "outline"}
-          className="h-12 justify-start text-base"
-          onClick={() => setEditorSurface("clothes")}
-        >
-          <Palette className="mr-2 h-5 w-5" /> Clothes
-        </Button>
-        <Button
-          variant={editorSurface === "avatar" ? "default" : "outline"}
-          className="h-12 justify-start text-base"
-          onClick={() => setEditorSurface("avatar")}
-        >
-          <UserRound className="mr-2 h-5 w-5" /> Avatar
-        </Button>
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-4 h-[calc(100vh-150px)]">
+        <div className="rounded-xl border border-slate-800 bg-slate-900 p-2 relative min-h-[420px]">
+          <AvatarPreview textureUrl={previewTexture} view={state.preview.view} previewMode={previewFocus} bodyType={state.preview.bodyType === "girl" ? "slim" : state.preview.bodyType === "boy" ? "athletic" : "classic"} itemType={state.template} avatarState={state.avatar} studioMode />
+          <div className="absolute top-3 left-3 rounded bg-slate-900/70 border border-slate-700 px-2 py-1 text-[11px] text-slate-300 flex items-center gap-1"><Eye className="h-3 w-3" />{isNo ? "Dra for å rotere" : "Drag to orbit"}</div>
+        </div>
+
+        <aside className="rounded-xl border border-slate-800 bg-slate-900 p-3 overflow-auto">
+          <div className="flex gap-2 items-center mb-2 flex-wrap">
+            <Sparkles className="h-4 w-4" />
+            <p className="text-sm font-medium">{isNo ? "AI-design" : "AI Suggestion Cards"}</p>
+            <Button size="sm" variant="secondary" onClick={() => void generateAiPlan()} disabled={aiLoading || !aiPrompt.trim()}>{aiLoading ? (isNo ? "Lager..." : "Generating...") : (isNo ? "Generer" : "Generate")}</Button>
+            <Button size="sm" onClick={applyAiPlan} disabled={state.aiPlanPreview.length === 0}><Wand2 className="h-3 w-3 mr-1" />{isNo ? "Bruk" : "Apply to Design"}</Button>
+          </div>
+          <Input value={aiPrompt} onChange={(event) => setAiPrompt(event.target.value)} placeholder={isNo ? "Beskriv klærne og utstyret du ønsker..." : "Describe your clothing and gear..."} />
+          {!isAuthed ? (
+            <p className="text-[11px] text-amber-300 mt-1">
+              {isNo ? "✨ 1 gratis AI-generering uten konto. Logg inn for å lage mer." : "✨ 1 free AI generation without an account. Log in to create more."}
+            </p>
+          ) : null}
+          {experienceMode === "simple" ? (
+            <div className="mt-2 flex flex-wrap gap-2">
+              {SIMPLE_AI_HELPERS.map((chip) => (
+                <Button key={chip} size="sm" variant="outline" className="h-9 rounded-full" onClick={() => setAiPrompt((current) => `${current}${current ? ", " : ""}${chip}`)}>
+                  {chip}
+                </Button>
+              ))}
+            </div>
+          ) : null}
+          {aiError ? <p className="text-xs text-red-400 mt-2">{aiError}</p> : null}
+          {state.aiPlanPreview.length > 0 ? (
+            <div className="space-y-2 mt-2">
+              <div className="grid grid-cols-2 gap-2">
+                {state.aiPlanPreview.map((layer) => (
+                  <div key={layer.id} className="rounded border border-slate-700 p-2 text-xs">
+                    <p className="font-medium">{layer.name}</p>
+                    <p className="text-slate-400">{layer.type} · {layer.zone}</p>
+                  </div>
+                ))}
+              </div>
+              {state.aiResultSummary ? (
+                <div className="rounded border border-slate-700/70 bg-slate-900/60 p-2 text-[11px] space-y-1">
+                  <p className="font-semibold text-slate-200">AI result breakdown</p>
+                  <p className="text-slate-400">Exportable clothing: {state.aiResultSummary.exportable.join(", ") || "none"}</p>
+                  <p className="text-slate-400">Avatar preview cosmetics: {state.aiResultSummary.previewOnly.join(", ") || "none"}</p>
+                  <p className="text-slate-400">Applied targets: {state.aiResultSummary.appliedTargets.join(", ")}</p>
+                </div>
+              ) : null}
+              <div className="rounded border border-slate-700/70 bg-slate-900/60 p-2 text-[11px] space-y-2">
+                <p className="font-semibold text-slate-200">Refine after apply</p>
+                <p className="text-slate-400">Layer mix: {layeredRoleSummary.hero} hero · {layeredRoleSummary.support} support · {layeredRoleSummary.decorative} decorative</p>
+                <div className="grid grid-cols-2 gap-2">
+                  <Button size="sm" variant="outline" onClick={() => {
+                    const heroLayer = [...state.layers].reverse().find((layer) => getAssetById(layer.assetId)?.importance === "hero");
+                    if (heroLayer) selectLayer(heroLayer.id);
+                  }}>Select latest hero</Button>
+                  <Button size="sm" variant="outline" onClick={() => {
+                    const decorativeLayer = [...state.layers].reverse().find((layer) => (getAssetById(layer.assetId)?.importance ?? "decorative") === "decorative");
+                    if (decorativeLayer) deleteLayer(decorativeLayer.id);
+                  }}>Remove last decorative</Button>
+                </div>
+              </div>
+            </div>
+          ) : <p className="text-xs text-slate-400 mt-2">{isNo ? "Ingen AI-kort ennå. Generer først, se gjennom, og bruk." : "No AI cards yet. Generate first, review cards, then apply."}</p>}
+        </aside>
       </div>
 
-      <div className="grid grid-cols-[280px_1fr_360px] gap-4 h-[calc(100vh-132px)]">
+      <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
+        <SheetContent side="left" className="w-full sm:max-w-[460px] bg-slate-950 border-slate-800 text-slate-100 overflow-y-auto">
+          <SheetHeader>
+            <SheetTitle className="text-slate-100">{isNo ? "Verktøy & lag" : "Tools & layers"}</SheetTitle>
+          </SheetHeader>
+
+          <div className="mt-4 grid grid-cols-2 gap-3">
+            <Button variant={editorSurface === "clothes" ? "default" : "outline"} className="h-12 justify-start text-base" onClick={() => setEditorSurface("clothes")}><Palette className="mr-2 h-5 w-5" /> Clothes</Button>
+            <Button variant={editorSurface === "avatar" ? "default" : "outline"} className="h-12 justify-start text-base" onClick={() => setEditorSurface("avatar")}><UserRound className="mr-2 h-5 w-5" /> Avatar</Button>
+          </div>
+
+          {state.preview.mode !== "3d" ? (
+            <div className="mt-4 rounded-lg border border-slate-800 bg-slate-950 p-2 relative aspect-square">
+              {!hasDesign ? <div className="absolute inset-3 z-10 rounded border border-dashed border-slate-700 bg-slate-900/80 p-3 text-sm text-slate-200">{friendlyEmptyMessage}</div> : null}
+              <canvas
+                ref={canvasRef}
+                width={TEMPLATE_SIZE.width}
+                height={TEMPLATE_SIZE.height}
+                className="w-full h-full object-contain"
+                onPointerDown={onPointerDraw}
+                onPointerMove={(e) => e.buttons === 1 && onPointerDraw(e)}
+              />
+              <div className="absolute inset-2">
+                {zones.map((zone) => (
+                  <button
+                    key={zone.key}
+                    onClick={() => setZone(zone.key)}
+                    className={`absolute border ${state.activeZone === zone.key ? "border-cyan-400 bg-cyan-400/20" : "border-slate-500/40 bg-transparent hover:bg-slate-500/10"}`}
+                    style={{ left: `${(zone.left / TEMPLATE_SIZE.width) * 100}%`, top: `${(zone.top / TEMPLATE_SIZE.height) * 100}%`, width: `${(zone.width / TEMPLATE_SIZE.width) * 100}%`, height: `${(zone.height / TEMPLATE_SIZE.height) * 100}%` }}
+                    title={zone.label}
+                  />
+                ))}
+              </div>
+            </div>
+          ) : null}
+
+          <div className="mt-4 grid gap-4">
         <aside className="rounded-xl border border-slate-800 bg-slate-900 p-3 overflow-auto">
           {experienceMode === "simple" ? (
             <div className="space-y-3">
@@ -624,100 +711,6 @@ export default function Editor() {
           </div> : null}
         </aside>
 
-        <main className="rounded-xl border border-slate-800 bg-slate-900 p-3 grid grid-rows-[1fr_auto] gap-3">
-          <div className={`grid gap-3 ${state.preview.mode === "split" ? "grid-cols-2" : "grid-cols-1"}`}>
-            {(state.preview.mode === "2d" || state.preview.mode === "split") && (
-              <div className="rounded-lg border border-slate-800 bg-slate-950 p-2 relative">
-                {!hasDesign ? <div className="absolute inset-3 z-10 rounded border border-dashed border-slate-700 bg-slate-900/80 p-3 text-sm text-slate-200">{friendlyEmptyMessage}</div> : null}
-                <canvas
-                  ref={canvasRef}
-                  width={TEMPLATE_SIZE.width}
-                  height={TEMPLATE_SIZE.height}
-                  className="w-full h-full object-contain"
-                  onPointerDown={onPointerDraw}
-                  onPointerMove={(e) => e.buttons === 1 && onPointerDraw(e)}
-                />
-                <div className="absolute inset-2">
-                  {zones.map((zone) => (
-                    <button
-                      key={zone.key}
-                      onClick={() => setZone(zone.key)}
-                      className={`absolute border ${state.activeZone === zone.key ? "border-cyan-400 bg-cyan-400/20" : "border-slate-500/40 bg-transparent hover:bg-slate-500/10"}`}
-                      style={{ left: `${(zone.left / TEMPLATE_SIZE.width) * 100}%`, top: `${(zone.top / TEMPLATE_SIZE.height) * 100}%`, width: `${(zone.width / TEMPLATE_SIZE.width) * 100}%`, height: `${(zone.height / TEMPLATE_SIZE.height) * 100}%` }}
-                      title={zone.label}
-                    />
-                  ))}
-                </div>
-              </div>
-            )}
-            {(state.preview.mode === "3d" || state.preview.mode === "split") && (
-              <div className="rounded-lg border border-slate-800 bg-slate-950 p-2 relative">
-                <AvatarPreview textureUrl={previewTexture} view={state.preview.view} previewMode={previewFocus} bodyType={state.preview.bodyType === "girl" ? "slim" : state.preview.bodyType === "boy" ? "athletic" : "classic"} itemType={state.template} avatarState={state.avatar} studioMode />
-                <div className="absolute top-3 left-3 rounded bg-slate-900/70 border border-slate-700 px-2 py-1 text-[11px] text-slate-300 flex items-center gap-1"><Eye className="h-3 w-3" />Drag to orbit, buttons to zoom/rotate.</div>
-              </div>
-            )}
-          </div>
-
-          {(experienceMode === "studio" || simplePanels.showAi) ? <div className="rounded-lg border border-slate-800 bg-slate-950 p-3">
-            <div className="flex gap-2 items-center mb-2">
-              <Sparkles className="h-4 w-4" />
-              <p className="text-sm font-medium">AI Suggestion Cards</p>
-              <Button size="sm" variant="secondary" onClick={() => void generateAiPlan()} disabled={aiLoading || !aiPrompt.trim()}>{aiLoading ? "Generating..." : "Generate"}</Button>
-              <Button size="sm" onClick={applyAiPlan} disabled={state.aiPlanPreview.length === 0}><Wand2 className="h-3 w-3 mr-1" />Apply to Design</Button>
-              <p className="text-[11px] text-slate-400">{state.aiPlanPreview.length > 0 ? `Reviewing ${state.aiPlanPreview.length} card(s) and avatar look before apply.` : "Generate cards, review placement, then apply."}</p>
-            </div>
-            <Input value={aiPrompt} onChange={(event) => setAiPrompt(event.target.value)} placeholder={isNo ? "Beskriv klærne og utstyret du ønsker..." : "Describe your clothing and gear..."} />
-            {!isAuthed ? (
-              <p className="text-[11px] text-amber-300 mt-1">
-                {isNo ? "✨ 1 gratis AI-generering uten konto. Logg inn for å lage mer." : "✨ 1 free AI generation without an account. Log in to create more."}
-              </p>
-            ) : null}
-            {experienceMode === "simple" ? (
-              <div className="mt-2 flex flex-wrap gap-2">
-                {SIMPLE_AI_HELPERS.map((chip) => (
-                  <Button key={chip} size="sm" variant="outline" className="h-9 rounded-full" onClick={() => setAiPrompt((current) => `${current}${current ? ", " : ""}${chip}`)}>
-                    {chip}
-                  </Button>
-                ))}
-              </div>
-            ) : null}
-            {aiError ? <p className="text-xs text-red-400 mt-2">{aiError}</p> : null}
-            {state.aiPlanPreview.length > 0 ? (
-              <div className="space-y-2 mt-2">
-                <div className="grid grid-cols-2 gap-2">
-                  {state.aiPlanPreview.map((layer) => (
-                    <div key={layer.id} className="rounded border border-slate-700 p-2 text-xs">
-                      <p className="font-medium">{layer.name}</p>
-                      <p className="text-slate-400">{layer.type} · {layer.zone}</p>
-                    </div>
-                  ))}
-                </div>
-                {state.aiResultSummary ? (
-                  <div className="rounded border border-slate-700/70 bg-slate-900/60 p-2 text-[11px] space-y-1">
-                    <p className="font-semibold text-slate-200">AI result breakdown</p>
-                    <p className="text-slate-400">Exportable clothing: {state.aiResultSummary.exportable.join(", ") || "none"}</p>
-                    <p className="text-slate-400">Avatar preview cosmetics: {state.aiResultSummary.previewOnly.join(", ") || "none"}</p>
-                    <p className="text-slate-400">Applied targets: {state.aiResultSummary.appliedTargets.join(", ")}</p>
-                  </div>
-                ) : null}
-                <div className="rounded border border-slate-700/70 bg-slate-900/60 p-2 text-[11px] space-y-2">
-                  <p className="font-semibold text-slate-200">Refine after apply</p>
-                  <p className="text-slate-400">Layer mix: {layeredRoleSummary.hero} hero · {layeredRoleSummary.support} support · {layeredRoleSummary.decorative} decorative</p>
-                  <div className="grid grid-cols-2 gap-2">
-                    <Button size="sm" variant="outline" onClick={() => {
-                      const heroLayer = [...state.layers].reverse().find((layer) => getAssetById(layer.assetId)?.importance === "hero");
-                      if (heroLayer) selectLayer(heroLayer.id);
-                    }}>Select latest hero</Button>
-                    <Button size="sm" variant="outline" onClick={() => {
-                      const decorativeLayer = [...state.layers].reverse().find((layer) => (getAssetById(layer.assetId)?.importance ?? "decorative") === "decorative");
-                      if (decorativeLayer) deleteLayer(decorativeLayer.id);
-                    }}>Remove last decorative</Button>
-                  </div>
-                </div>
-              </div>
-            ) : <p className="text-xs text-slate-400 mt-2">No AI cards yet. Generate first, review cards, then apply.</p>}
-          </div> : null}
-        </main>
 
         <aside className="rounded-xl border border-slate-800 bg-slate-900 p-3 overflow-auto">
           {editorSurface === "clothes" ? (
@@ -859,7 +852,9 @@ export default function Editor() {
             <p className="text-xs text-slate-400">Export captures this exact design state and layer stack.</p>
           </div>
         </aside>
-      </div>
+          </div>
+        </SheetContent>
+      </Sheet>
 
       <Dialog open={loginPrompt !== null} onOpenChange={(open) => { if (!open) setLoginPrompt(null); }}>
         <DialogContent className="bg-slate-900 border-slate-700 text-slate-100">
