@@ -48,7 +48,7 @@ function Router() {
       <Route path="/dashboard" component={() => <ProtectedRoute component={Dashboard} />} />
       <Route path="/projects" component={() => <ProtectedRoute component={Projects} />} />
       <Route path="/settings" component={() => <ProtectedRoute component={Settings} />} />
-      <Route path="/editor/:id" component={() => <AuthGuard><Editor /></AuthGuard>} />
+      <Route path="/editor/:id" component={() => <Editor />} />
       <Route path="/share/:token" component={ShareView} />
       <Route path="/payment-success" component={() => <ProtectedRoute component={PaymentSuccess} />} />
       <Route path="/payment-cancelled" component={() => <ProtectedRoute component={PaymentCancelled} />} />

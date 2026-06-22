@@ -16,3 +16,9 @@ R3F creates the WebGLRenderer inside an async effect, so a React error boundary 
 
 ## Avatar = procedural blocky Roblox rig (correct for the product)
 Avatar is built from rounded boxes (R6/R15 style) in `assets.ts` AVATAR_BASE_MODELS; clothing "merge" = slicing the 585x559 2D design texture into UV zones (SHIRT_FRONT etc. in AvatarPreview.tsx) mapped onto box faces, live. This blocky look is intentional — custommuse also previews on the real Roblox avatar. Quality levers are lighting/materials/shadows, not de-blocking.
+
+## Auth model: design free, save/export gated (kids-first)
+The editor route `/editor/:id` is intentionally PUBLIC (no AuthGuard) — children create without an account.
+Only **Save** and **Export PNG (Roblox-ready)** require login: those handlers short-circuit to a login Dialog when `useGetMe()` returns no user. Landing "start creating" CTAs go straight to `/editor/local`, not `/api/login`.
+**Why:** product is for kids; account/payment only gates persistence + Roblox deployment.
+**How to apply:** keep creation flows account-free. Dashboard/Projects/Settings stay behind AuthGuard. Frontend gating is UX only — any real save/export/deploy/payment endpoint MUST also enforce auth server-side.

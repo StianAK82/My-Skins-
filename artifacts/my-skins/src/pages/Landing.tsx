@@ -79,7 +79,7 @@ export default function Landing() {
               {isNo ? "Logg inn" : "Log in"}
             </a>
             <a
-              href="/api/login"
+              href={`${import.meta.env.BASE_URL}editor/local`}
               className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold rounded-lg transition-colors"
             >
               {isNo ? "Start gratis" : "Start for free"}
@@ -138,7 +138,7 @@ export default function Landing() {
             className="flex flex-col sm:flex-row items-center justify-center gap-3"
           >
             <a
-              href="/api/login"
+              href={`${import.meta.env.BASE_URL}editor/local`}
               className="flex items-center gap-2 px-8 py-4 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-base rounded-xl transition-all hover:scale-[1.02] active:scale-100 shadow-lg shadow-indigo-600/30"
             >
               <Sparkles className="w-5 h-5" />
@@ -254,7 +254,7 @@ export default function Landing() {
               : "Create your first Roblox outfit in minutes. Free to start."}
           </p>
           <a
-            href="/api/login"
+            href={`${import.meta.env.BASE_URL}editor/local`}
             className="inline-flex items-center gap-2 px-10 py-4 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-lg rounded-xl transition-all hover:scale-[1.02] shadow-xl shadow-indigo-600/30"
           >
             <Sparkles className="w-5 h-5" />

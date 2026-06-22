@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent } from "react";
 import { Link, useParams } from "wouter";
-import { ArrowLeft, Check, Copy, Download, Eye, Layers, Lock, MoveDown, MoveUp, Palette, Sparkles, ToyBrick, Trash2, Unlock, UserRound, Wand2 } from "lucide-react";
-import { aiGenerateDesign } from "@workspace/api-client-react";
+import { ArrowLeft, Check, Copy, Download, Eye, Layers, Lock, LogIn, MoveDown, MoveUp, Palette, Sparkles, ToyBrick, Trash2, Unlock, UserRound, Wand2 } from "lucide-react";
+import { aiGenerateDesign, useGetMe } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { useLanguage } from "@/hooks/use-language";
 import { AvatarPreview } from "@/components/editor/AvatarPreview";
 import { classicTextureAiSchema, parseClassicTextureAiPlan } from "@/lib/editor/ai-schema";
 import { useDesignStore, type AvatarCosmeticSlot, type ToolType } from "@/lib/editor/design-state";
@@ -138,6 +140,12 @@ export default function Editor() {
   const [simpleStyleChoice, setSimpleStyleChoice] = useState<string | null>(null);
   const [editorSurface, setEditorSurface] = useState<"clothes" | "avatar">("clothes");
   const [simpleAdvancedOpen, setSimpleAdvancedOpen] = useState(false);
+  const [loginPrompt, setLoginPrompt] = useState<null | "save" | "export">(null);
+
+  const { language } = useLanguage();
+  const isNo = language === "no";
+  const { data: user } = useGetMe({ query: { queryKey: ["/api/auth/me"], retry: false } });
+  const isAuthed = Boolean(user);
 
   const {
     state,
@@ -188,12 +196,16 @@ export default function Editor() {
   const handleExportPng = useCallback(async () => {
     const canvas = canvasRef.current;
     if (!canvas || !hasLayers) return;
+    if (!isAuthed) {
+      setLoginPrompt("export");
+      return;
+    }
     await preloadOverlayImages(state);
     const nextTexture = renderDesignToCanvas(state, canvas, { onOverlayImageReady: handleOverlayImageReady, target: "export" });
     setPreviewTexture(nextTexture);
     downloadPng(nextTexture, `${state.template}.png`);
     setSaveStatus("Exported PNG from current design state.");
-  }, [handleOverlayImageReady, hasLayers, state]);
+  }, [handleOverlayImageReady, hasLayers, state, isAuthed]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -216,8 +228,12 @@ export default function Editor() {
   };
 
   const saveDesign = () => {
+    if (!isAuthed) {
+      setLoginPrompt("save");
+      return;
+    }
     localStorage.setItem(storageKey, serializeDesignState(state));
-    setSaveStatus("Saved locally. You can reload this from this device.");
+    setSaveStatus("Saved. You can reload this design anytime.");
   };
 
   const loadDesign = () => {
@@ -364,9 +380,14 @@ export default function Editor() {
             <Button size="sm" variant={experienceMode === "simple" ? "default" : "ghost"} className="h-9 px-4" onClick={() => setExperienceMode("simple")}>Simple Mode</Button>
             <Button size="sm" variant={experienceMode === "studio" ? "default" : "ghost"} className="h-9 px-4" onClick={() => setExperienceMode("studio")}>Studio Mode</Button>
           </div>
-          <Button variant="secondary" onClick={saveDesign}>Save</Button>
+          {!isAuthed ? (
+            <Button variant="outline" asChild>
+              <a href="/api/login"><LogIn className="mr-2 h-4 w-4" />{isNo ? "Logg inn" : "Log in"}</a>
+            </Button>
+          ) : null}
+          <Button variant="secondary" onClick={saveDesign}>{!isAuthed ? <Lock className="mr-2 h-4 w-4" /> : null}Save</Button>
           <Button variant="secondary" onClick={loadDesign}>Load</Button>
-          <Button onClick={() => void handleExportPng()} disabled={!hasLayers}><Download className="mr-2 h-4 w-4" />Export PNG</Button>
+          <Button onClick={() => void handleExportPng()} disabled={!hasLayers}>{!isAuthed ? <Lock className="mr-2 h-4 w-4" /> : <Download className="mr-2 h-4 w-4" />}Export PNG</Button>
         </div>
       </div>
 
@@ -779,6 +800,31 @@ export default function Editor() {
           </div>
         </aside>
       </div>
+
+      <Dialog open={loginPrompt !== null} onOpenChange={(open) => { if (!open) setLoginPrompt(null); }}>
+        <DialogContent className="bg-slate-900 border-slate-700 text-slate-100">
+          <DialogHeader>
+            <DialogTitle>{isNo ? "Logg inn for å fortsette" : "Log in to continue"}</DialogTitle>
+            <DialogDescription className="text-slate-400">
+              {loginPrompt === "export"
+                ? (isNo
+                    ? "Du kan designe helt gratis uten konto. For å eksportere den Roblox-klare PNG-en må du logge inn."
+                    : "You can design for free without an account. To export the Roblox-ready PNG, please log in.")
+                : (isNo
+                    ? "Du kan designe helt gratis uten konto. For å lagre designet ditt må du logge inn."
+                    : "You can design for free without an account. To save your design, please log in.")}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-2">
+            <Button variant="outline" onClick={() => setLoginPrompt(null)}>
+              {isNo ? "Fortsett å designe" : "Keep designing"}
+            </Button>
+            <Button asChild>
+              <a href="/api/login"><LogIn className="mr-2 h-4 w-4" />{isNo ? "Logg inn" : "Log in"}</a>
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
