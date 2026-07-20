@@ -3,10 +3,13 @@ name: My Skins 3D editor preview & rendering
 description: How the Roblox clothing 3D preview works, its WebGL/screenshot constraint, the dev auth affordance, and the decluttered editor layout.
 ---
 
-## Editor layout convention (decluttered)
-The Editor page main surface shows ONLY the large 3D `AvatarPreview` (main column) + the AI panel (right aside). ALL other controls — surface (Clothes/Avatar) toggle, tools/templates/styles/colors, asset library, 2D editing canvas, layers, properties, Preview Studio (mode/body/view/focus), avatar slot editor — live inside a left-side `Sheet` drawer toggled by a single "Tools & layers" button.
-**Why:** user found the page cluttered with info text and panels; wanted everything in a side menu, only avatar + AI visible.
-**How to apply:** new editor controls go in the drawer, not the main surface. The visible 3D avatar is rendered unconditionally (NOT gated by `preview.mode`); the 2D drawing canvas lives in the drawer (gated `preview.mode !== "3d"`). Works because texture comes from the persistent offscreen canvas regardless of whether the visible 2D canvas is mounted.
+## Product is now ONE single page (July 2026 radical simplification)
+User ordered "fjern alt annet fra systemet": the entire multi-page app (Landing, Editor, Dashboard, Projects, Settings, Share, Payment pages, AuthGuard, Navbar/AppLayout, AiPanel) was DELETED. The whole product is `src/pages/Create.tsx` at route "/": 3 short how-to steps, one animated 3D avatar (`AvatarPreview` with `animated` prop → idle sway/bob via useFrame), one AI prompt input that generates and AUTO-applies the skin (clears old layers via deleteLayer loop, then setAiPlanPreview + applyAiPlan — Zustand sync updates make this safe), and one "Last opp til Roblox" button (exports PNG offscreen + opens create.roblox.com; no real Roblox Open Cloud upload yet — would need user's API key).
+**Why:** user wants a dead-simple product: type text → AI makes the skin on the figure → upload. No tools, no login UI, no modes.
+**How to apply:** do NOT reintroduce editor UI, drawers, save/load, or extra pages unless the user asks. New capabilities go into Create.tsx or behind the AI prompt.
+
+## TS quirk: `THREE.Group`/`THREE.Object3D` types not resolvable in this repo
+`tsc` errors "Namespace 'three' has no exported member 'Group'/'Object3D'" even though runtime `import * as THREE from "three"` works. Type refs for R3F object refs must use structural types (e.g. `useRef<{ rotation: { y: number } } | null>`).
 
 ## 3D preview cannot be verified via the screenshot tool
 The Replit headless screenshot browser has **no GPU/WebGL** ("Could not create a WebGL context"). Any Three.js/R3F view fails there.

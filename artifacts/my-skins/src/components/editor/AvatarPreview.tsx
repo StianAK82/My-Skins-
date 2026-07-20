@@ -1,5 +1,5 @@
-import { Component, useEffect, useMemo, useState, type ReactNode } from "react";
-import { Canvas } from "@react-three/fiber";
+import { Component, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Canvas, useFrame } from "@react-three/fiber";
 import { OrbitControls, RoundedBox, Environment, Lightformer, ContactShadows, SoftShadows } from "@react-three/drei";
 import * as THREE from "three";
 import { Button } from "@/components/ui/button";
@@ -26,6 +26,7 @@ type AvatarPreviewProps = {
   previewMode?: PreviewMode;
   garmentColor?: string;
   studioMode?: boolean;
+  animated?: boolean;
   stylizedConcept?: StylizedOutfitConcept | null;
   garmentBase?: string;
   garmentVariant?: string;
@@ -259,7 +260,19 @@ function StudioEnvironment() {
   );
 }
 
-function SceneContent({ maps, view, itemType, rotation, avatar, mode }: { maps: ClothingMaps | null; view: "front" | "back"; itemType: "shirt" | "pants"; rotation: number; avatar: AvatarState; mode: PreviewMode }) {
+function IdleGroup({ children, enabled }: { children: ReactNode; enabled: boolean }) {
+  const groupRef = useRef<{ rotation: { y: number; z: number }; position: { y: number } } | null>(null);
+  useFrame(({ clock }) => {
+    if (!enabled || !groupRef.current) return;
+    const t = clock.getElapsedTime();
+    groupRef.current.rotation.y = Math.sin(t * 0.45) * 0.28;
+    groupRef.current.position.y = Math.sin(t * 1.6) * 0.02;
+    groupRef.current.rotation.z = Math.sin(t * 0.8) * 0.012;
+  });
+  return <group ref={groupRef}>{children}</group>;
+}
+
+function SceneContent({ maps, view, itemType, rotation, avatar, mode, animated = false }: { maps: ClothingMaps | null; view: "front" | "back"; itemType: "shirt" | "pants"; rotation: number; avatar: AvatarState; mode: PreviewMode; animated?: boolean }) {
   const cameraTarget: [number, number, number] = mode === "clothing" ? [0, 1.2, 0] : [0, 1.05, 0];
   return (
     <>
@@ -287,7 +300,7 @@ function SceneContent({ maps, view, itemType, rotation, avatar, mode }: { maps: 
       />
       <directionalLight position={[-5, 3.4, -3.2]} intensity={0.9} color="#8fb6ff" />
       <pointLight position={[0, 1.6, -3]} intensity={0.7} color="#cfe0ff" />
-      <group rotation-y={rotation}><RobloxAvatar maps={maps} view={view} itemType={itemType} avatar={avatar} mode={mode} /></group>
+      <group rotation-y={rotation}><IdleGroup enabled={animated}><RobloxAvatar maps={maps} view={view} itemType={itemType} avatar={avatar} mode={mode} /></IdleGroup></group>
       <ContactShadows position={[0, -0.4, 0]} scale={6} far={4} blur={2.6} opacity={0.6} resolution={1024} color="#05070d" />
       <mesh rotation-x={-Math.PI / 2} position={[0, -0.402, 0]}><ringGeometry args={[1.0, 2.6, 80]} /><meshBasicMaterial color="#38507a" transparent opacity={0.22} /></mesh>
       <OrbitControls enablePan={false} enableDamping dampingFactor={0.08} minPolarAngle={0.35} maxPolarAngle={Math.PI / 1.75} minDistance={2.2} maxDistance={6.2} target={cameraTarget} />
@@ -335,7 +348,7 @@ function PreviewFallback({ textureUrl }: { textureUrl?: string }) {
   );
 }
 
-export function AvatarPreview({ textureUrl, className, avatarType = "neutral", view: controlledView, onViewChange, itemType = "shirt", dimension, previewMode, studioMode = false, avatarState }: AvatarPreviewProps) {
+export function AvatarPreview({ textureUrl, className, avatarType = "neutral", view: controlledView, onViewChange, itemType = "shirt", dimension, previewMode, studioMode = false, animated = false, avatarState }: AvatarPreviewProps) {
   const resolvedMode: PreviewMode = previewMode ?? (dimension === "3d" ? "avatar" : "clothing");
   const [internalView, setInternalView] = useState<"front" | "back">("front");
   const [zoom, setZoom] = useState(3.6);
@@ -358,7 +371,7 @@ export function AvatarPreview({ textureUrl, className, avatarType = "neutral", v
         camera={{ position: [0, 1.3, zoom], fov: resolvedMode === "clothing" ? 34 : 38 }}
         className="w-full h-full"
       >
-        <SceneContent maps={maps} view={view} itemType={itemType} rotation={rotation} avatar={effectiveAvatar} mode={resolvedMode} />
+        <SceneContent maps={maps} view={view} itemType={itemType} rotation={rotation} avatar={effectiveAvatar} mode={resolvedMode} animated={animated} />
       </Canvas>
     </WebGLBoundary>
   );
