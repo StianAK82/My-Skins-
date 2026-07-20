@@ -71,7 +71,7 @@ export type DesignState = {
 const defaultTransform = (): LayerTransform => ({ x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, visible: true, locked: false });
 
 export const defaultAvatarState = (): AvatarState => ({
-  modelVariant: "classic_blocky",
+  modelVariant: "proportioned_r15",
   presentation: "neutral",
   skinTone: "#f1c27d",
   pose: "idle",

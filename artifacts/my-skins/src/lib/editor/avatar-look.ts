@@ -125,7 +125,7 @@ export function buildAiAvatarLook(style: string, palette: string[]): AvatarState
   const bundle = chooseBundle(style);
 
   return {
-    modelVariant: cyber ? "heroic" : street ? "proportioned_r15" : "classic_blocky",
+    modelVariant: cyber ? "heroic" : "proportioned_r15",
     presentation: anime || street ? "androgynous" : cyber ? "masculine" : "neutral",
     skinTone: "#f1c27d",
     pose: street ? "walk" : cyber ? "hero" : "idle",

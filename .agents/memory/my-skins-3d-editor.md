@@ -24,7 +24,7 @@ R3F creates the WebGLRenderer inside an async effect, so a React error boundary 
 
 ## Avatar = procedural blocky Roblox rig (correct for the product)
 Avatar is built from rounded boxes (R6/R15 style) in `assets.ts` AVATAR_BASE_MODELS; clothing "merge" = slicing the 585x559 2D design texture into UV zones (SHIRT_FRONT etc. in AvatarPreview.tsx) mapped onto box faces, live. This blocky look is intentional — custommuse also previews on the real Roblox avatar. Quality levers are lighting/materials/shadows, not de-blocking.
-Default rig is `classic_blocky` (the iconic R6 silhouette) — users read R15/proportioned as "not Roblox", so prefer the blocky rig as the face of the product.
+Default rig is now `proportioned_r15` (July 2026): user explicitly asked for a more realistic figure, superseding the earlier blocky preference. `buildAiAvatarLook` also never falls back to blocky (cyber → heroic, else proportioned_r15).
 
 ## Design texture must be generated off-DOM, not from the visible 2D canvas
 The 3D avatar's clothing texture is produced by `renderDesignToCanvas` and passed to `AvatarPreview` as `previewTexture` (a dataURL). The 2D editing `<canvas ref={canvasRef}>` is only mounted in 2D/Split preview modes. **Texture generation (and PNG export) must render to a persistent off-DOM `offscreenCanvasRef`, then mirror onto the visible canvas only when mounted** — otherwise in pure 3D mode `canvasRef.current` is null, the render effect bails, and the avatar shows a stale/blank texture (the "design not visible on avatar" bug).
