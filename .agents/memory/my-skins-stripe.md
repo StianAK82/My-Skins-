@@ -12,12 +12,15 @@ the generic Stripe skill template assumes. Read `settings.secret` for the API ke
 `settings.secret ?? settings.secret_key`. No webhook_secret is provided.
 
 ## Payment model (July 2026)
-3 free skin uploads per browser (plain httpOnly cookie `skinFreeUploads`, bypassable — MVP),
-then 10 kr (1000 øre, NOK) one-time per upload via Stripe Checkout mode=payment.
-No stripe-replit-sync, no webhooks, no DB: checkout is verified on return by retrieving the
-session (`payment_status === "paid"`). Product/price are lazily created at runtime in
-`getSkinPriceId` (search product by name, reuse/create the matching one-time price) so no
-seed script is needed.
+NO free uploads (user decision July 2026: must pay before any Roblox upload; FREE_LIMIT=0).
+10 kr (1000 øre, NOK) buys a pack of 3 upload credits via Stripe Checkout mode=payment.
+Credits tracked in httpOnly cookie (bypassable — accepted MVP tradeoff).
+No stripe-replit-sync, no webhooks, no DB: checkout verified on return by retrieving the
+session. Anti-replay: checkout sets a pending-session cookie that must match on verify, and
+granted session ids are tracked in a cookie list so old paid sessions can't re-grant credits.
+Price resolution: prefer the price behind the user's live Payment Link
+(https://buy.stripe.com/7sY6oK5HQ8mj3nAg8l7ss02 — only visible with live keys); in test mode
+falls back to lazily creating a 10 NOK product/price. No seed script.
 **Roblox limitation:** no real auto-upload; payment unlocks PNG download + opens Roblox
 upload page. The generated skin PNG is stashed in localStorage before the Stripe redirect and
 restored on the `?paid=<session_id>` return.

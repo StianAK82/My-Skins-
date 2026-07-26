@@ -8,6 +8,15 @@ AI design generation (`api-server` ai-generation.service.ts, model `gpt-5.2` via
 **Why:** completion budget is shared between hidden reasoning and the actual output; a verbose schema (modules array + placement + editorInstructions) overruns a small budget.
 **How to apply:** keep the budget generous (currently 6000) for this structured schema, and tell the model to stay compact (≤8 modules, ≤3 notes). If you add fields to the schema, re-check the budget.
 
+## Hero image makes the prompt literal (July 2026)
+User required that AI "actually makes what the text asks for". The module/plan system only
+produces abstract shapes, so `/ai/hero-image` (ai-v2.ts) now generates the real artwork with
+`gpt-image-1` (`background: "transparent"`, quality medium, ~20-30s) and the frontend adds it
+as an `imageLayer` on the `front` zone after `applyAiPlan` (Create.tsx, `aiPhase` progress text).
+**Gotcha:** the returned PNG can *look* like it has a painted backdrop in a viewer, but check
+the alpha channel — with `background: "transparent"` it usually IS transparent. Also prompt
+must forbid backdrops/glows/shadows explicitly or the model paints them into the subject halo.
+
 ## parseStrictJson is layered + tolerant of truncation
 `parseStrictJson` tries: direct parse → fenced ```json``` block → first-brace..last-brace slice → `closeTruncatedJson` repair (closes open strings/brackets) as a last resort. Repaired output still must pass `JSON.parse` and is then sanitised by `normalizeDesignPayload` + `aiValidationService.ensureDesign` (which fill defaults for every field), so a partial salvage is safe.
 **How to apply:** the budget fix is the real cure; the repair is a safety net. Don't rely on the repair for correctness — if you see the repair path firing often, the token budget is too low again.

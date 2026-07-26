@@ -1,5 +1,6 @@
 import { Router, type IRouter } from "express";
 import { z } from "zod";
+import { openai } from "@workspace/integrations-openai-ai-server";
 import { aiGenerateRequestSchema, aiImproveRequestSchema, stylizedOutfitGenerateRequestSchema } from "../lib/ai-contracts";
 import { aiGenerationService } from "../services/ai/ai-generation.service";
 import { aiHistoryService } from "../services/ai/ai-history.service";
@@ -48,6 +49,48 @@ router.post("/ai/generate", async (req, res): Promise<void> => {
     if (err instanceof z.ZodError || err instanceof SyntaxError) return schema422(req, res, err);
     req.log.error({ err }, "ai.v2.generate.failed");
     res.status(500).json({ error: "AI generation failed" });
+  }
+});
+
+const heroImageRequestSchema = z.object({
+  prompt: z.string().min(1).max(600),
+});
+
+// Generates the actual artwork described in the prompt (gpt-image-1, transparent PNG).
+router.post("/ai/hero-image", async (req, res): Promise<void> => {
+  const parsed = heroImageRequestSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Invalid request", details: parsed.error.flatten() });
+    return;
+  }
+
+  try {
+    const imagePrompt = [
+      "Flat 2D game artwork for the front of a Roblox shirt.",
+      `Draw exactly this, faithfully including every detail mentioned: ${parsed.data.prompt}.`,
+      "Bold, vibrant, high-contrast, centered composition with clean edges.",
+      "The subject must be completely isolated on a fully transparent background:",
+      "do NOT draw any background, backdrop, gradient, glow, halo, shadow or border around the subject.",
+      "No watermark. No frame. No text unless explicitly requested.",
+    ].join(" ");
+
+    const result = await openai.images.generate({
+      model: "gpt-image-1",
+      prompt: imagePrompt,
+      size: "1024x1024",
+      background: "transparent",
+      quality: "medium",
+    });
+
+    const b64 = result.data?.[0]?.b64_json;
+    if (!b64) {
+      res.status(502).json({ error: "Image generation returned no image" });
+      return;
+    }
+    res.json({ imageUrl: `data:image/png;base64,${b64}` });
+  } catch (err) {
+    req.log.error({ err }, "ai.v2.hero_image.failed");
+    res.status(500).json({ error: "Image generation failed" });
   }
 });
 

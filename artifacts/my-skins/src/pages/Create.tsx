@@ -64,13 +64,13 @@ function downloadPng(dataUrl: string, filename: string) {
 const STEPS = [
   { title: "1. Beskriv skinnet", text: "Skriv hva du vil ha i feltet under figuren – hva som helst. AI-en lager designet." },
   { title: "2. Se det på figuren", text: "Skinnet dukker opp direkte på 3D-figuren. Dra for å rotere og se det fra alle sider." },
-  { title: "3. Last opp til Roblox", text: "Tre skins er gratis. Deretter koster hver opplasting 10 kr. Du får en PNG-fil, og Roblox sin opplastingsside åpnes." },
+  { title: "3. Last opp til Roblox", text: "10 kr gir 3 opplastinger. Du får en PNG-fil, og Roblox sin opplastingsside åpnes – velg filen der, så er skinnet ditt." },
 ];
 
 const API_BASE = `${import.meta.env.BASE_URL.replace(/\/$/, "")}/api`;
 const PENDING_SKIN_KEY = "mySkins.pendingSkin";
 
-type SkinStatus = { remainingFree: number; freeLimit: number };
+type SkinStatus = { remainingFree: number; freeLimit: number; paidCredits: number };
 
 async function apiGet<T>(path: string): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, { credentials: "include" });
@@ -78,12 +78,12 @@ async function apiGet<T>(path: string): Promise<T> {
   return (await res.json()) as T;
 }
 
-async function apiPost<T>(path: string): Promise<{ status: number; data: T }> {
+async function apiPost<T>(path: string, body?: unknown): Promise<{ status: number; data: T }> {
   const res = await fetch(`${API_BASE}${path}`, {
     method: "POST",
     credentials: "include",
     headers: { "Content-Type": "application/json" },
-    body: "{}",
+    body: body ? JSON.stringify(body) : "{}",
   });
   const data = (await res.json().catch(() => ({}))) as T;
   return { status: res.status, data };
@@ -100,12 +100,13 @@ export default function Create() {
   const [prompt, setPrompt] = useState("");
   const [aiError, setAiError] = useState<string>("");
   const [aiLoading, setAiLoading] = useState(false);
+  const [aiPhase, setAiPhase] = useState<string>("");
   const [uploadStatus, setUploadStatus] = useState<string>("");
   const [uploadBusy, setUploadBusy] = useState(false);
   const [skinStatus, setSkinStatus] = useState<SkinStatus | null>(null);
   const [imageRenderNonce, setImageRenderNonce] = useState(0);
 
-  const { state, setAiPlanPreview, setAiAvatarPreview, deleteLayer, applyAiPlan, setPaintSwatch } = useDesignStore();
+  const { state, setAiPlanPreview, setAiAvatarPreview, deleteLayer, addLayer, applyAiPlan, setPaintSwatch } = useDesignStore();
   const hasDesign = state.layers.length > 0 || Boolean(state.baseColor);
 
   const refreshStatus = useCallback(async () => {
@@ -128,11 +129,16 @@ export default function Create() {
         const { paid } = await apiGet<{ paid: boolean }>(`/payments/verify?session_id=${encodeURIComponent(paidSession)}`);
         const pending = window.localStorage.getItem(PENDING_SKIN_KEY);
         if (paid && pending) {
-          openRobloxWithFile(pending);
-          window.localStorage.removeItem(PENDING_SKIN_KEY);
-          setUploadStatus("Betaling godkjent! Skinnet er lastet ned, og Roblox sin opplastingsside er åpnet – velg «Clothing» der og last opp filen.");
+          const consume = await apiPost<{ ok?: boolean }>("/payments/consume-free");
+          if (consume.status === 200 && consume.data.ok) {
+            openRobloxWithFile(pending);
+            window.localStorage.removeItem(PENDING_SKIN_KEY);
+            setUploadStatus("Betaling godkjent – du har fått 3 opplastinger! Skinnet er lastet ned, og Roblox sin opplastingsside er åpnet – velg «Clothing» der og last opp filen.");
+          } else {
+            setUploadStatus("Betaling godkjent, men opplastingen kunne ikke brukes. Trykk «Last opp til Roblox» igjen.");
+          }
         } else if (paid) {
-          setUploadStatus("Betaling godkjent, men skinnet ble ikke funnet i nettleseren. Lag skinnet på nytt og trykk «Last opp til Roblox» igjen.");
+          setUploadStatus("Betaling godkjent – du har fått 3 opplastinger! Lag skinnet på nytt og trykk «Last opp til Roblox».");
         } else {
           setUploadStatus("Betalingen ble ikke fullført. Prøv igjen.");
         }
@@ -163,6 +169,7 @@ export default function Create() {
     setAiLoading(true);
     setAiError("");
     setUploadStatus("");
+    setAiPhase("Lager designet…");
     try {
       const response = normalizeAiResponse(await aiGenerateDesign({ prompt, itemType: "classic_shirt", style: "AI velger", theme: prompt }));
       const previewAvatar = buildAiAvatarLook(
@@ -200,6 +207,21 @@ export default function Create() {
       setAiAvatarPreview(plan.avatarLook ?? null);
       applyAiPlan();
       if (parsed.palette[0]) setPaintSwatch(parsed.palette[0]);
+
+      // Then draw the actual artwork described in the prompt and place it on the shirt.
+      setAiPhase("Tegner motivet du beskrev… (kan ta opptil ett minutt)");
+      const hero = await apiPost<{ imageUrl?: string }>("/ai/hero-image", { prompt });
+      if (hero.status === 200 && hero.data.imageUrl) {
+        addLayer({
+          name: "AI-motiv",
+          type: "imageLayer",
+          zone: "front",
+          image: hero.data.imageUrl,
+          transform: { x: 0, y: 0, scale: 0.95, rotation: 0, opacity: 1 },
+        });
+      } else {
+        setAiError("Designet er klart, men selve motivet kunne ikke tegnes. Prøv «Lag skin» igjen.");
+      }
     } catch (error) {
       const status = (error as { status?: number })?.status;
       if (status === 401 || status === 429) {
@@ -209,6 +231,7 @@ export default function Create() {
       }
     } finally {
       setAiLoading(false);
+      setAiPhase("");
     }
   };
 
@@ -239,7 +262,7 @@ export default function Create() {
       if (consume.status === 402 || consume.data.needsPayment) {
         // Free skins used up – save the skin and send the user to Stripe checkout.
         window.localStorage.setItem(PENDING_SKIN_KEY, texture);
-        setUploadStatus("Sender deg til betaling (10 kr)…");
+        setUploadStatus("Sender deg til betaling (10 kr for 3 opplastinger)…");
         const checkout = await apiPost<{ checkoutUrl?: string; error?: string }>("/payments/create-checkout-session");
         if (checkout.data.checkoutUrl) {
           window.location.href = checkout.data.checkoutUrl;
@@ -304,7 +327,7 @@ export default function Create() {
             />
             <Button type="submit" size="lg" className="h-12 px-6" disabled={aiLoading || !prompt.trim()}>
               {aiLoading ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <Sparkles className="mr-2 h-5 w-5" />}
-              {aiLoading ? "Lager skin…" : "Lag skin"}
+              {aiLoading ? (aiPhase || "Lager skin…") : "Lag skin"}
             </Button>
           </form>
           {aiError ? <p className="text-sm text-red-400">{aiError}</p> : null}
@@ -316,9 +339,9 @@ export default function Create() {
             </Button>
             {skinStatus ? (
               <p className="text-xs text-slate-400">
-                {skinStatus.remainingFree > 0
-                  ? `${skinStatus.remainingFree} av ${skinStatus.freeLimit} gratis opplastinger igjen`
-                  : "Gratis opplastinger brukt opp – neste opplasting koster 10 kr"}
+                {skinStatus.paidCredits > 0
+                  ? `${skinStatus.paidCredits} opplastinger igjen`
+                  : "10 kr gir 3 opplastinger til Roblox"}
               </p>
             ) : null}
             {uploadStatus ? <p className="text-sm text-emerald-400 text-center max-w-lg">{uploadStatus}</p> : null}
