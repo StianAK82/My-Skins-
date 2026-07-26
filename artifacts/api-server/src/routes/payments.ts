@@ -1,245 +1,124 @@
 import { Router, type IRouter } from "express";
-import Stripe from "stripe";
-import { and, eq } from "drizzle-orm";
-import {
-  billingInvoicesTable,
-  billingPricesTable,
-  billingProductsTable,
-  billingSubscriptionsTable,
-  creditTransactionsTable,
-  db,
-  entitlementsTable,
-} from "@workspace/db";
-import { randomUUID } from "crypto";
-import { z } from "zod";
-import { normalizeCheckoutCompleted, normalizeInvoice, normalizeSubscriptionUpdate } from "../lib/billing-lifecycle";
+import type Stripe from "stripe";
+import { getUncachableStripeClient } from "../lib/stripeClient";
 
 const router: IRouter = Router();
 
-const stripeSecret = process.env.STRIPE_SECRET_KEY;
-const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
-const appUrl = process.env.APP_URL;
+const FREE_COOKIE = "skinFreeUploads";
+const FREE_LIMIT = 3;
+const FREE_COOKIE_MAX_AGE = 365 * 24 * 60 * 60 * 1000;
 
-const stripe = stripeSecret ? new Stripe(stripeSecret) : null;
+// Fixed one-time price for unlocking a Roblox skin upload.
+const SKIN_PRODUCT_NAME = "My Skins – Roblox skin-opplasting";
+const SKIN_PRICE_AMOUNT = 1000; // 10.00 NOK, in øre
+const SKIN_PRICE_CURRENCY = "nok";
 
-const checkoutSchema = z.object({
-  plan: z.enum(["pro", "team", "enterprise"]).default("pro"),
-});
-
-const PLAN_PRICE_ENV: Record<"pro" | "team" | "enterprise", string | undefined> = {
-  pro: process.env.STRIPE_PRO_PRICE_ID,
-  team: process.env.STRIPE_TEAM_PRICE_ID,
-  enterprise: process.env.STRIPE_ENTERPRISE_PRICE_ID,
-};
-
-function assertStripeEnv(): { stripe: Stripe; appUrl: string } {
-  if (!stripe || !appUrl) {
-    throw new Error("Stripe is not configured. Set STRIPE_SECRET_KEY and APP_URL.");
-  }
-  return { stripe, appUrl };
+function readFreeUses(req: { cookies?: Record<string, string> }): number {
+  const raw = Number(req.cookies?.[FREE_COOKIE] ?? "0");
+  return Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : 0;
 }
 
-router.post("/payments/create-checkout-session", async (req, res): Promise<void> => {
-  if (!req.isAuthenticated()) {
-    res.status(401).json({ error: "Unauthorized" });
-    return;
-  }
+function appBaseUrl(req: { protocol: string; get(name: string): string | undefined }): string {
+  const host = req.get("x-forwarded-host") ?? req.get("host");
+  const proto = req.get("x-forwarded-proto") ?? req.protocol;
+  return `${proto}://${host}`;
+}
 
-  const parsed = checkoutSchema.safeParse(req.body ?? {});
-  if (!parsed.success) {
-    res.status(400).json({ error: "Invalid checkout request", details: parsed.error.flatten() });
-    return;
-  }
+/**
+ * Finds (or lazily creates) the one-time Stripe price used to unlock a skin upload.
+ * Returns the real price ID so checkout never uses inline price_data.
+ */
+async function getSkinPriceId(stripe: Stripe): Promise<string> {
+  const products = await stripe.products.search({
+    query: `name:'${SKIN_PRODUCT_NAME}' AND active:'true'`,
+  });
 
-  const { stripe, appUrl } = assertStripeEnv();
-  const priceId = PLAN_PRICE_ENV[parsed.data.plan];
-  if (!priceId) {
-    res.status(503).json({ error: "BILLING_NOT_CONFIGURED", message: `Stripe price ID for ${parsed.data.plan} is not configured.` });
-    return;
-  }
-
-  try {
-    const session = await stripe.checkout.sessions.create({
-      mode: "subscription",
-      line_items: [{ price: priceId, quantity: 1 }],
-      success_url: `${appUrl}/payment-success?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${appUrl}/payment-cancelled`,
-      metadata: { userId: req.user.id, plan: parsed.data.plan },
-      client_reference_id: req.user.id,
+  let product = products.data[0];
+  if (!product) {
+    product = await stripe.products.create({
+      name: SKIN_PRODUCT_NAME,
+      description: "Låser opp nedlasting og opplasting av ett Roblox-skin.",
+      metadata: { kind: "skin_upload" },
     });
+  }
 
-    res.json({ checkoutUrl: session.url, sessionId: session.id, plan: parsed.data.plan });
+  const prices = await stripe.prices.list({ product: product.id, active: true, limit: 10 });
+  const match = prices.data.find(
+    (p) => p.unit_amount === SKIN_PRICE_AMOUNT && p.currency === SKIN_PRICE_CURRENCY && !p.recurring,
+  );
+  if (match) return match.id;
+
+  const price = await stripe.prices.create({
+    product: product.id,
+    unit_amount: SKIN_PRICE_AMOUNT,
+    currency: SKIN_PRICE_CURRENCY,
+  });
+  return price.id;
+}
+
+// How many free uploads remain for this browser + the price of a paid one.
+router.get("/payments/skin-status", (req, res): void => {
+  const freeUsed = readFreeUses(req);
+  res.json({
+    freeUsed,
+    freeLimit: FREE_LIMIT,
+    remainingFree: Math.max(0, FREE_LIMIT - freeUsed),
+    priceAmount: SKIN_PRICE_AMOUNT,
+    priceCurrency: SKIN_PRICE_CURRENCY,
+  });
+});
+
+// Consume one free upload. Fails with 402 when the free allotment is used up.
+router.post("/payments/consume-free", (req, res): void => {
+  const freeUsed = readFreeUses(req);
+  if (freeUsed >= FREE_LIMIT) {
+    res.status(402).json({ error: "FREE_LIMIT_REACHED", needsPayment: true });
+    return;
+  }
+  const next = freeUsed + 1;
+  res.cookie(FREE_COOKIE, String(next), {
+    httpOnly: true,
+    sameSite: "lax",
+    path: "/",
+    maxAge: FREE_COOKIE_MAX_AGE,
+  });
+  res.json({ ok: true, freeUsed: next, remainingFree: Math.max(0, FREE_LIMIT - next) });
+});
+
+// Create a one-time Stripe Checkout session for a single skin upload.
+router.post("/payments/create-checkout-session", async (req, res): Promise<void> => {
+  try {
+    const stripe = await getUncachableStripeClient();
+    const priceId = await getSkinPriceId(stripe);
+    const base = appBaseUrl(req);
+    const session = await stripe.checkout.sessions.create({
+      mode: "payment",
+      line_items: [{ price: priceId, quantity: 1 }],
+      success_url: `${base}/?paid={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${base}/?cancelled=1`,
+    });
+    res.json({ checkoutUrl: session.url });
   } catch (error) {
-    req.log.error({ err: error }, "create checkout session failed");
-    res.status(500).json({ error: "Failed to create checkout session" });
+    req.log.error({ err: error }, "create skin checkout session failed");
+    res.status(500).json({ error: "Kunne ikke starte betaling. Prøv igjen." });
   }
 });
 
-router.post("/payments/webhook", async (req, res): Promise<void> => {
-  if (!stripe || !webhookSecret) {
-    res.status(500).json({ error: "Stripe webhook is not configured." });
+// Verify a completed checkout session before unlocking the upload.
+router.get("/payments/verify", async (req, res): Promise<void> => {
+  const sessionId = typeof req.query.session_id === "string" ? req.query.session_id : "";
+  if (!sessionId) {
+    res.status(400).json({ error: "Missing session_id" });
     return;
   }
-
-  const signature = req.headers["stripe-signature"];
-  if (!signature || typeof signature !== "string") {
-    res.status(400).json({ error: "Missing stripe signature" });
-    return;
-  }
-
-  let event: Stripe.Event;
   try {
-    const payload = Buffer.isBuffer(req.body)
-      ? req.body
-      : typeof req.body === "string"
-        ? Buffer.from(req.body)
-        : Buffer.from(JSON.stringify(req.body ?? {}));
-    event = stripe.webhooks.constructEvent(payload, signature, webhookSecret);
+    const stripe = await getUncachableStripeClient();
+    const session = await stripe.checkout.sessions.retrieve(sessionId);
+    const paid = session.payment_status === "paid";
+    res.json({ paid });
   } catch (error) {
-    req.log.warn({ err: error }, "invalid stripe webhook signature");
-    res.status(400).json({ error: "Invalid signature" });
-    return;
-  }
-
-  try {
-    if (event.type === "checkout.session.completed") {
-      const normalized = normalizeCheckoutCompleted(event.data.object as Stripe.Checkout.Session);
-
-      if (typeof normalized.userId === "string" && typeof normalized.providerSubscriptionId === "string") {
-        const userId = normalized.userId;
-        const providerSubscriptionId = normalized.providerSubscriptionId;
-        await db.transaction(async (tx) => {
-          const [existing] = await tx
-            .select({ id: billingSubscriptionsTable.id })
-            .from(billingSubscriptionsTable)
-            .where(eq(billingSubscriptionsTable.providerSubscriptionId, providerSubscriptionId))
-            .limit(1);
-
-          if (existing) return;
-
-          await tx.insert(billingSubscriptionsTable).values({
-            id: randomUUID(),
-            userId,
-            providerSubscriptionId,
-            status: "active",
-          });
-
-          await tx.insert(entitlementsTable).values({
-            id: randomUUID(),
-            userId,
-            key: `plan:${normalized.plan}`,
-            source: "stripe_subscription",
-            status: "active",
-          });
-        });
-      }
-    }
-
-    if (event.type === "customer.subscription.updated" || event.type === "customer.subscription.deleted") {
-      const normalized = normalizeSubscriptionUpdate(event.data.object as Stripe.Subscription);
-      await db
-        .update(billingSubscriptionsTable)
-        .set({
-          status: normalized.status,
-          currentPeriodEnd: normalized.currentPeriodEnd,
-        })
-        .where(eq(billingSubscriptionsTable.providerSubscriptionId, normalized.id));
-    }
-
-    if (event.type === "invoice.paid" || event.type === "invoice.payment_failed") {
-      const normalized = normalizeInvoice(event.data.object as Stripe.Invoice);
-
-      await db.transaction(async (tx) => {
-        const [existing] = await tx
-          .select({ id: billingInvoicesTable.id })
-          .from(billingInvoicesTable)
-          .where(eq(billingInvoicesTable.providerInvoiceId, normalized.id))
-          .limit(1);
-
-        if (!existing) {
-          const [sub] = normalized.providerSubscriptionId
-            ? await tx
-                .select({ id: billingSubscriptionsTable.id })
-                .from(billingSubscriptionsTable)
-                .where(eq(billingSubscriptionsTable.providerSubscriptionId, normalized.providerSubscriptionId))
-                .limit(1)
-            : [];
-
-          await tx.insert(billingInvoicesTable).values({
-            id: randomUUID(),
-            subscriptionId: sub?.id ?? null,
-            providerInvoiceId: normalized.id,
-            status: normalized.status,
-            amountPaid: normalized.amountPaid,
-          });
-        }
-
-        if (event.type === "invoice.paid" && normalized.providerSubscriptionId) {
-          const [sub] = await tx
-            .select()
-            .from(billingSubscriptionsTable)
-            .where(eq(billingSubscriptionsTable.providerSubscriptionId, normalized.providerSubscriptionId))
-            .limit(1);
-
-          if (sub) {
-            const [existingCreditTxn] = await tx
-              .select({ id: creditTransactionsTable.id })
-              .from(creditTransactionsTable)
-              .where(and(eq(creditTransactionsTable.userId, sub.userId), eq(creditTransactionsTable.stripeSessionId, normalized.id)))
-              .limit(1);
-
-            if (!existingCreditTxn) {
-              await tx.insert(creditTransactionsTable).values({
-                userId: sub.userId,
-                type: "purchase",
-                credits: 10,
-                amountNok: Math.round(normalized.amountPaid / 100),
-                stripeSessionId: normalized.id,
-                uploadId: null,
-              });
-            }
-          }
-        }
-      });
-    }
-
-    if (event.type === "product.created" || event.type === "product.updated") {
-      const product = event.data.object as Stripe.Product;
-      await db.insert(billingProductsTable).values({
-        id: randomUUID(),
-        provider: "stripe",
-        providerProductId: product.id,
-        name: product.name,
-        active: String(product.active),
-      }).onConflictDoUpdate({
-        target: billingProductsTable.providerProductId,
-        set: { name: product.name, active: String(product.active) },
-      });
-    }
-
-    if (event.type === "price.created" || event.type === "price.updated") {
-      const price = event.data.object as Stripe.Price;
-      await db.insert(billingPricesTable).values({
-        id: randomUUID(),
-        productId: typeof price.product === "string" ? price.product : "unknown",
-        providerPriceId: price.id,
-        currency: price.currency,
-        amount: price.unit_amount ?? 0,
-        interval: price.recurring?.interval ?? null,
-      }).onConflictDoUpdate({
-        target: billingPricesTable.providerPriceId,
-        set: {
-          currency: price.currency,
-          amount: price.unit_amount ?? 0,
-          interval: price.recurring?.interval ?? null,
-        },
-      });
-    }
-
-    res.json({ received: true });
-  } catch (error) {
-    req.log.error({ err: error, eventId: event.id, type: event.type }, "stripe webhook processing failed");
-    res.status(500).json({ error: "Webhook processing failed" });
+    req.log.error({ err: error }, "verify skin checkout session failed");
+    res.status(500).json({ error: "Kunne ikke bekrefte betaling." });
   }
 });
 
