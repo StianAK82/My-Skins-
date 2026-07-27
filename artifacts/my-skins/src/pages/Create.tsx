@@ -68,10 +68,20 @@ function downloadPng(dataUrl: string, filename: string) {
   a.click();
 }
 
-const STEPS = [
-  { title: "1. Beskriv skinnet", text: "Skriv hva du vil ha i feltet under figuren – hva som helst. AI-en lager hele antrekket: overdel, bukse og t-skjorte-motiv." },
-  { title: "2. Se det på figuren", text: "Hele antrekket dukker opp direkte på 3D-figuren. Dra for å rotere og se det fra alle sider." },
-  { title: "3. Last opp til Roblox", text: "10 kr gir 3 opplastinger. Du får PNG-filer for overdel (Shirt), bukse (Pants) og t-skjorte, og Roblox sin opplastingsside åpnes – velg filene der." },
+// Big tap-to-create ideas so even small kids (who can't read yet) can use the app.
+const IDEAS: Array<{ emoji: string; label: string; prompt: string }> = [
+  { emoji: "🐉", label: "Drage", prompt: "en kul grønn drage som puster oransje ild" },
+  { emoji: "🥷", label: "Ninja", prompt: "en tøff svart ninja med rødt pannebånd og sverd" },
+  { emoji: "👸", label: "Prinsesse", prompt: "en vakker prinsessekjole i rosa og gull med glitter og krone" },
+  { emoji: "🦄", label: "Enhjørning", prompt: "en søt regnbue-enhjørning med stjerner og glitter" },
+  { emoji: "⚽", label: "Fotball", prompt: "en kul fotballdrakt med fotball på brystet og striper" },
+  { emoji: "🧟", label: "Zombie", prompt: "en skummel grønn zombie med revet t-skjorte" },
+  { emoji: "🦸", label: "Superhelt", prompt: "en superheltdrakt i rødt og blått med lyn på brystet" },
+  { emoji: "🐱", label: "Kattepus", prompt: "en søt katt med rosa sløyfe og poter" },
+  { emoji: "🚀", label: "Astronaut", prompt: "en kul astronautdrakt med rakett og stjerner" },
+  { emoji: "🦈", label: "Hai", prompt: "en tøff blå hai med skarpe tenner" },
+  { emoji: "🌋", label: "Lava", prompt: "svart drakt med glødende oransje lava og flammer" },
+  { emoji: "🎮", label: "Gamer", prompt: "en kul gamer-hettegenser med spillkontroll og neonlys" },
 ];
 
 const API_BASE = `${import.meta.env.BASE_URL.replace(/\/$/, "")}/api`;
@@ -128,6 +138,7 @@ export default function Create() {
   const [skinStatus, setSkinStatus] = useState<SkinStatus | null>(null);
   const [imageRenderNonce, setImageRenderNonce] = useState(0);
   const outfitRef = useRef<{ pantsBase: string; pantsAccent: string; heroUrl?: string } | null>(null);
+  const generateLockRef = useRef(false);
 
   const { state, setAiPlanPreview, setAiAvatarPreview, deleteLayer, addLayer, applyAiPlan, setPaintSwatch } = useDesignStore();
   const hasDesign = state.layers.length > 0 || Boolean(state.baseColor);
@@ -188,14 +199,17 @@ export default function Create() {
     return () => window.clearTimeout(idHandle);
   }, [handleOverlayImageReady, imageRenderNonce, state]);
 
-  const generate = async () => {
-    if (aiLoading || !prompt.trim()) return;
+  const generate = async (promptOverride?: string) => {
+    const usedPrompt = (promptOverride ?? prompt).trim();
+    // Synchronous lock: state updates are async, so a fast double-tap could start two runs.
+    if (generateLockRef.current || aiLoading || !usedPrompt) return;
+    generateLockRef.current = true;
     setAiLoading(true);
     setAiError("");
     setUploadStatus("");
     setAiPhase("Lager designet…");
     try {
-      const response = normalizeAiResponse(await aiGenerateDesign({ prompt, itemType: "classic_shirt", style: "AI velger", theme: prompt }));
+      const response = normalizeAiResponse(await aiGenerateDesign({ prompt: usedPrompt, itemType: "classic_shirt", style: "AI velger", theme: usedPrompt }));
       const previewAvatar = buildAiAvatarLook(
         [response.result.style, ...response.result.intent.styleVibes].join(" "),
         response.result.colorPalette,
@@ -247,7 +261,7 @@ export default function Create() {
 
       // Then draw the actual artwork described in the prompt and place it on the shirt.
       setAiPhase("Tegner motivet du beskrev… (kan ta opptil ett minutt)");
-      const hero = await apiPost<{ imageUrl?: string }>("/ai/hero-image", { prompt });
+      const hero = await apiPost<{ imageUrl?: string }>("/ai/hero-image", { prompt: usedPrompt });
       if (hero.status === 200 && hero.data.imageUrl) {
         outfitRef.current = { pantsBase: pantsColors.base, pantsAccent: pantsColors.accent, heroUrl: hero.data.imageUrl };
         addLayer({
@@ -268,6 +282,7 @@ export default function Create() {
         setAiError("Noe gikk galt med AI-en. Prøv igjen, gjerne med en litt annen beskrivelse.");
       }
     } finally {
+      generateLockRef.current = false;
       setAiLoading(false);
       setAiPhase("");
     }
@@ -338,17 +353,28 @@ export default function Create() {
     <div className="min-h-screen bg-slate-950 text-slate-100">
       <div className="mx-auto max-w-3xl px-4 py-8 flex flex-col items-center gap-8">
         <header className="text-center space-y-2">
-          <h1 className="text-3xl font-bold tracking-tight">My Skins</h1>
-          <p className="text-slate-400">Skriv hva du vil ha – AI-en lager skinnet på Roblox-figuren.</p>
+          <h1 className="text-4xl font-bold tracking-tight">My Skins</h1>
+          <p className="text-lg text-slate-300">👇 Trykk på et bilde – så lager vi skinnet! ✨</p>
         </header>
 
-        <section className="grid gap-3 sm:grid-cols-3 w-full">
-          {STEPS.map((step) => (
-            <div key={step.title} className="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
-              <h2 className="text-sm font-semibold mb-1">{step.title}</h2>
-              <p className="text-xs text-slate-400 leading-relaxed">{step.text}</p>
-            </div>
-          ))}
+        <section className="w-full">
+          <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
+            {IDEAS.map((idea) => (
+              <button
+                key={idea.label}
+                type="button"
+                disabled={aiLoading}
+                onClick={() => {
+                  setPrompt(idea.prompt);
+                  void generate(idea.prompt);
+                }}
+                className="flex flex-col items-center gap-1 rounded-2xl border-2 border-slate-700 bg-slate-900/70 py-4 transition hover:border-emerald-400 hover:bg-slate-800 active:scale-95 disabled:opacity-40"
+              >
+                <span className="text-4xl sm:text-5xl leading-none">{idea.emoji}</span>
+                <span className="text-sm font-semibold text-slate-200">{idea.label}</span>
+              </button>
+            ))}
+          </div>
         </section>
 
         <section className="w-full">
@@ -364,43 +390,59 @@ export default function Create() {
           </div>
         </section>
 
-        <section className="w-full space-y-3">
-          <form
-            className="flex flex-col sm:flex-row gap-2"
-            onSubmit={(event) => {
-              event.preventDefault();
-              void generate();
-            }}
-          >
-            <Input
-              value={prompt}
-              onChange={(event) => setPrompt(event.target.value)}
-              placeholder="F.eks. «svart drage-hettegenser med røde flammer»"
-              className="h-12 bg-slate-900 border-slate-700 text-base"
-              disabled={aiLoading}
-            />
-            <Button type="submit" size="lg" className="h-12 px-6" disabled={aiLoading || !prompt.trim()}>
-              {aiLoading ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <Sparkles className="mr-2 h-5 w-5" />}
-              {aiLoading ? (aiPhase || "Lager skin…") : "Lag skin"}
-            </Button>
-          </form>
-          {aiError ? <p className="text-sm text-red-400">{aiError}</p> : null}
+        <section className="w-full space-y-4">
+          {aiLoading ? (
+            <div className="flex flex-col items-center gap-2 rounded-2xl border-2 border-emerald-500/50 bg-emerald-500/10 p-5 text-center">
+              <Loader2 className="h-8 w-8 animate-spin text-emerald-400" />
+              <p className="text-lg font-semibold">🎨 {aiPhase || "Lager skinnet ditt…"}</p>
+              <p className="text-sm text-slate-300">Vent litt – se på figuren! 👀</p>
+            </div>
+          ) : null}
+          {aiError ? <p className="text-center text-sm text-red-400">{aiError}</p> : null}
 
-          <div className="flex flex-col items-center gap-2 pt-2">
-            <Button size="lg" className="h-14 px-10 text-lg font-semibold" onClick={() => void uploadToRoblox()} disabled={!hasDesign || uploadBusy}>
-              {uploadBusy ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <Upload className="mr-2 h-5 w-5" />}
-              {uploadBusy ? "Jobber…" : "Last opp til Roblox"}
+          <div className="flex flex-col items-center gap-2">
+            <Button
+              size="lg"
+              className="h-16 w-full max-w-md rounded-2xl bg-emerald-500 px-10 text-xl font-bold text-emerald-950 hover:bg-emerald-400"
+              onClick={() => void uploadToRoblox()}
+              disabled={!hasDesign || uploadBusy || aiLoading}
+            >
+              {uploadBusy ? <Loader2 className="mr-2 h-6 w-6 animate-spin" /> : <Upload className="mr-2 h-6 w-6" />}
+              {uploadBusy ? "Jobber…" : "🎁 Send til Roblox!"}
             </Button>
             {skinStatus ? (
-              <p className="text-xs text-slate-400">
+              <p className="text-sm text-slate-400">
                 {skinStatus.paidCredits > 0
-                  ? `${skinStatus.paidCredits} opplastinger igjen`
-                  : "10 kr gir 3 opplastinger til Roblox"}
+                  ? `⭐ ${skinStatus.paidCredits} opplastinger igjen`
+                  : "10 kr gir 3 opplastinger (en voksen hjelper med betalingen)"}
               </p>
             ) : null}
             {uploadStatus ? <p className="text-sm text-emerald-400 text-center max-w-lg">{uploadStatus}</p> : null}
-            {!hasDesign ? <p className="text-xs text-slate-500">Lag et skin med AI først, så kan du laste det opp.</p> : null}
+            {!hasDesign && !aiLoading ? <p className="text-sm text-slate-500">Trykk på et bilde øverst for å lage skinnet ditt! 👆</p> : null}
           </div>
+
+          <details className="w-full rounded-xl border border-slate-800 bg-slate-900/50 p-4">
+            <summary className="cursor-pointer text-sm font-semibold text-slate-300">✏️ Skriv ditt eget skin (for store barn og voksne)</summary>
+            <form
+              className="mt-3 flex flex-col sm:flex-row gap-2"
+              onSubmit={(event) => {
+                event.preventDefault();
+                void generate();
+              }}
+            >
+              <Input
+                value={prompt}
+                onChange={(event) => setPrompt(event.target.value)}
+                placeholder="F.eks. «svart drage-hettegenser med røde flammer»"
+                className="h-12 bg-slate-900 border-slate-700 text-base"
+                disabled={aiLoading}
+              />
+              <Button type="submit" size="lg" className="h-12 px-6" disabled={aiLoading || !prompt.trim()}>
+                <Sparkles className="mr-2 h-5 w-5" />
+                Lag skin
+              </Button>
+            </form>
+          </details>
         </section>
       </div>
     </div>
