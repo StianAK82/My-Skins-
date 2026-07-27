@@ -6,7 +6,7 @@ type ImageCacheEntry = { status: "loading" | "loaded" | "error"; image: CanvasIm
 
 type RenderTarget = "preview" | "export";
 
-type RenderOptions = { onOverlayImageReady?: () => void; target?: RenderTarget };
+type RenderOptions = { onOverlayImageReady?: () => void; target?: RenderTarget; scale?: number };
 
 const overlayImageCache = new Map<string, ImageCacheEntry>();
 
@@ -310,14 +310,16 @@ export function preloadOverlayImages(state: DesignState) {
 
 export function renderDesignToCanvas(state: DesignState, canvas: HTMLCanvasElement, options?: RenderOptions): string {
   const target = options?.target ?? "preview";
-  canvas.width = TEMPLATE_SIZE.width;
-  canvas.height = TEMPLATE_SIZE.height;
+  const scale = options?.scale ?? 1;
+  canvas.width = TEMPLATE_SIZE.width * scale;
+  canvas.height = TEMPLATE_SIZE.height * scale;
   const ctx = canvas.getContext("2d");
   if (!ctx) return "";
 
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.setTransform(scale, 0, 0, scale, 0, 0);
+  ctx.clearRect(0, 0, TEMPLATE_SIZE.width, TEMPLATE_SIZE.height);
   ctx.fillStyle = state.baseColor ?? "#0f172a";
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.fillRect(0, 0, TEMPLATE_SIZE.width, TEMPLATE_SIZE.height);
 
   state.layers.forEach((layer) => {
     if (!shouldRenderLayerInTarget(layer, target)) return;

@@ -262,7 +262,7 @@ export default function Create() {
     if (!offscreenCanvasRef.current) offscreenCanvasRef.current = document.createElement("canvas");
     const offscreen = offscreenCanvasRef.current;
     const idHandle = window.setTimeout(() => {
-      setPreviewTexture(renderDesignToCanvas(state, offscreen, { onOverlayImageReady: handleOverlayImageReady }));
+      setPreviewTexture(renderDesignToCanvas(state, offscreen, { onOverlayImageReady: handleOverlayImageReady, scale: 3 }));
     }, 20);
     return () => window.clearTimeout(idHandle);
   }, [handleOverlayImageReady, imageRenderNonce, state]);

@@ -289,7 +289,12 @@ export class AiGenerationService {
     if (intent.includesAvatarLook && !avatarSlotPlan.some((slot) => slot.slot === "face")) {
       avatarSlotPlan.push({ slot: "face", assetHint: intent.fantasyArchetype ? `face_${intent.fantasyArchetype}_eyes` : "face_stylized", role: "support", rationale: "Face clarity for avatar identity", color: colorPalette[0] });
     }
-    if (intent.includesAvatarLook && !avatarSlotPlan.some((slot) => slot.slot === "hair")) {
+    // Only style the hair when the user actually mentions hair — otherwise leave it alone.
+    const mentionsHair = /\bhår|hair|frisyre|sveis|hårete\b/i.test([input.prompt, input.theme ?? "", input.style ?? ""].join(" "));
+    if (!mentionsHair) {
+      const hairIndex = avatarSlotPlan.findIndex((slot) => slot.slot === "hair");
+      if (hairIndex >= 0) avatarSlotPlan.splice(hairIndex, 1);
+    } else if (intent.includesAvatarLook && !avatarSlotPlan.some((slot) => slot.slot === "hair")) {
       avatarSlotPlan.push({ slot: "hair", assetHint: intent.styleVibes.includes("anime") ? "hair_anime_layered" : "hair_wavy_midnight", role: "support", rationale: "Hair establishes style silhouette", color: colorPalette[1] });
     }
 

@@ -47,14 +47,17 @@ const PANTS_BACK: Zone = { left: 338, top: 288, width: 128, height: 192 };
 const PANTS_SIDE: Zone = { left: 44, top: 288, width: 128, height: 192 };
 
 function makeTextureFromZone(source: CanvasImageSource, zone: Zone, fallback = "#d1d5db") {
+  // The atlas may be rendered at higher resolution than the 585x559 template — scale zone coords to match.
+  const sourceWidth = "width" in source ? Number(source.width) : 585;
+  const atlasScale = sourceWidth > 0 ? sourceWidth / 585 : 1;
   const canvas = document.createElement("canvas");
-  canvas.width = zone.width;
-  canvas.height = zone.height;
+  canvas.width = Math.round(zone.width * atlasScale);
+  canvas.height = Math.round(zone.height * atlasScale);
   const ctx = canvas.getContext("2d");
   if (!ctx) return new THREE.CanvasTexture(canvas);
   ctx.fillStyle = fallback;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
-  ctx.drawImage(source, zone.left, zone.top, zone.width, zone.height, 0, 0, zone.width, zone.height);
+  ctx.drawImage(source, zone.left * atlasScale, zone.top * atlasScale, zone.width * atlasScale, zone.height * atlasScale, 0, 0, canvas.width, canvas.height);
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
   texture.wrapS = THREE.ClampToEdgeWrapping;
@@ -318,11 +321,11 @@ function SceneContent({ maps, view, itemType, rotation, avatar, mode, animated =
       <SoftShadows size={12} samples={8} focus={0.5} />
       <StudioEnvironment />
       
-      <hemisphereLight intensity={1.2} color="#ffffff" groundColor="#0f172a" />
+      <hemisphereLight intensity={0.75} color="#ffffff" groundColor="#0f172a" />
       
       <spotLight
         position={[3, 7, 5]}
-        intensity={mode === "clothing" ? 4.5 : 4}
+        intensity={mode === "clothing" ? 3.5 : 3}
         color="#ffffff"
         castShadow
         penumbra={1}
@@ -410,7 +413,7 @@ export function AvatarPreview({ textureUrl, className, avatarType = "neutral", v
       <Canvas
         shadows
         dpr={[1, 1.5]}
-        gl={{ antialias: true, alpha: false, powerPreference: "high-performance", toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.05 }}
+        gl={{ antialias: true, alpha: false, powerPreference: "high-performance", toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 0.95 }}
         camera={{ position: [0, 1.3, zoom], fov: resolvedMode === "clothing" ? 34 : 38 }}
         className="w-full h-full"
       >
