@@ -1,4 +1,5 @@
 import type { ClassicGarment } from "./classic-atlas";
+import type { GarmentClassification } from "@workspace/integrations-openai-ai-server";
 
 export interface EnhancedGarmentSpecification {
   garmentType: string;
@@ -9,6 +10,12 @@ export interface EnhancedGarmentSpecification {
   decorativeDetails: string[];
   visibleText: string | null;
   realismInstructions: string[];
+  fit: string;
+  front: string[];
+  back: string[];
+  sleeves: string[];
+  legs: string[];
+  colourProfile: { primary: string[]; accent: string[] };
 }
 
 const MATERIAL_RULES: Array<{ names: string[]; name: string; instructions: string[] }> = [
@@ -59,11 +66,14 @@ function uniqueMatches(description: string, terms: string[]): string[] {
   return terms.filter((term) => lower.includes(term)).filter((term, index, all) => !all.some((other, i) => i < index && other.includes(term)));
 }
 
-export function enhanceGarmentPrompt(type: ClassicGarment, description: string): EnhancedGarmentSpecification {
-  const lower = description.toLowerCase();
+export function enhanceGarmentPrompt(type: ClassicGarment, description: string, classification?: GarmentClassification): EnhancedGarmentSpecification {
+  const classifiedTerms = [classification?.garmentType, classification?.material].filter(Boolean).join(" ");
+  const lower = `${description} ${classifiedTerms}`.toLowerCase();
   const materialRule = MATERIAL_RULES.find((rule) => rule.names.some((name) => lower.includes(name)));
   const garmentRule = GARMENT_RULES.find((rule) => rule.names.some((name) => lower.includes(name)));
-  const colours = uniqueMatches(description, COLOURS);
+  const detectedColours = uniqueMatches(description, COLOURS);
+  const primaryColours = (classification?.primaryColours.length ? classification.primaryColours : detectedColours.slice(0, 2)).filter((value, index, all) => all.indexOf(value) === index);
+  const secondaryColours = [...(classification?.accentColours ?? []), ...detectedColours.filter((colour) => !primaryColours.includes(colour))].filter((value, index, all) => all.indexOf(value) === index);
   const textMatch = description.match(/(?:number\s+)(\d{1,3})\s+on\s+the\s+(back|chest|front)\b/i)
     ?? description.match(/"([^"]{1,20})"\s+on\s+the\s+(back|chest|front)\b/i)
     ?? description.match(/\b([A-Z][A-Z ]{0,19})\s+on\s+the\s+(back|chest|front)\b/)
@@ -72,18 +82,27 @@ export function enhanceGarmentPrompt(type: ClassicGarment, description: string):
   const defaults = type === "shirt"
     ? ["distinct constructed front and rear body panels", "left and right sleeve panels joined naturally at shoulders and underarms", "continuous side, shoulder and armhole seams"]
     : ["constructed waistband and distinct front and rear hip panels", "separate articulated front and rear leg panels", "continuous side seams and inseams"];
+  const garmentType = classification?.garmentType || garmentRule?.name || (type === "shirt" ? "constructed shirt or top" : "constructed trousers or pants");
+  const constructionDetails = [...(classification?.explicitDetails ?? []), ...uniqueMatches(description, CONSTRUCTION), ...defaults, ...(garmentRule?.details ?? [])].filter((value, index, all) => all.indexOf(value) === index);
+  const decorativeDetails = [...uniqueMatches(description, ["dragon", "heart", "graphic", "embroidered", "stripes"]), ...(classification?.artwork ?? [])].filter((value, index, all) => all.indexOf(value) === index);
   return {
-    garmentType: garmentRule?.name ?? (type === "shirt" ? "constructed shirt or top" : "constructed trousers or pants"),
+    garmentType,
     material: materialRule?.name ?? "woven clothing fabric",
-    primaryColours: colours.slice(0, 2),
-    secondaryColours: colours.slice(2),
-    constructionDetails: [...uniqueMatches(description, CONSTRUCTION), ...defaults, ...(garmentRule?.details ?? [])].filter((value, index, all) => all.indexOf(value) === index),
-    decorativeDetails: uniqueMatches(description, ["dragon", "heart", "graphic", "embroidered", "stripes"]),
+    primaryColours,
+    secondaryColours,
+    constructionDetails,
+    decorativeDetails,
     visibleText,
     realismInstructions: materialRule?.instructions ?? ["visible woven surface", "matte material-aware highlights", "gravity-driven folds and fabric tension", "precise construction stitching", "properly joined and finished panels", "subtle tonal wear without dirt"],
+    fit: classification?.fit || (lower.includes("oversized") ? "oversized" : "standard"),
+    front: constructionDetails.filter((detail) => /front|pocket|zipper|placket|fly|button|drawcord/i.test(detail)),
+    back: constructionDetails.filter((detail) => /back|rear|yoke|hood|shoulder/i.test(detail)),
+    sleeves: type === "shirt" ? constructionDetails.filter((detail) => /sleeve|cuff|arm|shoulder/i.test(detail)) : [],
+    legs: type === "pants" ? constructionDetails.filter((detail) => /leg|knee|inseam|ankle/i.test(detail)) : [],
+    colourProfile: { primary: primaryColours, accent: secondaryColours },
   };
 }
 
 export function formatEnhancedPrompt(spec: EnhancedGarmentSpecification): string {
-  return [`GARMENT: ${spec.garmentType}.`, `MATERIAL: ${spec.material}; ${spec.realismInstructions.join("; ")}.`, `COLOUR: ${spec.primaryColours.join(", ") || "exactly as requested"}${spec.secondaryColours.length ? ` with ${spec.secondaryColours.join(", ")}` : ""}; use subtle tonal variation, material highlights, structural shadows, restrained fading, stitch contrast and clean edge wear instead of flat fills.`, `CONSTRUCTION: ${spec.constructionDetails.join("; ")}.`, spec.decorativeDetails.length ? `SURFACE ARTWORK: ${spec.decorativeDetails.join(", ")}; integrate it as ink or embroidery following fabric grain, folds and panel boundaries.` : "", spec.visibleText ? `EXACT VISIBLE TEXT: ${spec.visibleText}.` : "NO VISIBLE TEXT."].filter(Boolean).join("\n");
+  return [`GARMENT: ${spec.garmentType}; FIT: ${spec.fit}.`, `MATERIAL: ${spec.material}; ${spec.realismInstructions.join("; ")}.`, `COLOUR: ${spec.primaryColours.join(", ") || "exactly as requested"}${spec.secondaryColours.length ? ` with ${spec.secondaryColours.join(", ")}` : ""}; use subtle tonal variation, material highlights, structural shadows, restrained fading, stitch contrast and clean edge wear instead of flat fills.`, `FRONT: ${spec.front.join("; ") || "clean front construction"}.`, `BACK: ${spec.back.join("; ") || "credible distinct rear construction"}.`, spec.sleeves.length ? `SLEEVES: ${spec.sleeves.join("; ")}.` : "", spec.legs.length ? `LEGS: ${spec.legs.join("; ")}.` : "", `CONSTRUCTION: ${spec.constructionDetails.join("; ")}.`, spec.decorativeDetails.length ? `SURFACE ARTWORK: ${spec.decorativeDetails.join(", ")}; integrate it as ink or embroidery following fabric grain, folds and panel boundaries.` : "", spec.visibleText ? `EXACT VISIBLE TEXT: ${spec.visibleText}.` : "NO VISIBLE TEXT."].filter(Boolean).join("\n");
 }
