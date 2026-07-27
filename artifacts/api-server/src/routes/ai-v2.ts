@@ -1,9 +1,9 @@
 import { Router, type IRouter } from "express";
 import { z } from "zod";
-import { openai } from "@workspace/integrations-openai-ai-server";
 import { aiGenerateRequestSchema, aiImproveRequestSchema, stylizedOutfitGenerateRequestSchema } from "../lib/ai-contracts";
 import { aiGenerationService } from "../services/ai/ai-generation.service";
 import { aiHistoryService } from "../services/ai/ai-history.service";
+import { generateClassicTexture } from "../services/ai/classic-texture.service";
 
 const router: IRouter = Router();
 
@@ -52,73 +52,22 @@ router.post("/ai/generate", async (req, res): Promise<void> => {
   }
 });
 
-const heroImageRequestSchema = z.object({
-  prompt: z.string().min(1).max(600),
-  kind: z.enum(["motif", "fabric", "garment-top", "garment-bottom"]).optional().default("motif"),
+const classicTextureRequestSchema = z.object({
+  prompt: z.string().trim().min(3).max(600),
+  garmentType: z.enum(["shirt", "pants"]),
 });
 
-// Generates the actual artwork described in the prompt (gpt-image-1, transparent PNG).
-router.post("/ai/hero-image", async (req, res): Promise<void> => {
-  const parsed = heroImageRequestSchema.safeParse(req.body);
+router.post("/ai/classic-texture", async (req, res): Promise<void> => {
+  const parsed = classicTextureRequestSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: "Invalid request", details: parsed.error.flatten() });
     return;
   }
-
   try {
-    const kind = parsed.data.kind;
-    const isFabric = kind === "fabric";
-    const isGarment = kind === "garment-top" || kind === "garment-bottom";
-    const garmentPart = kind === "garment-top"
-      ? "the UPPER-BODY garment (shirt, hoodie, jacket, sweater — whatever upper-body clothing the description mentions or implies)"
-      : "the LOWER-BODY garment (trousers, jeans, skirt, shorts — whatever lower-body clothing the description mentions or implies)";
-    const imagePrompt = isGarment
-      ? [
-          `Photorealistic flat clothing texture: the front cloth panel of ${garmentPart}.`,
-          `The outfit described by the user: ${parsed.data.prompt}.`,
-          "The fabric panel must fill the ENTIRE square canvas edge-to-edge, viewed straight on, like a texture map for a video game character.",
-          "Include the realistic details real clothes have: fabric weave/denim grain, seams, stitching, pockets, zippers, buttons, drawstrings, subtle natural wrinkles and soft shading.",
-          "Do NOT draw a person, mannequin, hanger, background, or the garment's outline/silhouette — only the flat cloth surface with its details, edge-to-edge.",
-          "Even lighting, no vignette, no border, no text, no watermark.",
-        ].join(" ")
-      : isFabric
-      ? [
-          "Seamless square fabric/material texture for video-game clothing.",
-          `The material described: ${parsed.data.prompt}.`,
-          "The texture must fill the ENTIRE square canvas edge-to-edge with the material surface itself —",
-          "realistic detail like scales, weave, leather grain, stitching, wear and subtle lighting variation.",
-          "Do NOT draw any object, garment, person, logo or scene — only the flat material surface, viewed straight on.",
-          "Tileable, even lighting, no vignette, no border, no text, no watermark.",
-        ].join(" ")
-      : [
-          "Flat 2D game artwork that will be printed on the front of a Roblox shirt.",
-          `The user's description: ${parsed.data.prompt}.`,
-          "IMPORTANT: If the description mentions a piece of clothing (shirt, hoodie, genser, jakke, t-skjorte, bukse, drakt, etc.), do NOT draw the garment itself —",
-          "draw ONLY the logo, motif, emblem or graphic that should be printed on that garment, faithfully including every detail mentioned about it.",
-          "If no garment is mentioned, draw the described subject exactly and faithfully.",
-          "Bold, vibrant, high-contrast, centered composition with clean edges.",
-          "The subject must be completely isolated on a fully transparent background:",
-          "do NOT draw any background, backdrop, gradient, glow, halo, shadow or border around the subject.",
-          "No watermark. No frame. No text unless explicitly requested.",
-        ].join(" ");
-
-    const result = await openai.images.generate({
-      model: "gpt-image-1",
-      prompt: imagePrompt,
-      size: "1024x1024",
-      background: isFabric || isGarment ? "opaque" : "transparent",
-      quality: "medium",
-    });
-
-    const b64 = result.data?.[0]?.b64_json;
-    if (!b64) {
-      res.status(502).json({ error: "Image generation returned no image" });
-      return;
-    }
-    res.json({ imageUrl: `data:image/png;base64,${b64}` });
+    res.json(await generateClassicTexture(parsed.data.garmentType, parsed.data.prompt));
   } catch (err) {
-    req.log.error({ err }, "ai.v2.hero_image.failed");
-    res.status(500).json({ error: "Image generation failed" });
+    req.log.error({ err }, "ai.v2.classic_texture.failed");
+    res.status(502).json({ error: "AI could not produce a valid complete classic texture" });
   }
 });
 

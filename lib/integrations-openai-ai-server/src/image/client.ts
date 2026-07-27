@@ -60,3 +60,22 @@ export async function editImages(
 
   return imageBytes;
 }
+
+/** Edit in-memory PNG references with gpt-image-1 at final-art quality. */
+export async function editImageBuffers(
+  inputs: Array<{ data: Buffer; filename: string }>,
+  prompt: string,
+): Promise<Buffer> {
+  const images = await Promise.all(inputs.map(({ data, filename }) =>
+    toFile(data, filename, { type: "image/png" })
+  ));
+  const response = await openai.images.edit({
+    model: "gpt-image-1",
+    image: images,
+    prompt,
+    size: "1536x1024",
+    quality: "high",
+    output_format: "png",
+  });
+  return Buffer.from(response.data?.[0]?.b64_json ?? "", "base64");
+}
