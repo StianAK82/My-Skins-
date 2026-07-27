@@ -99,6 +99,10 @@ export default function Create() {
               </Button>
             ))}
           </div>
+          <div className="grid gap-2 text-sm text-slate-400 sm:grid-cols-2">
+            <p><strong className="text-slate-200">Classic Shirt:</strong> Creates a flat Roblox clothing texture with a hoodie-style appearance.</p>
+            <p><strong className="text-slate-200">Layered Clothing / 3D Hoodie:</strong> Creates actual 3D clothing geometry. <span className="text-slate-500">Coming later.</span></p>
+          </div>
           <form className="flex flex-col gap-3 sm:flex-row" onSubmit={(event) => { event.preventDefault(); void generate(); }}>
             <Input value={prompt} onChange={(event) => setPrompt(event.target.value)} disabled={loading} maxLength={600} className="h-12 bg-slate-950" placeholder="White cotton zip hoodie with realistic seams and folds…" aria-label="Clothing description" />
             <Button className="h-12 px-7" type="submit" disabled={loading || prompt.trim().length < 3}>

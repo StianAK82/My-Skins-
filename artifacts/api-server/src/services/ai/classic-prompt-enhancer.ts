@@ -495,6 +495,7 @@ export function enhanceGarmentPrompt(
     .filter(Boolean)
     .join(" ");
   const lower = `${description} ${classifiedTerms}`.toLowerCase();
+  const isHoodie = /\b(hoodie|hooded sweater|hettegenser|hooded sweatshirt)\b/i.test(lower);
   const materialRule = MATERIAL_RULES.find((rule) =>
     rule.names.some((name) => lower.includes(name)),
   );
@@ -536,7 +537,7 @@ export function enhanceGarmentPrompt(
           "continuous side seams and inseams",
         ];
   const garmentType =
-    classification?.garmentType ||
+    (isHoodie && !/oversized hoodie/i.test(classification?.garmentType ?? "") ? "hoodie" : classification?.garmentType) ||
     garmentRule?.name ||
     (type === "shirt"
       ? "constructed shirt or top"
@@ -559,7 +560,7 @@ export function enhanceGarmentPrompt(
   ].filter((value, index, all) => all.indexOf(value) === index);
   return {
     garmentType,
-    material: materialRule?.name ?? "woven clothing fabric",
+    material: isHoodie && materialRule?.name === "cotton" ? "heavyweight cotton" : materialRule?.name ?? (isHoodie ? "heavyweight cotton" : "woven clothing fabric"),
     primaryColours,
     secondaryColours,
     constructionDetails,
@@ -576,14 +577,14 @@ export function enhanceGarmentPrompt(
     fit:
       classification?.fit ||
       (lower.includes("oversized") ? "oversized" : "standard"),
-    front: constructionDetails.filter((detail) =>
+    front: isHoodie ? ["painted hood opening around the neckline", "two believable drawstrings", "centred kangaroo pocket with stitched openings", "rib-knit lower hem", "shoulder and armhole seams", "natural neckline, underarm, pocket and hem folds"] : constructionDetails.filter((detail) =>
       /front|pocket|zipper|placket|fly|button|drawcord/i.test(detail),
     ),
-    back: constructionDetails.filter((detail) =>
+    back: isHoodie ? ["rear of a two-piece hood", "centre-back hood seam", "shoulder continuation", "rear fabric folds", "rib-knit lower hem", "no drawstrings, kangaroo pocket or copied front artwork"] : constructionDetails.filter((detail) =>
       /back|rear|yoke|hood|shoulder/i.test(detail),
     ),
     sleeves:
-      type === "shirt"
+      isHoodie ? ["rib-knit cuffs", "continuous shoulder seams", "continuous underarm seams", "heavyweight cotton grain", "left and right sleeves with independent non-identical fabric folds"] : type === "shirt"
         ? constructionDetails.filter((detail) =>
             /sleeve|cuff|arm|shoulder/i.test(detail),
           )

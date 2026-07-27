@@ -11,6 +11,7 @@ import type { AvatarCosmeticSlot, AvatarState } from "@/lib/editor/design-state"
 import { defaultAvatarState } from "@/lib/editor/design-state";
 import { getAvatarAssetById, getAvatarBaseModel, type AvatarRenderPart } from "@/lib/editor/assets";
 import { resolveSlotPosition } from "@/lib/editor/avatar-slots";
+import { CLASSIC_SHIRT_UV } from "@/lib/editor/classic-shirt-uv";
 
 type ThreeTexture = ReturnType<typeof makeTextureFromZone>;
 type PreviewMode = "clothing" | "avatar";
@@ -36,12 +37,12 @@ type AvatarPreviewProps = {
 };
 
 type Zone = { left: number; top: number; width: number; height: number };
-type ClothingMaps = { shirtFront: ThreeTexture; shirtBack: ThreeTexture; shirtSide: ThreeTexture; pantsFront: ThreeTexture; pantsBack: ThreeTexture; pantsSide: ThreeTexture };
+type ClothingMaps = { shirtFront: ThreeTexture; shirtBack: ThreeTexture; shirtSide: ThreeTexture; leftArmFront: ThreeTexture; leftArmBack: ThreeTexture; leftArmSide: ThreeTexture; rightArmFront: ThreeTexture; rightArmBack: ThreeTexture; rightArmSide: ThreeTexture; pantsFront: ThreeTexture; pantsBack: ThreeTexture; pantsSide: ThreeTexture };
 type FaceMaps = { front: ThreeTexture; back: ThreeTexture; side: ThreeTexture };
 
-const SHIRT_FRONT: Zone = { left: 196, top: 118, width: 128, height: 128 };
-const SHIRT_BACK: Zone = { left: 338, top: 118, width: 128, height: 128 };
-const SHIRT_SIDE: Zone = { left: 44, top: 118, width: 128, height: 128 };
+const SHIRT_FRONT: Zone = CLASSIC_SHIRT_UV.torso_front;
+const SHIRT_BACK: Zone = CLASSIC_SHIRT_UV.torso_back;
+const SHIRT_SIDE: Zone = CLASSIC_SHIRT_UV.torso_right;
 const PANTS_FRONT: Zone = { left: 196, top: 288, width: 128, height: 192 };
 const PANTS_BACK: Zone = { left: 338, top: 288, width: 128, height: 192 };
 const PANTS_SIDE: Zone = { left: 44, top: 288, width: 128, height: 192 };
@@ -101,11 +102,17 @@ function useClothingMaps(textureUrl?: string) {
     const applyMaps = (base: CanvasImageSource) => {
       if (!alive) return;
       setMaps((prev) => {
-        prev?.shirtFront.dispose(); prev?.shirtBack.dispose(); prev?.shirtSide.dispose(); prev?.pantsFront.dispose(); prev?.pantsBack.dispose(); prev?.pantsSide.dispose();
+        Object.values(prev ?? {}).forEach((texture) => texture.dispose());
         return {
           shirtFront: makeTextureFromZone(base, SHIRT_FRONT, "#475569"),
           shirtBack: makeTextureFromZone(base, SHIRT_BACK, "#475569"),
           shirtSide: makeTextureFromZone(base, SHIRT_SIDE, "#475569"),
+          leftArmFront: makeTextureFromZone(base, CLASSIC_SHIRT_UV.left_arm_front, "#475569"),
+          leftArmBack: makeTextureFromZone(base, CLASSIC_SHIRT_UV.left_arm_back, "#475569"),
+          leftArmSide: makeTextureFromZone(base, CLASSIC_SHIRT_UV.left_arm_left, "#475569"),
+          rightArmFront: makeTextureFromZone(base, CLASSIC_SHIRT_UV.right_arm_front, "#475569"),
+          rightArmBack: makeTextureFromZone(base, CLASSIC_SHIRT_UV.right_arm_back, "#475569"),
+          rightArmSide: makeTextureFromZone(base, CLASSIC_SHIRT_UV.right_arm_right, "#475569"),
           pantsFront: makeTextureFromZone(base, PANTS_FRONT, "#334155"),
           pantsBack: makeTextureFromZone(base, PANTS_BACK, "#334155"),
           pantsSide: makeTextureFromZone(base, PANTS_SIDE, "#334155"),
@@ -225,7 +232,9 @@ function RobloxAvatar({ maps, view, itemType, avatar, mode }: { maps: ClothingMa
   if (!maps) return null;
   // Show the full outfit: shirt zones on the torso/arms and pants zones on the legs.
   void itemType;
-  const shirtMaps: FaceMaps = { front: maps.shirtFront, back: maps.shirtBack, side: maps.shirtSide };
+  const torsoMaps: FaceMaps = { front: maps.shirtFront, back: maps.shirtBack, side: maps.shirtSide };
+  const leftArmMaps: FaceMaps = { front: maps.leftArmFront, back: maps.leftArmBack, side: maps.leftArmSide };
+  const rightArmMaps: FaceMaps = { front: maps.rightArmFront, back: maps.rightArmBack, side: maps.rightArmSide };
   // Leg sides sample the front zone: the side zone (x=44) is unpainted in the shirt-template atlas.
   const pantsMaps: FaceMaps = { front: maps.pantsFront, back: maps.pantsBack, side: maps.pantsFront };
   const baseModel = getAvatarBaseModel(avatar.modelVariant);
@@ -246,7 +255,7 @@ function RobloxAvatar({ maps, view, itemType, avatar, mode }: { maps: ClothingMa
       <group rotation-y={poseRotY}>
         {baseModel.bodyParts.map((part) => (
           <group key={part.id} position={part.position} scale={partScaleForId(part.id)}>
-            <BodyPart material={part.material} args={part.args} position={[0, 0, 0]} radius={part.radius} smoothness={part.smoothness} maps={{ shirt: shirtMaps, pants: pantsMaps }} skinTone={avatar.skinTone} />
+            <BodyPart material={part.material} args={part.args} position={[0, 0, 0]} radius={part.radius} smoothness={part.smoothness} maps={{ shirt: part.id.toLowerCase().includes("leftarm") ? leftArmMaps : part.id.toLowerCase().includes("rightarm") ? rightArmMaps : torsoMaps, pants: pantsMaps }} skinTone={avatar.skinTone} />
           </group>
         ))}
       </group>

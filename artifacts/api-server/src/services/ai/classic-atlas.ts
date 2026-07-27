@@ -2,14 +2,32 @@ import { deflateSync, inflateSync } from "node:zlib";
 
 export type ClassicGarment = "shirt" | "pants";
 export const CLASSIC_TEXTURE_SIZE = { width: 585, height: 559 } as const;
-type Region = { name: string; x: number; y: number; width: number; height: number };
+export type ClassicRegion = { name: string; x: number; y: number; width: number; height: number };
 
-export const CLASSIC_REGIONS: Record<ClassicGarment, Region[]> = {
+/**
+ * The 585x559 Roblox Classic UV islands.  Keep faces separate: their names are
+ * also part of the image-editing contract and the preview/debug tooling.
+ */
+export const CLASSIC_REGIONS: Record<ClassicGarment, ClassicRegion[]> = {
   shirt: [
-    { name: "left_arm", x: 44, y: 74, width: 128, height: 172 },
-    { name: "torso_front", x: 196, y: 74, width: 128, height: 172 },
-    { name: "torso_back", x: 338, y: 74, width: 128, height: 172 },
-    { name: "right_arm", x: 441, y: 74, width: 128, height: 172 },
+    { name: "right_arm_top", x: 44, y: 74, width: 64, height: 44 },
+    { name: "right_arm_bottom", x: 108, y: 74, width: 64, height: 44 },
+    { name: "right_arm_right", x: 44, y: 118, width: 32, height: 128 },
+    { name: "right_arm_front", x: 76, y: 118, width: 32, height: 128 },
+    { name: "right_arm_left", x: 108, y: 118, width: 32, height: 128 },
+    { name: "right_arm_back", x: 140, y: 118, width: 32, height: 128 },
+    { name: "torso_top", x: 196, y: 74, width: 64, height: 44 },
+    { name: "torso_bottom", x: 260, y: 74, width: 64, height: 44 },
+    { name: "torso_front", x: 196, y: 118, width: 128, height: 128 },
+    { name: "torso_back", x: 338, y: 118, width: 128, height: 128 },
+    { name: "torso_right", x: 324, y: 118, width: 14, height: 128 },
+    { name: "torso_left", x: 466, y: 118, width: 14, height: 128 },
+    { name: "left_arm_top", x: 441, y: 74, width: 64, height: 44 },
+    { name: "left_arm_bottom", x: 505, y: 74, width: 64, height: 44 },
+    { name: "left_arm_right", x: 441, y: 288, width: 32, height: 128 },
+    { name: "left_arm_front", x: 473, y: 288, width: 32, height: 128 },
+    { name: "left_arm_left", x: 505, y: 288, width: 32, height: 128 },
+    { name: "left_arm_back", x: 537, y: 288, width: 32, height: 128 },
   ],
   pants: [
     { name: "left_hip", x: 44, y: 74, width: 128, height: 172 },
