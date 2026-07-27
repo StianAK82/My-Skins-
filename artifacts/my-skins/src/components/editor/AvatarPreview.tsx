@@ -310,7 +310,7 @@ function IdleGroup({ children, enabled }: { children: ReactNode; enabled: boolea
 }
 
 function SceneContent({ maps, view, itemType, rotation, avatar, mode, animated = false }: { maps: ClothingMaps | null; view: "front" | "back"; itemType: "shirt" | "pants"; rotation: number; avatar: AvatarState; mode: PreviewMode; animated?: boolean }) {
-  const cameraTarget: [number, number, number] = mode === "clothing" ? [0, 1.2, 0] : [0, 1.05, 0];
+  const cameraTarget: [number, number, number] = mode === "clothing" ? [0, 1.2, 0] : [0, 1.15, 0];
   return (
     <>
       <color attach="background" args={["#050811"]} />
@@ -394,7 +394,7 @@ function PreviewFallback({ textureUrl }: { textureUrl?: string }) {
 export function AvatarPreview({ textureUrl, className, avatarType = "neutral", view: controlledView, onViewChange, itemType = "shirt", dimension, previewMode, studioMode = false, animated = false, avatarState }: AvatarPreviewProps) {
   const resolvedMode: PreviewMode = previewMode ?? (dimension === "3d" ? "avatar" : "clothing");
   const [internalView, setInternalView] = useState<"front" | "back">("front");
-  const [zoom, setZoom] = useState(3.6);
+  const [zoom, setZoom] = useState(resolvedMode === "clothing" ? 3.6 : 4.9);
   const [rotation, setRotation] = useState(0);
   const maps = useClothingMaps(textureUrl);
   const effectiveAvatar = useMemo(() => ({ ...defaultAvatarState(), ...avatarState, slots: { ...defaultAvatarState().slots, ...(avatarState?.slots ?? {}) } }), [avatarState]);

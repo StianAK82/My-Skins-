@@ -66,8 +66,11 @@ router.post("/ai/hero-image", async (req, res): Promise<void> => {
 
   try {
     const imagePrompt = [
-      "Flat 2D game artwork for the front of a Roblox shirt.",
-      `Draw exactly this, faithfully including every detail mentioned: ${parsed.data.prompt}.`,
+      "Flat 2D game artwork that will be printed on the front of a Roblox shirt.",
+      `The user's description: ${parsed.data.prompt}.`,
+      "IMPORTANT: If the description mentions a piece of clothing (shirt, hoodie, genser, jakke, t-skjorte, bukse, drakt, etc.), do NOT draw the garment itself —",
+      "draw ONLY the logo, motif, emblem or graphic that should be printed on that garment, faithfully including every detail mentioned about it.",
+      "If no garment is mentioned, draw the described subject exactly and faithfully.",
       "Bold, vibrant, high-contrast, centered composition with clean edges.",
       "The subject must be completely isolated on a fully transparent background:",
       "do NOT draw any background, backdrop, gradient, glow, halo, shadow or border around the subject.",
