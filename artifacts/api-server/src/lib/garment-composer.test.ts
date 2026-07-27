@@ -17,14 +17,14 @@ function solidAtlas() {
 
 test("hoodie fingerprint defines every invariant construction feature", () => {
   assert.deepEqual(GARMENT_FINGERPRINTS.hoodie.required, [
-    "hood opening",
+    "hood",
+    "hood-opening",
     "drawstrings",
-    "kangaroo pocket",
-    "rib cuffs",
-    "rib hem",
-    "hood back",
-    "seams",
-    "folds",
+    "kangaroo-pocket",
+    "shoulder-seams",
+    "sleeve-seams",
+    "rib-cuffs",
+    "rib-hem",
   ]);
 });
 

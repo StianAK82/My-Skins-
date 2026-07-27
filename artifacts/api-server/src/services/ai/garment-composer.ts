@@ -1,62 +1,34 @@
 import { decodePng, encodeRgba } from "./classic-atlas.ts";
 import type { EnhancedGarmentSpecification } from "./classic-prompt-enhancer.ts";
+import {
+  GARMENT_LIBRARY,
+  resolveGarmentKey,
+  type GarmentKey,
+  type GarmentModule,
+} from "./garment-library.ts";
 
 export type GarmentFingerprint = {
-  key: "hoodie" | "t-shirt" | "jeans";
-  required: readonly string[];
+  key: GarmentKey;
+  required: readonly GarmentModule[];
 };
 
 /** Structural details that must not be delegated to the image model. */
-export const GARMENT_FINGERPRINTS: Record<
-  GarmentFingerprint["key"],
-  GarmentFingerprint
-> = {
-  hoodie: {
-    key: "hoodie",
-    required: [
-      "hood opening",
-      "drawstrings",
-      "kangaroo pocket",
-      "rib cuffs",
-      "rib hem",
-      "hood back",
-      "seams",
-      "folds",
-    ],
-  },
-  "t-shirt": {
-    key: "t-shirt",
-    required: ["crew neck", "short sleeve hems", "lower hem", "seams"],
-  },
-  jeans: {
-    key: "jeans",
-    required: [
-      "front pockets",
-      "back pockets",
-      "belt loops",
-      "fly",
-      "waistband",
-      "seams",
-    ],
-  },
-};
+export const GARMENT_FINGERPRINTS = Object.fromEntries(
+  Object.values(GARMENT_LIBRARY).map((template) => [
+    template.key,
+    { key: template.key, required: template.requiredModules },
+  ]),
+) as Record<GarmentKey, GarmentFingerprint>;
 
 type Point = readonly [number, number];
 type Canvas = { width: number; height: number; rgba: Buffer };
 
 function fingerprintFor(
   spec: EnhancedGarmentSpecification,
-): GarmentFingerprint | undefined {
-  const garment = spec.garmentType.toLowerCase();
-  if (garment.includes("hoodie")) return GARMENT_FINGERPRINTS.hoodie;
-  if (garment.includes("t-shirt") || garment.includes("tee"))
-    return GARMENT_FINGERPRINTS["t-shirt"];
-  if (
-    garment.includes("jeans") ||
-    spec.material.toLowerCase().includes("denim")
-  )
-    return GARMENT_FINGERPRINTS.jeans;
-  return undefined;
+): GarmentFingerprint {
+  return GARMENT_FINGERPRINTS[
+    resolveGarmentKey(`${spec.garmentType} ${spec.material}`)
+  ];
 }
 
 function ink(canvas: Canvas, x: number, y: number, strength: number): void {
@@ -324,10 +296,11 @@ export function composeGarmentFingerprint(
   spec: EnhancedGarmentSpecification,
 ) {
   const fingerprint = fingerprintFor(spec);
-  if (!fingerprint) return { png, fingerprint: undefined };
   const canvas = decodePng(png);
-  if (fingerprint.key === "hoodie") composeHoodie(canvas);
-  else if (fingerprint.key === "t-shirt") composeTshirt(canvas);
+  if (fingerprint.key === "hoodie" || fingerprint.key === "zip-hoodie")
+    composeHoodie(canvas);
+  else if (GARMENT_LIBRARY[fingerprint.key].atlas === "shirt")
+    composeTshirt(canvas);
   else composeJeans(canvas);
   return {
     png: encodeRgba(canvas.width, canvas.height, canvas.rgba),
@@ -340,7 +313,6 @@ export function validateGarmentFingerprint(
   applied?: GarmentFingerprint,
 ): string[] {
   const expected = fingerprintFor(spec);
-  if (!expected) return [];
   if (applied?.key !== expected.key)
     return [`missing required ${expected.key} garment fingerprint`];
   return [];
