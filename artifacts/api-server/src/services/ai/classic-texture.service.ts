@@ -7,9 +7,18 @@ import {
   formatEnhancedPrompt,
 } from "./classic-prompt-enhancer";
 import { planGarmentBlueprint } from "./garment-blueprint";
+import {
+  composeGarmentFingerprint,
+  validateGarmentFingerprint,
+} from "./garment-composer";
 import { getLearnedDesignInstructions } from "./design-memory-feedback.service";
 import type { EnhancedGarmentSpecification } from "./classic-prompt-enhancer";
-import { AiGenerationError, normalizeAiError, timeoutMs, withAiTimeout } from "./ai-errors";
+import {
+  AiGenerationError,
+  normalizeAiError,
+  timeoutMs,
+  withAiTimeout,
+} from "./ai-errors";
 
 export {
   CLASSIC_REGIONS,
@@ -189,15 +198,21 @@ export async function generateClassicTexture(
   type: ClassicGarment,
   description: string,
   preparedSpecification?: EnhancedGarmentSpecification,
-  diagnostics?: { generationId: string; startedAt: number; log: (event: string, data: Record<string, unknown>) => void },
+  diagnostics?: {
+    generationId: string;
+    startedAt: number;
+    log: (event: string, data: Record<string, unknown>) => void;
+  },
 ) {
   const blank = referencePng(type, false),
     guide = referencePng(type, true),
-    enhanced = preparedSpecification ?? await withAiTimeout(
-      () => planGarmentBlueprint(type, description),
-      timeoutMs("AI_TEXT_TIMEOUT_MS", 20_000),
-      `${type}_planning`,
-    ),
+    enhanced =
+      preparedSpecification ??
+      (await withAiTimeout(
+        () => planGarmentBlueprint(type, description),
+        timeoutMs("AI_TEXT_TIMEOUT_MS", 20_000),
+        `${type}_planning`,
+      )),
     references = await qualityReferences(type);
   let learned: string[] = [];
   try {
@@ -221,33 +236,65 @@ export async function generateClassicTexture(
       references.length > 0,
       learned,
     );
-    diagnostics?.log("complete_outfit.ai_request", { generationId: diagnostics.generationId, elapsedMs: Date.now() - diagnostics.startedAt, currentStage: `${type}_generation`, openAIRequestType: "images.edit", attempt: attempts });
+    diagnostics?.log("complete_outfit.ai_request", {
+      generationId: diagnostics.generationId,
+      elapsedMs: Date.now() - diagnostics.startedAt,
+      currentStage: `${type}_generation`,
+      openAIRequestType: "images.edit",
+      attempt: attempts,
+    });
     try {
-      raw = await withAiTimeout((signal) => editImageBuffers(
-        [
-        { data: blank, filename: `blank-classic-${type}-585x559.png` },
-        { data: guide, filename: `classic-${type}-region-guide-585x559.png` },
-        ...references,
-      ],
-        prompt,
-        signal,
-      ), timeoutMs("AI_IMAGE_TIMEOUT_MS", 120_000), `${type}_generation`);
+      raw = await withAiTimeout(
+        (signal) =>
+          editImageBuffers(
+            [
+              { data: blank, filename: `blank-classic-${type}-585x559.png` },
+              {
+                data: guide,
+                filename: `classic-${type}-region-guide-585x559.png`,
+              },
+              ...references,
+            ],
+            prompt,
+            signal,
+          ),
+        timeoutMs("AI_IMAGE_TIMEOUT_MS", 120_000),
+        `${type}_generation`,
+      );
     } catch (error) {
       throw normalizeAiError(error, `${type}_generation`);
     }
     try {
       final = resizeToAtlas(raw);
-      failures = validateClassicTexture(type, final, blank);
+      const composed = composeGarmentFingerprint(final, enhanced);
+      final = composed.png;
+      failures = [
+        ...validateClassicTexture(type, final, blank),
+        ...validateGarmentFingerprint(enhanced, composed.fingerprint),
+      ];
     } catch (error) {
       failures = [
         error instanceof Error ? error.message : "image decoding failed",
       ];
     }
     if (!failures.length) break;
-    diagnostics?.log("complete_outfit.validation_failed", { generationId: diagnostics.generationId, elapsedMs: Date.now() - diagnostics.startedAt, currentStage: `${type}_validation`, openAIRequestType: "images.edit", attempt: attempts, validationFailures: failures });
+    diagnostics?.log("complete_outfit.validation_failed", {
+      generationId: diagnostics.generationId,
+      elapsedMs: Date.now() - diagnostics.startedAt,
+      currentStage: `${type}_validation`,
+      openAIRequestType: "images.edit",
+      attempt: attempts,
+      validationFailures: failures,
+    });
   }
   if (failures.length)
-    throw new AiGenerationError("Image failed quality validation", "AI_VALIDATION", `${type}_validation`, true, 502);
+    throw new AiGenerationError(
+      "Image failed quality validation",
+      "AI_VALIDATION",
+      `${type}_validation`,
+      true,
+      502,
+    );
   return {
     imageUrl: `data:image/png;base64,${final.toString("base64")}`,
     referenceUrl: `data:image/png;base64,${blank.toString("base64")}`,
