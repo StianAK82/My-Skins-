@@ -1,0 +1,14 @@
+{
+  "case": "White hoodie skin",
+  "tolerance": { "pixelRatio": 0.025, "visibilityDelta": 0.04 },
+  "captures": [
+    "enhanced-front.png",
+    "enhanced-back.png",
+    "classic-front.png",
+    "classic-back.png",
+    "wireframe.png",
+    "uv-debug.png"
+  ],
+  "requiredModules": ["hood", "hoodOpening", "drawstrings", "pocket", "leftCuff", "rightCuff", "lowerHem"],
+  "failureConditions": ["detachedSleeves", "severeClipping", "incorrectTextureOrientation"]
+}

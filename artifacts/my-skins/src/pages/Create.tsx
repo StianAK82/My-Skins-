@@ -4,14 +4,10 @@ import { AvatarPreview } from "@/components/editor/AvatarPreview";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { requestCompleteOutfit, type OutfitApiError } from "@/lib/complete-outfit-api";
+import type { CompleteOutfitResponse } from "@/lib/complete-outfit-types";
+import { PREVIEW_PRODUCT_CONTRACT } from "@/lib/complete-outfit-types";
 
-type Blueprint = { theme: string; completeLook: string; top: { type: string }; bottom: { type: string }; footwear: { type: string } };
-type OutfitResult = {
-  preview: { shirtTexture: string; pantsTexture: string };
-  outfitBlueprint: Blueprint;
-  components: { shirtTexture: string; pantsTexture: string; footwearPreview: { support: string }; accessories: unknown[] };
-  export: { robloxItemCount: number };
-};
+type OutfitResult = CompleteOutfitResponse;
 
 function downloadPart(dataUrl: string, name: string) {
   const link = document.createElement("a");
@@ -58,7 +54,7 @@ export default function Create() {
       if (!data.components?.shirtTexture || !data.components?.pantsTexture) throw new Error("Missing outfit textures");
       if (requestRef.current?.id !== id) return;
       setProgress("Building the preview…");
-      setResult(data); setView("front");
+      setResult({ ...data, export: { ...data.export, ...PREVIEW_PRODUCT_CONTRACT } }); setView("front");
     } catch (caught) {
       if (controller.signal.aborted || requestRef.current?.id !== id) return;
       const error = caught as OutfitApiError;
