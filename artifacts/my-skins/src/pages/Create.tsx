@@ -4,6 +4,8 @@ import { AvatarPreview } from "@/components/editor/AvatarPreview";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { requestCompleteOutfit, type OutfitApiError } from "@/lib/complete-outfit-api";
+import { resolveGarmentManifest } from "@/lib/editor/garment-resolver";
+import type { GarmentManifest } from "@/lib/editor/garment-manifest";
 
 type Blueprint = { theme: string; completeLook: string; top: { type: string }; bottom: { type: string }; footwear: { type: string } };
 type OutfitResult = {
@@ -23,6 +25,7 @@ function downloadPart(dataUrl: string, name: string) {
 export default function Create() {
   const [prompt, setPrompt] = useState("");
   const [result, setResult] = useState<OutfitResult | null>(null);
+  const [manifest, setManifest] = useState<GarmentManifest | null>(null);
   const [view, setView] = useState<"front" | "back">("front");
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
@@ -59,6 +62,7 @@ export default function Create() {
       if (requestRef.current?.id !== id) return;
       setProgress("Building the preview…");
       setResult(data); setView("front");
+      setManifest(resolveGarmentManifest(prompt.trim()));
     } catch (caught) {
       if (controller.signal.aborted || requestRef.current?.id !== id) return;
       const error = caught as OutfitApiError;
@@ -92,12 +96,12 @@ export default function Create() {
       <section className="rounded-3xl border border-violet-500/30 bg-slate-900/80 p-5 shadow-2xl shadow-violet-950/30">
         <form className="space-y-3" onSubmit={(event) => { event.preventDefault(); void generate(); }}>
           <label className="block text-lg font-semibold" htmlFor="skin-prompt">Describe your skin</label>
-          <div className="flex flex-col gap-3 sm:flex-row"><Input id="skin-prompt" value={prompt} onChange={(event) => setPrompt(event.target.value)} disabled={loading} maxLength={600} className="h-14 bg-slate-950 text-base" placeholder="White hoodie skin" /><Button className="h-14 px-8 text-base" type="submit" disabled={loading || prompt.trim().length < 3}>{loading ? <Loader2 className="mr-2 animate-spin" /> : <Sparkles className="mr-2" />}Create Skin</Button></div>
-          <div className="flex flex-wrap gap-2 text-sm text-slate-400" aria-label="Prompt examples">{["White hoodie skin", "Pink anime outfit", "Black fire skin", "Blue football skin"].map((example) => <button type="button" key={example} className="rounded-full bg-slate-800 px-3 py-1 hover:bg-slate-700" onClick={() => setPrompt(example)}>{example}</button>)}</div>
+          <div className="flex flex-col gap-3 sm:flex-row"><Input id="skin-prompt" value={prompt} onChange={(event) => setPrompt(event.target.value)} disabled={loading} maxLength={600} className="h-14 bg-slate-950 text-base" placeholder="Black T-shirt and blue jeans" /><Button className="h-14 px-8 text-base" type="submit" disabled={loading || prompt.trim().length < 3}>{loading ? <Loader2 className="mr-2 animate-spin" /> : <Sparkles className="mr-2" />}Create Skin</Button></div>
+          <div className="flex flex-wrap gap-2 text-sm text-slate-400" aria-label="Prompt examples">{["White hoodie skin", "Black T-shirt and blue jeans", "Red football uniform number 10", "Pink princess outfit", "Green cargo outfit", "Knight armour outfit"].map((example) => <button type="button" key={example} className="rounded-full bg-slate-800 px-3 py-1 hover:bg-slate-700" onClick={() => setPrompt(example)}>{example}</button>)}</div>
         </form>
       </section>
       <section className="relative h-[540px] overflow-hidden rounded-3xl border border-slate-800 bg-slate-900" aria-label="Complete outfit preview">
-        <AvatarPreview shirtTextureUrl={result?.components.shirtTexture} pantsTextureUrl={result?.components.pantsTexture} view={view} onViewChange={setView} previewMode="avatar" studioMode animated />
+        <AvatarPreview shirtTextureUrl={result?.components.shirtTexture} pantsTextureUrl={result?.components.pantsTexture} garmentManifest={manifest ?? undefined} view={view} onViewChange={setView} previewMode="avatar" studioMode animated />
         {loading && <div className="absolute inset-0 grid place-content-center bg-slate-950/75 text-center" role="status"><Loader2 className="mx-auto mb-3 h-10 w-10 animate-spin text-violet-400" /><strong>{progress}</strong><span className="mt-1 text-sm text-slate-300">Elapsed time: {elapsedSeconds}s</span></div>}
         {result && <div className="absolute left-4 top-4 rounded-full bg-black/60 px-4 py-2 text-sm backdrop-blur">✨ {result.outfitBlueprint.completeLook}</div>}
       </section>
