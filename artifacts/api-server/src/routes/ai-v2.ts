@@ -54,6 +54,7 @@ router.post("/ai/generate", async (req, res): Promise<void> => {
 
 const heroImageRequestSchema = z.object({
   prompt: z.string().min(1).max(600),
+  kind: z.enum(["motif", "fabric"]).optional().default("motif"),
 });
 
 // Generates the actual artwork described in the prompt (gpt-image-1, transparent PNG).
@@ -65,23 +66,33 @@ router.post("/ai/hero-image", async (req, res): Promise<void> => {
   }
 
   try {
-    const imagePrompt = [
-      "Flat 2D game artwork that will be printed on the front of a Roblox shirt.",
-      `The user's description: ${parsed.data.prompt}.`,
-      "IMPORTANT: If the description mentions a piece of clothing (shirt, hoodie, genser, jakke, t-skjorte, bukse, drakt, etc.), do NOT draw the garment itself —",
-      "draw ONLY the logo, motif, emblem or graphic that should be printed on that garment, faithfully including every detail mentioned about it.",
-      "If no garment is mentioned, draw the described subject exactly and faithfully.",
-      "Bold, vibrant, high-contrast, centered composition with clean edges.",
-      "The subject must be completely isolated on a fully transparent background:",
-      "do NOT draw any background, backdrop, gradient, glow, halo, shadow or border around the subject.",
-      "No watermark. No frame. No text unless explicitly requested.",
-    ].join(" ");
+    const isFabric = parsed.data.kind === "fabric";
+    const imagePrompt = isFabric
+      ? [
+          "Seamless square fabric/material texture for video-game clothing.",
+          `The material described: ${parsed.data.prompt}.`,
+          "The texture must fill the ENTIRE square canvas edge-to-edge with the material surface itself —",
+          "realistic detail like scales, weave, leather grain, stitching, wear and subtle lighting variation.",
+          "Do NOT draw any object, garment, person, logo or scene — only the flat material surface, viewed straight on.",
+          "Tileable, even lighting, no vignette, no border, no text, no watermark.",
+        ].join(" ")
+      : [
+          "Flat 2D game artwork that will be printed on the front of a Roblox shirt.",
+          `The user's description: ${parsed.data.prompt}.`,
+          "IMPORTANT: If the description mentions a piece of clothing (shirt, hoodie, genser, jakke, t-skjorte, bukse, drakt, etc.), do NOT draw the garment itself —",
+          "draw ONLY the logo, motif, emblem or graphic that should be printed on that garment, faithfully including every detail mentioned about it.",
+          "If no garment is mentioned, draw the described subject exactly and faithfully.",
+          "Bold, vibrant, high-contrast, centered composition with clean edges.",
+          "The subject must be completely isolated on a fully transparent background:",
+          "do NOT draw any background, backdrop, gradient, glow, halo, shadow or border around the subject.",
+          "No watermark. No frame. No text unless explicitly requested.",
+        ].join(" ");
 
     const result = await openai.images.generate({
       model: "gpt-image-1",
       prompt: imagePrompt,
       size: "1024x1024",
-      background: "transparent",
+      background: isFabric ? "opaque" : "transparent",
       quality: "medium",
     });
 

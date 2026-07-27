@@ -149,7 +149,7 @@ export default function Create() {
   // Files the user has already paid a credit for – kept around so a blocked
   // popup/download or a failed direct upload can always be retried for free.
   const [readyFiles, setReadyFiles] = useState<OutfitFiles | null>(null);
-  const outfitRef = useRef<{ pantsBase: string; pantsAccent: string; heroUrl?: string } | null>(null);
+  const outfitRef = useRef<{ pantsBase: string; pantsAccent: string; heroUrl?: string; fabricUrl?: string } | null>(null);
   const generateLockRef = useRef(false);
 
   const { state, setAiPlanPreview, setAiAvatarPreview, deleteLayer, addLayer, applyAiPlan, setPaintSwatch } = useDesignStore();
@@ -327,11 +327,36 @@ export default function Create() {
         });
       }
 
-      // Then draw the actual artwork described in the prompt and place it on the shirt.
-      setAiPhase("Tegner motivet du beskrev… (kan ta opptil ett minutt)");
-      const hero = await apiPost<{ imageUrl?: string }>("/ai/hero-image", { prompt: usedPrompt });
+      // Then draw the real artwork: a fabric texture for the whole outfit + the motif on the chest.
+      setAiPhase("Tegner stoffet og motivet du beskrev… (kan ta opptil ett minutt)");
+      const fabricPrompt = [
+        response.result.theme,
+        response.result.style,
+        `colors: ${response.result.colorPalette.slice(0, 3).join(", ")}`,
+        response.result.designElements.slice(0, 4).join(", "),
+      ].filter(Boolean).join(". ");
+      const [fabric, hero] = await Promise.all([
+        apiPost<{ imageUrl?: string }>("/ai/hero-image", { prompt: fabricPrompt.slice(0, 600), kind: "fabric" }),
+        apiPost<{ imageUrl?: string }>("/ai/hero-image", { prompt: usedPrompt }),
+      ]);
+
+      const fabricUrl = fabric.status === 200 ? fabric.data.imageUrl : undefined;
+      if (fabricUrl) {
+        // Cover every clothing zone edge-to-edge with the generated material.
+        const fabricZones = ["front", "back", "left_sleeve", "right_sleeve", "left_leg_front", "right_leg_front", "left_leg_back", "right_leg_back"];
+        for (const zone of fabricZones) {
+          addLayer({
+            name: "AI-stoff",
+            type: "imageLayer",
+            zone,
+            image: fabricUrl,
+            transform: { x: 0, y: 0, scale: 1.6, rotation: 0, opacity: 1 },
+          });
+        }
+      }
+
       if (hero.status === 200 && hero.data.imageUrl) {
-        outfitRef.current = { pantsBase: pantsColors.base, pantsAccent: pantsColors.accent, heroUrl: hero.data.imageUrl };
+        outfitRef.current = { pantsBase: pantsColors.base, pantsAccent: pantsColors.accent, heroUrl: hero.data.imageUrl, fabricUrl };
         addLayer({
           name: "AI-motiv",
           type: "imageLayer",
@@ -340,6 +365,7 @@ export default function Create() {
           transform: { x: 0, y: 0, scale: 0.95, rotation: 0, opacity: 1 },
         });
       } else {
+        if (fabricUrl) outfitRef.current = { pantsBase: pantsColors.base, pantsAccent: pantsColors.accent, fabricUrl };
         setAiError("Designet er klart, men selve motivet kunne ikke tegnes. Prøv «Lag skin» igjen.");
       }
     } catch (error) {
@@ -365,7 +391,7 @@ export default function Create() {
     const outfit = outfitRef.current;
     const pantsBase = outfit?.pantsBase ?? state.baseColor ?? "#1e293b";
     const pantsAccent = outfit?.pantsAccent ?? state.paintSwatch;
-    const pants = await renderPantsTexture({ base: pantsBase, accent: pantsAccent, motifUrl: outfit?.heroUrl });
+    const pants = await renderPantsTexture({ base: pantsBase, accent: pantsAccent, motifUrl: outfit?.heroUrl, fabricUrl: outfit?.fabricUrl });
     const tshirt = outfit?.heroUrl ? await renderTShirtTexture(outfit.heroUrl) : undefined;
     return { shirt, pants: pants || undefined, tshirt };
   };

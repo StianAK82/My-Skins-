@@ -20,3 +20,6 @@ must forbid backdrops/glows/shadows explicitly or the model paints them into the
 ## parseStrictJson is layered + tolerant of truncation
 `parseStrictJson` tries: direct parse → fenced ```json``` block → first-brace..last-brace slice → `closeTruncatedJson` repair (closes open strings/brackets) as a last resort. Repaired output still must pass `JSON.parse` and is then sanitised by `normalizeDesignPayload` + `aiValidationService.ensureDesign` (which fill defaults for every field), so a partial salvage is safe.
 **How to apply:** the budget fix is the real cure; the repair is a safety net. Don't rely on the repair for correctness — if you see the repair path firing often, the token budget is too low again.
+
+## Realistic look (July 2026)
+Users found procedural modules + one motif "just color changes". Fix: TWO parallel gpt-image-1 calls per skin — `kind:"fabric"` (opaque, full-bleed seamless material texture from theme/palette/designElements, applied edge-to-edge as imageLayer on all 8 shirt/leg zones, scale 1.6) + `kind:"motif"` (transparent chest logo). Motif prompt must tell the model NOT to draw the garment itself when the user names one (hoodie/genser) — otherwise it pastes a picture of a hoodie on the chest. Pants export reuses fabricUrl.

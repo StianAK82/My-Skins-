@@ -45,6 +45,7 @@ export async function renderPantsTexture(input: {
   base: string;
   accent: string;
   motifUrl?: string;
+  fabricUrl?: string;
 }): Promise<string> {
   const canvas = document.createElement("canvas");
   canvas.width = TEMPLATE_SIZE.width;
@@ -58,17 +59,31 @@ export async function renderPantsTexture(input: {
   const zones = TEMPLATE_ZONES.pants;
   const legs = [zones.left_leg_front, zones.right_leg_front, zones.left_leg_back, zones.right_leg_back];
 
-  // Accent stripe down the outer edge of each leg + waistband bar.
-  ctx.fillStyle = input.accent;
-  for (const leg of legs) {
-    if (!leg) continue;
-    const stripeW = 12;
-    const outerLeft = leg.key.startsWith("left") ? leg.left : leg.left + leg.width - stripeW;
-    ctx.globalAlpha = 0.9;
-    ctx.fillRect(outerLeft, leg.top, stripeW, leg.height);
-    ctx.globalAlpha = 0.5;
-    ctx.fillRect(leg.left, leg.top, leg.width, 8);
-    ctx.globalAlpha = 1;
+  // If we have an AI fabric texture, fill every zone with it so the pants match the shirt.
+  const fabricImg = input.fabricUrl ? await loadImage(input.fabricUrl) : null;
+  if (fabricImg) {
+    for (const zone of Object.values(zones)) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(zone.left, zone.top, zone.width, zone.height);
+      ctx.clip();
+      const size = Math.max(zone.width, zone.height);
+      ctx.drawImage(fabricImg, zone.left + zone.width / 2 - size / 2, zone.top + zone.height / 2 - size / 2, size, size);
+      ctx.restore();
+    }
+  } else {
+    // Accent stripe down the outer edge of each leg + waistband bar.
+    ctx.fillStyle = input.accent;
+    for (const leg of legs) {
+      if (!leg) continue;
+      const stripeW = 12;
+      const outerLeft = leg.key.startsWith("left") ? leg.left : leg.left + leg.width - stripeW;
+      ctx.globalAlpha = 0.9;
+      ctx.fillRect(outerLeft, leg.top, stripeW, leg.height);
+      ctx.globalAlpha = 0.5;
+      ctx.fillRect(leg.left, leg.top, leg.width, 8);
+      ctx.globalAlpha = 1;
+    }
   }
 
   // Small motif on the right leg front, if we have one.
