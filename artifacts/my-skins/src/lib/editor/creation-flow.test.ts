@@ -16,3 +16,12 @@ test("complete preview and all result actions stay in one flow", () => {
   assert.match(source, /shirtTextureUrl=.*pantsTextureUrl=/s);
   assert.match(source, /robloxItemCount/);
 });
+
+test("loading resets, duplicate submissions are guarded, and progress is visible", () => {
+  assert.match(source, /busyRef\.current/);
+  assert.match(source, /finally/);
+  assert.match(source, /setLoading\(false\)/);
+  for (const stage of ["Planning your skin", "Creating the top", "Creating the bottoms", "Building the preview"])
+    assert.match(source, new RegExp(stage));
+  assert.match(source, /Elapsed time:/);
+});

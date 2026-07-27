@@ -1,28 +1,14 @@
 import fs from "node:fs";
-import OpenAI, { toFile } from "openai";
+import { toFile } from "openai";
 import { Buffer } from "node:buffer";
-
-if (!process.env.AI_INTEGRATIONS_OPENAI_BASE_URL) {
-  throw new Error(
-    "AI_INTEGRATIONS_OPENAI_BASE_URL must be set. Did you forget to provision the OpenAI AI integration?",
-  );
-}
-
-if (!process.env.AI_INTEGRATIONS_OPENAI_API_KEY) {
-  throw new Error(
-    "AI_INTEGRATIONS_OPENAI_API_KEY must be set. Did you forget to provision the OpenAI AI integration?",
-  );
-}
-
-export const openai = new OpenAI({
-  apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
-  baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
-});
+import { assertOpenAiConfigured, openai } from "../client";
+export { openai } from "../client";
 
 export async function generateImageBuffer(
   prompt: string,
   size: "1024x1024" | "512x512" | "256x256" = "1024x1024"
 ): Promise<Buffer> {
+  assertOpenAiConfigured();
   const response = await openai.images.generate({
     model: "gpt-image-1",
     prompt,
@@ -37,6 +23,7 @@ export async function editImages(
   prompt: string,
   outputPath?: string
 ): Promise<Buffer> {
+  assertOpenAiConfigured();
   const images = await Promise.all(
     imageFiles.map((file) =>
       toFile(fs.createReadStream(file), file, {
@@ -65,7 +52,9 @@ export async function editImages(
 export async function editImageBuffers(
   inputs: Array<{ data: Buffer; filename: string }>,
   prompt: string,
+  signal?: AbortSignal,
 ): Promise<Buffer> {
+  assertOpenAiConfigured();
   const images = await Promise.all(inputs.map(({ data, filename }) =>
     toFile(data, filename, { type: "image/png" })
   ));
@@ -76,6 +65,8 @@ export async function editImageBuffers(
     size: "1536x1024",
     quality: "high",
     output_format: "png",
-  });
-  return Buffer.from(response.data?.[0]?.b64_json ?? "", "base64");
+  }, { signal });
+  const encoded = response.data?.[0]?.b64_json;
+  if (!encoded) throw Object.assign(new Error("Malformed image response"), { code: "AI_IMAGE_RESPONSE" });
+  return Buffer.from(encoded, "base64");
 }

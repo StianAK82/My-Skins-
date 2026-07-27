@@ -1,4 +1,4 @@
-import { openai } from "../client";
+import { assertOpenAiConfigured, openai } from "../client";
 
 export interface GarmentClassification {
   garmentType: string;
@@ -12,6 +12,7 @@ export interface GarmentClassification {
 
 /** Convert natural clothing language into a small, factual planning record. */
 export async function classifyGarmentDescription(description: string): Promise<GarmentClassification> {
+  assertOpenAiConfigured();
   const response = await openai.chat.completions.create({
     model: "gpt-4o-mini",
     temperature: 0,
