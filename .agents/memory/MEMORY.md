@@ -2,4 +2,5 @@
 - [my-skins DB schema push](my-skins-db-schema.md) — app uses its own DATABASE_URL (heliumdb), NOT the executeSql tool DB; empty schema = login 500s, fix with drizzle-kit push.
 - [Guest AI free-use gate](my-skins-guest-ai-gate.md) — REMOVED July 2026: gate deleted from /ai/generate because login UI is gone (gate 401 broke the product); AI is now free/unlimited for guests.
 - [my-skins Stripe per-upload payment](my-skins-stripe.md) — NO free uploads; 10 kr = 3 opplastinger; connector settings use `settings.secret` not `secret_key`; verify-on-return, no webhooks.
+- [Roblox OAuth direct upload](my-skins-roblox-oauth.md) — login works via official OAuth; upload rides a LEGACY endpoint (Open Cloud lacks classic clothing); customer needs ID-verified konto + 10 Robux/plagg; always falls back to downloads.
 - [AI design generation (gpt-5.2)](my-skins-ai-generation.md) — gpt-image-1 hero image makes prompts literal; token budget must be generous or JSON truncates (422).

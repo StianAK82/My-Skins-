@@ -123,6 +123,14 @@ function openRobloxWithFiles(files: OutfitFiles) {
   }
 }
 
+type RobloxMe = { loggedIn: boolean; configured?: boolean; name?: string; picture?: string };
+
+const DIRECT_ITEMS: Array<{ key: keyof OutfitFiles; type: string; name: string; label: string }> = [
+  { key: "shirt", type: "shirt", name: "My Skins overdel", label: "overdelen" },
+  { key: "pants", type: "pants", name: "My Skins bukse", label: "buksa" },
+  { key: "tshirt", type: "tshirt", name: "My Skins t-skjorte", label: "t-skjorta" },
+];
+
 const UPLOAD_DONE_MSG =
   "Antrekket er lastet ned som tre filer: overdel (Shirt), bukse (Pants) og t-skjorte-motiv. Roblox sin side er åpnet – last opp overdelen som «Shirt», buksa som «Pants» og motivet som «T-Shirt».";
 
@@ -137,6 +145,10 @@ export default function Create() {
   const [uploadBusy, setUploadBusy] = useState(false);
   const [skinStatus, setSkinStatus] = useState<SkinStatus | null>(null);
   const [imageRenderNonce, setImageRenderNonce] = useState(0);
+  const [robloxMe, setRobloxMe] = useState<RobloxMe | null>(null);
+  // Files the user has already paid a credit for – kept around so a blocked
+  // popup/download or a failed direct upload can always be retried for free.
+  const [readyFiles, setReadyFiles] = useState<OutfitFiles | null>(null);
   const outfitRef = useRef<{ pantsBase: string; pantsAccent: string; heroUrl?: string } | null>(null);
   const generateLockRef = useRef(false);
 
@@ -151,10 +163,57 @@ export default function Create() {
     }
   }, []);
 
+  const refreshRobloxMe = useCallback(async () => {
+    try {
+      setRobloxMe(await apiGet<RobloxMe>("/auth/roblox/me"));
+    } catch {
+      /* ignore – login is optional */
+    }
+  }, []);
+
+  // Upload the whole outfit straight to the logged-in Roblox account.
+  // Returns a status message; falls back to manual downloads if anything fails.
+  const directUpload = useCallback(async (files: OutfitFiles): Promise<{ msg: string; allOk: boolean }> => {
+    const uploaded: string[] = [];
+    const failed: string[] = [];
+    for (const item of DIRECT_ITEMS) {
+      const dataUrl = files[item.key];
+      if (!dataUrl) continue;
+      try {
+        const res = await apiPost<{ ok?: boolean; error?: string }>("/auth/roblox/upload", {
+          type: item.type,
+          name: item.name,
+          pngDataUrl: dataUrl,
+        });
+        if (res.status === 200 && res.data.ok) uploaded.push(item.label);
+        else failed.push(item.label);
+      } catch {
+        failed.push(item.label);
+      }
+    }
+    if (failed.length === 0) {
+      return { msg: `🎉 Ferdig! Antrekket (${uploaded.join(", ")}) er sendt rett til Roblox-kontoen din. Husk: Roblox tar 10 Robux per plagg.`, allOk: true };
+    }
+    // Something failed – give the user the manual route so nothing is lost.
+    openRobloxWithFiles(files);
+    const uploadedPart = uploaded.length > 0 ? `Sendt direkte: ${uploaded.join(", ")}. ` : "";
+    return {
+      msg: `${uploadedPart}Roblox godtok ikke direkte opplasting av ${failed.join(", ")} (dette kan kreve ID-verifisert konto og minst 10 Robux). ${UPLOAD_DONE_MSG}`,
+      allOk: false,
+    };
+  }, []);
+
   // On mount: load free-count status and finish any payment we returned from.
   useEffect(() => {
     void refreshStatus();
+    void refreshRobloxMe();
     const params = new URLSearchParams(window.location.search);
+    if (params.get("robloxLogin") === "failed") {
+      setUploadStatus("Roblox-innloggingen ble avbrutt. Prøv igjen, eller last ned filene manuelt.");
+      window.history.replaceState({}, "", window.location.pathname);
+    } else if (params.get("robloxLogin") === "ok") {
+      window.history.replaceState({}, "", window.location.pathname);
+    }
     const paidSession = params.get("paid");
     if (!paidSession) return;
     const cleanUrl = window.location.pathname;
@@ -166,9 +225,18 @@ export default function Create() {
         if (paid && pending) {
           const consume = await apiPost<{ ok?: boolean }>("/payments/consume-free");
           if (consume.status === 200 && consume.data.ok) {
-            openRobloxWithFiles(pending);
-            window.localStorage.removeItem(PENDING_SKIN_KEY);
-            setUploadStatus(`Betaling godkjent – du har fått 3 opplastinger! ${UPLOAD_DONE_MSG}`);
+            // Keep the files recoverable until delivery is confirmed.
+            setReadyFiles(pending);
+            const me = await apiGet<RobloxMe>("/auth/roblox/me").catch(() => null);
+            if (me?.loggedIn) {
+              setUploadStatus("Betaling godkjent! Sender antrekket til Roblox…");
+              const result = await directUpload(pending);
+              if (result.allOk) window.localStorage.removeItem(PENDING_SKIN_KEY);
+              setUploadStatus(`Betaling godkjent – du har fått 3 opplastinger! ${result.msg}`);
+            } else {
+              openRobloxWithFiles(pending);
+              setUploadStatus(`Betaling godkjent – du har fått 3 opplastinger! ${UPLOAD_DONE_MSG} Startet ikke nedlastingen? Bruk knappen «Last ned filene på nytt» under.`);
+            }
           } else {
             setUploadStatus("Betaling godkjent, men opplastingen kunne ikke brukes. Trykk «Last opp til Roblox» igjen.");
           }
@@ -184,7 +252,7 @@ export default function Create() {
         void refreshStatus();
       }
     })();
-  }, [refreshStatus]);
+  }, [refreshStatus, refreshRobloxMe, directUpload]);
 
   const handleOverlayImageReady = useCallback(() => {
     setImageRenderNonce((current) => current + 1);
@@ -312,8 +380,14 @@ export default function Create() {
 
       const consume = await apiPost<{ ok?: boolean; needsPayment?: boolean }>("/payments/consume-free");
       if (consume.status === 200 && consume.data.ok) {
-        openRobloxWithFiles(files);
-        setUploadStatus(UPLOAD_DONE_MSG);
+        setReadyFiles(files);
+        if (robloxMe?.loggedIn) {
+          setUploadStatus("Sender antrekket rett til Roblox-kontoen din…");
+          setUploadStatus((await directUpload(files)).msg);
+        } else {
+          openRobloxWithFiles(files);
+          setUploadStatus(UPLOAD_DONE_MSG);
+        }
         await refreshStatus();
         return;
       }
@@ -410,6 +484,32 @@ export default function Create() {
               {uploadBusy ? <Loader2 className="mr-2 h-6 w-6 animate-spin" /> : <Upload className="mr-2 h-6 w-6" />}
               {uploadBusy ? "Jobber…" : "🎁 Send til Roblox!"}
             </Button>
+            {robloxMe?.configured ? (
+              robloxMe.loggedIn ? (
+                <p className="text-sm text-slate-300">
+                  🎮 Logget inn som <span className="font-semibold">{robloxMe.name}</span> – antrekket sendes rett til kontoen din!{" "}
+                  <button
+                    type="button"
+                    className="underline text-slate-400 hover:text-slate-200"
+                    onClick={() => {
+                      void apiPost("/auth/roblox/logout").then(() => setRobloxMe({ loggedIn: false, configured: true }));
+                    }}
+                  >
+                    Logg ut
+                  </button>
+                </p>
+              ) : (
+                <button
+                  type="button"
+                  className="rounded-xl border-2 border-slate-600 bg-slate-900 px-5 py-2 text-sm font-semibold text-slate-200 hover:border-emerald-400"
+                  onClick={() => {
+                    window.location.href = `${API_BASE}/auth/roblox/login?returnTo=${encodeURIComponent(window.location.pathname)}`;
+                  }}
+                >
+                  🎮 Logg inn med Roblox (send skins rett til kontoen din)
+                </button>
+              )
+            ) : null}
             {skinStatus ? (
               <p className="text-sm text-slate-400">
                 {skinStatus.paidCredits > 0
@@ -418,6 +518,15 @@ export default function Create() {
               </p>
             ) : null}
             {uploadStatus ? <p className="text-sm text-emerald-400 text-center max-w-lg">{uploadStatus}</p> : null}
+            {readyFiles ? (
+              <button
+                type="button"
+                className="rounded-xl border border-slate-700 bg-slate-900 px-4 py-2 text-sm text-slate-300 hover:border-emerald-400"
+                onClick={() => openRobloxWithFiles(readyFiles)}
+              >
+                📥 Last ned filene på nytt (gratis – du har allerede betalt)
+              </button>
+            ) : null}
             {!hasDesign && !aiLoading ? <p className="text-sm text-slate-500">Trykk på et bilde øverst for å lage skinnet ditt! 👆</p> : null}
           </div>
 
