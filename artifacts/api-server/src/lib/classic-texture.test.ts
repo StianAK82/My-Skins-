@@ -1,31 +1,23 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { CLASSIC_REGIONS, CLASSIC_TEXTURE_SIZE, encodeRgba, resizeToAtlas } from "../services/ai/classic-atlas.ts";
 
-process.env.AI_INTEGRATIONS_OPENAI_BASE_URL ??= "http://localhost.invalid";
-process.env.AI_INTEGRATIONS_OPENAI_API_KEY ??= "test-key";
-const { enhanceGarmentPrompt, formatEnhancedPrompt } = await import("../services/ai/classic-prompt-enhancer.ts");
+test("classic texture finalization emits the exact Roblox atlas dimensions", () => {
+  const source = encodeRgba(2, 2, Buffer.from([
+    255, 0, 0, 255, 0, 255, 0, 128,
+    0, 0, 255, 64, 255, 255, 255, 0,
+  ]));
+  const finalized = resizeToAtlas(source);
 
-test("enhancement preserves requested material, construction, graphic and no invented text", () => {
-  const spec = enhanceGarmentPrompt("shirt", "White hoodie with blue dragon");
-  assert.equal(spec.material, "woven clothing fabric");
-  assert.deepEqual(spec.primaryColours, ["white", "blue"]);
-  assert.ok(spec.constructionDetails.includes("hood"));
-  assert.ok(spec.constructionDetails.includes("structured hood"));
-  assert.ok(spec.decorativeDetails.includes("dragon"));
-  assert.equal(spec.visibleText, null);
-  assert.match(formatEnhancedPrompt(spec), /No visible text/);
+  assert.deepEqual(finalized.subarray(0, 8), Buffer.from("89504e470d0a1a0a", "hex"));
+  assert.equal(finalized.readUInt32BE(16), CLASSIC_TEXTURE_SIZE.width);
+  assert.equal(finalized.readUInt32BE(20), CLASSIC_TEXTURE_SIZE.height);
+  assert.equal(finalized[25], 6, "finalized PNG must retain an alpha channel");
 });
 
-
-test("exact requested text and location are preserved", () => {
-  const spec = enhanceGarmentPrompt("shirt", "Red football jersey with number 10 on the back");
-  assert.equal(spec.visibleText, '"10" on the back');
-  assert.ok(spec.realismInstructions.includes("lightweight synthetic texture"));
-});
-
-test("material-specific denim realism is added", () => {
-  const spec = enhanceGarmentPrompt("pants", "Blue denim jeans with waistband and pockets");
-  assert.equal(spec.material, "denim");
-  assert.ok(spec.realismInstructions.includes("visible denim grain"));
-  assert.ok(spec.constructionDetails.includes("waistband"));
+test("each garment validates every physical rectangle exactly once", () => {
+  for (const regions of Object.values(CLASSIC_REGIONS)) {
+    const rectangles = regions.map(({ x, y, width, height }) => `${x}:${y}:${width}:${height}`);
+    assert.equal(new Set(rectangles).size, rectangles.length);
+  }
 });

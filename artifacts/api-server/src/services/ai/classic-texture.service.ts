@@ -1,60 +1,35 @@
 import { createHash } from "node:crypto";
 import { readdir, readFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { deflateSync, inflateSync } from "node:zlib";
 import { editImageBuffers } from "@workspace/integrations-openai-ai-server";
+import { enhanceGarmentPrompt, formatEnhancedPrompt } from "./classic-prompt-enhancer";
 
-export type ClassicGarment = "shirt" | "pants";
-export const CLASSIC_TEXTURE_SIZE = { width: 585, height: 559 } as const;
-
-type Region = { name: string; x: number; y: number; width: number; height: number };
-import { enhanceGarmentPrompt, formatEnhancedPrompt, type EnhancedGarmentSpecification } from "./classic-prompt-enhancer";
-
-export const CLASSIC_REGIONS: Record<ClassicGarment, Region[]> = {
-  shirt: [
-    { name: "left sleeve", x: 44, y: 74, width: 128, height: 172 },
-    { name: "torso front", x: 196, y: 74, width: 128, height: 172 },
-    { name: "torso back", x: 338, y: 74, width: 128, height: 172 },
-    { name: "right sleeve", x: 441, y: 74, width: 128, height: 172 },
-  ],
-  pants: [
-    { name: "left hip", x: 44, y: 74, width: 128, height: 172 },
-    { name: "waist front", x: 196, y: 74, width: 128, height: 172 },
-    { name: "waist back", x: 338, y: 74, width: 128, height: 172 },
-    { name: "right hip", x: 441, y: 74, width: 128, height: 172 },
-    { name: "left leg", x: 44, y: 288, width: 128, height: 192 },
-    { name: "right leg front", x: 196, y: 288, width: 128, height: 192 },
-    { name: "left leg back", x: 338, y: 288, width: 128, height: 192 },
-    { name: "right leg back", x: 441, y: 288, width: 128, height: 192 },
-  ],
-};
-
-
-function crc32(input: Buffer): number { let crc = 0xffffffff; for (const byte of input) { crc ^= byte; for (let bit = 0; bit < 8; bit += 1) crc = (crc >>> 1) ^ (0xedb88320 & -(crc & 1)); } return (crc ^ 0xffffffff) >>> 0; }
-function chunk(type: string, data: Buffer): Buffer { const name = Buffer.from(type); const length = Buffer.alloc(4); length.writeUInt32BE(data.length); const crc = Buffer.alloc(4); crc.writeUInt32BE(crc32(Buffer.concat([name, data]))); return Buffer.concat([length, name, data, crc]); }
-function encodeRgba(width: number, height: number, rgba: Buffer): Buffer { const rows = Buffer.alloc((width * 4 + 1) * height); for (let y = 0; y < height; y++) rgba.copy(rows, y * (width * 4 + 1) + 1, y * width * 4, (y + 1) * width * 4); const ihdr = Buffer.alloc(13); ihdr.writeUInt32BE(width, 0); ihdr.writeUInt32BE(height, 4); ihdr[8] = 8; ihdr[9] = 6; return Buffer.concat([Buffer.from("89504e470d0a1a0a", "hex"), chunk("IHDR", ihdr), chunk("IDAT", deflateSync(rows, { level: 9 })), chunk("IEND", Buffer.alloc(0))]); }
-
-function decodePng(png: Buffer): { width: number; height: number; rgba: Buffer } {
-  if (!png.subarray(0, 8).equals(Buffer.from("89504e470d0a1a0a", "hex"))) throw new Error("image does not decode as PNG");
-  let offset = 8, width = 0, height = 0, colorType = 0, bitDepth = 0; const idat: Buffer[] = [];
-  while (offset + 12 <= png.length) { const length = png.readUInt32BE(offset); const type = png.toString("ascii", offset + 4, offset + 8); const data = png.subarray(offset + 8, offset + 8 + length); if (type === "IHDR") { width = data.readUInt32BE(0); height = data.readUInt32BE(4); bitDepth = data[8]; colorType = data[9]; } if (type === "IDAT") idat.push(data); offset += 12 + length; }
-  if (!width || !height || bitDepth !== 8 || ![2, 6].includes(colorType)) throw new Error("unsupported PNG encoding");
-  const channels = colorType === 6 ? 4 : 3, stride = width * channels, raw = inflateSync(Buffer.concat(idat)), recon = Buffer.alloc(stride * height);
-  for (let y = 0; y < height; y++) { const filter = raw[y * (stride + 1)]; for (let x = 0; x < stride; x++) { const value = raw[y * (stride + 1) + 1 + x], left = x >= channels ? recon[y * stride + x - channels] : 0, up = y ? recon[(y - 1) * stride + x] : 0, ul = y && x >= channels ? recon[(y - 1) * stride + x - channels] : 0; const p = left + up - ul, pa = Math.abs(p-left), pb = Math.abs(p-up), pc = Math.abs(p-ul); const predictor = pa <= pb && pa <= pc ? left : pb <= pc ? up : ul; recon[y * stride + x] = (value + (filter === 1 ? left : filter === 2 ? up : filter === 3 ? Math.floor((left+up)/2) : filter === 4 ? predictor : 0)) & 255; } }
-  const rgba = Buffer.alloc(width * height * 4); for (let i = 0, j = 0; i < recon.length; i += channels, j += 4) { rgba[j]=recon[i]; rgba[j+1]=recon[i+1]; rgba[j+2]=recon[i+2]; rgba[j+3]=channels===4?recon[i+3]:255; } return { width, height, rgba };
-}
-
-function resizeToAtlas(png: Buffer) { const decoded = decodePng(png); const out = Buffer.alloc(CLASSIC_TEXTURE_SIZE.width * CLASSIC_TEXTURE_SIZE.height * 4); for (let y=0;y<CLASSIC_TEXTURE_SIZE.height;y++) for(let x=0;x<CLASSIC_TEXTURE_SIZE.width;x++){ const sx=Math.min(decoded.width-1,Math.floor(x*decoded.width/CLASSIC_TEXTURE_SIZE.width)), sy=Math.min(decoded.height-1,Math.floor(y*decoded.height/CLASSIC_TEXTURE_SIZE.height)); decoded.rgba.copy(out,(y*CLASSIC_TEXTURE_SIZE.width+x)*4,(sy*decoded.width+sx)*4,(sy*decoded.width+sx)*4+4); } return encodeRgba(CLASSIC_TEXTURE_SIZE.width,CLASSIC_TEXTURE_SIZE.height,out); }
+export { CLASSIC_REGIONS, CLASSIC_TEXTURE_SIZE, resizeToAtlas } from "./classic-atlas";
+import { CLASSIC_REGIONS, CLASSIC_TEXTURE_SIZE, decodePng, encodeRgba, resizeToAtlas, type ClassicGarment } from "./classic-atlas";
+export type { ClassicGarment } from "./classic-atlas";
 
 function referencePng(type: ClassicGarment, guide: boolean): Buffer { const {width,height}=CLASSIC_TEXTURE_SIZE, pixels=Buffer.alloc(width*height*4); for(let y=0;y<height;y++)for(let x=0;x<width;x++){const region=CLASSIC_REGIONS[type].find(r=>x>=r.x&&x<r.x+r.width&&y>=r.y&&y<r.y+r.height);if(!region)continue;const i=CLASSIC_REGIONS[type].indexOf(region),o=(y*width+x)*4,colors=[[67,97,238],[20,184,166],[168,85,247],[245,158,11]],c=colors[i%4];pixels[o]=guide?c[0]:238;pixels[o+1]=guide?c[1]:238;pixels[o+2]=guide?c[2]:238;pixels[o+3]=guide?72:255;} return encodeRgba(width,height,pixels); }
 
 export function buildClassicTexturePrompt(type: ClassicGarment, description: string, enhanced = enhanceGarmentPrompt(type, description), correction?: string, hasReferences=false): string {
-  return ["Edit Image 1 using Image 2 only as the UV region guide. Output one complete flat 585 x 559 Roblox Classic clothing UV texture.", `ORIGINAL USER DESCRIPTION (do not replace it): ${description}`, `ENHANCED GARMENT SPECIFICATION: ${formatEnhancedPrompt(enhanced)}`, `GARMENT TYPE: Classic ${type}. REQUIRED UV REGIONS: ${CLASSIC_REGIONS[type].map(r=>r.name).join(", ")}. Fill each distinct region in its exact atlas position and orientation.`,
-    "REALISTIC CLOTHING TEXTURE: render appropriate fabric weave, denim grain, knit texture or leather grain; believable stitching, seams, folds, wrinkles, collars, cuffs, waistbands, pockets, zippers, buttons, panel construction, subtle highlights and structural shadows. Continue construction coherently between adjacent surfaces.",
-    "NOT ALLOWED: human body, mannequin, floating garment, fashion photograph, catalogue image, 3D product render, repeated front image on the back, identical copied regions, copied squares, placeholders, guide colours, labels, template text, watermark, or unrelated background. Preserve transparency outside garment islands.",
-    enhanced.visibleText ? `TEXT REQUIREMENT: render only ${enhanced.visibleText}, preserving exact spelling and placement. Add no other words or numbers.` : "TEXT REQUIREMENT: no visible letters, words, numbers, logos, or brand names anywhere.",
-    hasReferences ? "Use the additional images only as references for visual quality, fabric detail and believable garment construction. Do not copy their colours, graphics, text, logos or exact design." : "",
-    correction ? `CORRECTION AFTER FAILED VALIDATION: ${correction} Regenerate genuine garment artwork; do not return copied squares or placeholders.` : "", "Return only the PNG atlas."].filter(Boolean).join("\n");
+  const panelContinuity = type === "shirt"
+    ? "The torso front may contain the requested zipper, buttons, placket, chest pockets, graphic or hood opening. The torso back must instead show credible rear construction: rear yoke or panel seams, shoulder continuation, rear folds and the back of the hood where applicable. Never mirror or copy the torso front. Build left and right arms as separate physical panels; continue shoulder, underarm, cuff, stripe and fabric details around each sleeve without cloning one sleeve onto the other."
+    : "The waist front may contain the requested fly, closure, curved pockets, pleats or drawcord construction. The waist back must instead show credible rear construction: yoke or seat shaping, rear pockets, waistband continuation and rear folds. Never mirror or copy the waist front. Continue side seams, inseams, pocket edges, knee panels, fabric grain and wear naturally from hips through the distinct front and rear leg panels without cloning legs.";
+  return [
+    "ROLE AND OUTPUT: You are a professional game-clothing texture artist creating one production-ready Roblox Classic UV texture atlas. You are creating a UV texture atlas for a game character. You are NOT creating an illustration. You are NOT creating concept art. You are NOT creating a clothing advertisement. You are painting directly onto the supplied UV layout. Return only one flat transparent PNG at the supplied atlas proportions; never show the atlas as an object or scene.",
+    `SOURCE PRIORITY: Preserve the user's design exactly: ${description}`,
+    `CONSTRUCTION SPECIFICATION:\n${formatEnhancedPrompt(enhanced)}`,
+    `UV PAINTING CONTRACT: Image 1 is the blank editable atlas. Image 2 is only a positional region guide and must not be visible in the result. Paint every ${type} island completely in place. Required physical panels: ${CLASSIC_REGIONS[type].map((region) => region.name).join(", ")}. Each island is a different physical garment panel that wraps around a 3D avatar. Respect its position, orientation and role. Keep every pixel outside valid clothing islands transparent. Do not move, crop, merge, rotate, label or redraw the islands.`,
+    `PANEL DIFFERENTIATION AND CONTINUITY: ${panelContinuity}`,
+    "TAILORING STANDARD: Construct the garment rather than depicting it. Resolve fabric grain at believable scale; shaped panels; finished openings; collars, hoods, cuffs and waistbands with thickness; functional pockets and closures; seam allowances implied by precise topstitching; double stitching or flatlock stitching where appropriate; folds caused by gravity, drape, compression and fabric tension; and subtle structural shading contained inside the garment. Align seams and patterns wherever adjacent UV panels meet. Construction must remain coherent from front to side to back.",
+    "COLOUR AND MATERIAL DEPTH: Do not use flat colour fills. Within the requested palette, add restrained tonal variation, weave or grain, natural material highlights, contact shading at seams, clean wear patterns, stitch contrast and slight edge wear appropriate to the specified fabric. Keep the garment clean. Material response must control fold shape and highlight width: never substitute generic airbrushed shading, plastic shine or photographic lighting.",
+    enhanced.decorativeDetails.length || enhanced.visibleText ? "GRAPHICS AND EMBROIDERY: Render requested artwork as physically printed ink, woven applique or embroidery attached to the fabric surface. It must follow fabric grain, folds, perspective and panel orientation; respect seams and openings; remain correctly scaled; and never float, look pasted on, stretch across unrelated islands or cover construction incorrectly." : "SURFACE ARTWORK: Add no unrequested graphics, symbols, logos, lettering or numbers.",
+    enhanced.visibleText ? `TEXT: Render only ${enhanced.visibleText}, with exact spelling and placement. Add no other letters, words, numbers or logos.` : "TEXT: No visible letters, words, numbers, logos or brand marks anywhere.",
+    "ABSOLUTE FAILURE CONDITIONS: Do not include a person, human, body, avatar, character, fashion model, mannequin, hanger, clothing photograph, catalogue image, product photo, studio lighting, isolated garment, floating clothing, 3D render, real-world photograph, illustration, concept art, background, wall, table, floor, reflection, cast shadow outside the garment, opaque pixels outside UV islands, watermark, signature, caption, template marking, label, guide colour, guide outline, copied region, repeated motif caused by generation, symmetrical duplication, identical sleeves, identical legs, or identical front and back. Any one of these makes the result invalid.",
+    hasReferences ? "QUALITY REFERENCES: Use additional project images only to understand professional fabric rendering, tailoring detail and construction density. Never copy their design, palette, graphics, text, logos, layout or garment identity." : "",
+    correction ? `MANDATORY CORRECTION FROM THE PREVIOUS FAILED ATTEMPT: ${correction}. Repaint the affected physical panels with genuine, coherent garment construction rather than concealing the defect.` : "",
+    "INTERNAL PRE-FLIGHT INSPECTION: Before returning, silently inspect the complete atlas. Ask: Did I create any photograph, scene, person, avatar, mannequin, hanger, floating garment or 3D object? Is every required UV island fully painted? Are transparency and island positions preserved? Did I copy the front onto the back, duplicate sleeves or legs, reverse panel roles, leave flat or blank faces, break seam continuity, paste graphics over construction, misspell requested text, or leave guide colours or markings? If any answer indicates failure, correct and regenerate internally before returning.",
+    "FINAL RESPONSE: Return only the completed PNG UV atlas. No explanation, mockup, preview, border or alternate version.",
+  ].filter(Boolean).join("\n\n");
 }
 
 export function validateClassicTexture(type: ClassicGarment, png: Buffer, blank=referencePng(type,false)): string[] { const failures:string[]=[]; let image; try { image=decodePng(png); } catch { return ["image must decode successfully as a PNG"]; } if(image.width!==585||image.height!==559) failures.push("output dimensions must be exactly 585 x 559"); if(png.equals(blank)) failures.push("output is byte-identical to the blank template"); const colors=new Map<string,number>(); for(let i=0;i<image.rgba.length;i+=4){if(image.rgba[i+3]>16){const key=`${image.rgba[i]>>4},${image.rgba[i+1]>>4},${image.rgba[i+2]>>4}`;colors.set(key,(colors.get(key)??0)+1);}} if(Math.max(0,...colors.values())>image.width*image.height*.9) failures.push("output is almost entirely one flat colour"); const guide=[[67,97,238],[20,184,166],[168,85,247],[245,158,11]]; let guidePixels=0; for(const r of CLASSIC_REGIONS[type]){let covered=0, varied=new Set<string>();for(let y=r.y;y<r.y+r.height;y+=3)for(let x=r.x;x<r.x+r.width;x+=3){const o=(y*image.width+x)*4;if(image.rgba[o+3]>32)covered++;varied.add(`${image.rgba[o]>>4},${image.rgba[o+1]>>4},${image.rgba[o+2]>>4}`);if(guide.some(c=>Math.abs(image.rgba[o]-c[0])<8&&Math.abs(image.rgba[o+1]-c[1])<8&&Math.abs(image.rgba[o+2]-c[2])<8))guidePixels++;} const samples=Math.ceil(r.width/3)*Math.ceil(r.height/3);if(covered/samples<.55)failures.push(`${r.name} has insufficient non-transparent coverage`);if(varied.size<3)failures.push(`${r.name} appears blank or flat`);} if(guidePixels>250)failures.push("coloured region-guide pixels remain visible"); return failures; }
