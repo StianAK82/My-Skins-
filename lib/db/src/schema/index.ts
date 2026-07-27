@@ -4,6 +4,7 @@ export * from "./projects";
 export * from "./ai_generations";
 export * from "./ai_generation_runs";
 export * from "./ai_generation_run_events";
+export * from "./ai_design_feedback";
 export * from "./exports";
 export * from "./export_jobs";
 export * from "./export_artifacts";
