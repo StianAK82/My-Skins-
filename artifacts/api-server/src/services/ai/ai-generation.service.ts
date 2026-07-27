@@ -292,9 +292,6 @@ export class AiGenerationService {
     if (intent.includesAvatarLook && !avatarSlotPlan.some((slot) => slot.slot === "hair")) {
       avatarSlotPlan.push({ slot: "hair", assetHint: intent.styleVibes.includes("anime") ? "hair_anime_layered" : "hair_wavy_midnight", role: "support", rationale: "Hair establishes style silhouette", color: colorPalette[1] });
     }
-    if (intent.includesEffects && !avatarSlotPlan.some((slot) => slot.slot === "aura")) {
-      avatarSlotPlan.push({ slot: "aura", assetHint: "aura_energy_ring", role: "decorative", rationale: "Requested VFX or glow effects", color: colorPalette[0] });
-    }
 
     return {
       title: typeof source.title === "string" && source.title.trim() ? source.title.trim() : "Generated Roblox Design",

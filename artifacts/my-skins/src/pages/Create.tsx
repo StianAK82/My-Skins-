@@ -327,46 +327,53 @@ export default function Create() {
         });
       }
 
-      // Then draw the real artwork: a fabric texture for the whole outfit + the motif on the chest.
-      setAiPhase("Tegner stoffet og motivet du beskrev… (kan ta opptil ett minutt)");
-      const fabricPrompt = [
-        response.result.theme,
-        response.result.style,
-        `colors: ${response.result.colorPalette.slice(0, 3).join(", ")}`,
-        response.result.designElements.slice(0, 4).join(", "),
-      ].filter(Boolean).join(". ");
-      const [fabric, hero] = await Promise.all([
-        apiPost<{ imageUrl?: string }>("/ai/hero-image", { prompt: fabricPrompt.slice(0, 600), kind: "fabric" }),
+      // Then draw the real clothing: one texture for the top garment, one for the bottom, plus the motif.
+      setAiPhase("Tegner klærne du beskrev… (kan ta opptil ett minutt)");
+      const [top, bottom, hero] = await Promise.all([
+        apiPost<{ imageUrl?: string }>("/ai/hero-image", { prompt: usedPrompt.slice(0, 600), kind: "garment-top" }),
+        apiPost<{ imageUrl?: string }>("/ai/hero-image", { prompt: usedPrompt.slice(0, 600), kind: "garment-bottom" }),
         apiPost<{ imageUrl?: string }>("/ai/hero-image", { prompt: usedPrompt }),
       ]);
 
-      const fabricUrl = fabric.status === 200 ? fabric.data.imageUrl : undefined;
-      if (fabricUrl) {
-        // Cover every clothing zone edge-to-edge with the generated material.
-        const fabricZones = ["front", "back", "left_sleeve", "right_sleeve", "left_leg_front", "right_leg_front", "left_leg_back", "right_leg_back"];
-        for (const zone of fabricZones) {
+      const topUrl = top.status === 200 ? top.data.imageUrl : undefined;
+      const bottomUrl = bottom.status === 200 ? bottom.data.imageUrl : undefined;
+      if (topUrl) {
+        // The top garment covers chest, back and both sleeves edge-to-edge.
+        for (const zone of ["front", "back", "left_sleeve", "right_sleeve"]) {
           addLayer({
-            name: "AI-stoff",
+            name: "AI-overdel",
             type: "imageLayer",
             zone,
-            image: fabricUrl,
+            image: topUrl,
             transform: { x: 0, y: 0, scale: 1.6, rotation: 0, opacity: 1 },
+          });
+        }
+      }
+      if (bottomUrl) {
+        // The bottom garment covers all four leg zones edge-to-edge.
+        for (const zone of ["left_leg_front", "right_leg_front", "left_leg_back", "right_leg_back"]) {
+          addLayer({
+            name: "AI-bukse",
+            type: "imageLayer",
+            zone,
+            image: bottomUrl,
+            transform: { x: 0, y: 0, scale: 2.4, rotation: 0, opacity: 1 },
           });
         }
       }
 
       if (hero.status === 200 && hero.data.imageUrl) {
-        outfitRef.current = { pantsBase: pantsColors.base, pantsAccent: pantsColors.accent, heroUrl: hero.data.imageUrl, fabricUrl };
+        outfitRef.current = { pantsBase: pantsColors.base, pantsAccent: pantsColors.accent, heroUrl: hero.data.imageUrl, fabricUrl: bottomUrl };
         addLayer({
           name: "AI-motiv",
           type: "imageLayer",
           zone: "front",
           image: hero.data.imageUrl,
-          transform: { x: 0, y: 0, scale: 0.95, rotation: 0, opacity: 1 },
+          transform: { x: 0, y: -6, scale: 0.6, rotation: 0, opacity: 1 },
         });
       } else {
-        if (fabricUrl) outfitRef.current = { pantsBase: pantsColors.base, pantsAccent: pantsColors.accent, fabricUrl };
-        setAiError("Designet er klart, men selve motivet kunne ikke tegnes. Prøv «Lag skin» igjen.");
+        outfitRef.current = { pantsBase: pantsColors.base, pantsAccent: pantsColors.accent, fabricUrl: bottomUrl };
+        if (!topUrl && !bottomUrl) setAiError("Designet er klart, men selve motivet kunne ikke tegnes. Prøv «Lag skin» igjen.");
       }
     } catch (error) {
       const status = (error as { status?: number })?.status;

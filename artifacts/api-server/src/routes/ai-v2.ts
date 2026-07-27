@@ -54,7 +54,7 @@ router.post("/ai/generate", async (req, res): Promise<void> => {
 
 const heroImageRequestSchema = z.object({
   prompt: z.string().min(1).max(600),
-  kind: z.enum(["motif", "fabric"]).optional().default("motif"),
+  kind: z.enum(["motif", "fabric", "garment-top", "garment-bottom"]).optional().default("motif"),
 });
 
 // Generates the actual artwork described in the prompt (gpt-image-1, transparent PNG).
@@ -66,8 +66,22 @@ router.post("/ai/hero-image", async (req, res): Promise<void> => {
   }
 
   try {
-    const isFabric = parsed.data.kind === "fabric";
-    const imagePrompt = isFabric
+    const kind = parsed.data.kind;
+    const isFabric = kind === "fabric";
+    const isGarment = kind === "garment-top" || kind === "garment-bottom";
+    const garmentPart = kind === "garment-top"
+      ? "the UPPER-BODY garment (shirt, hoodie, jacket, sweater — whatever upper-body clothing the description mentions or implies)"
+      : "the LOWER-BODY garment (trousers, jeans, skirt, shorts — whatever lower-body clothing the description mentions or implies)";
+    const imagePrompt = isGarment
+      ? [
+          `Photorealistic flat clothing texture: the front cloth panel of ${garmentPart}.`,
+          `The outfit described by the user: ${parsed.data.prompt}.`,
+          "The fabric panel must fill the ENTIRE square canvas edge-to-edge, viewed straight on, like a texture map for a video game character.",
+          "Include the realistic details real clothes have: fabric weave/denim grain, seams, stitching, pockets, zippers, buttons, drawstrings, subtle natural wrinkles and soft shading.",
+          "Do NOT draw a person, mannequin, hanger, background, or the garment's outline/silhouette — only the flat cloth surface with its details, edge-to-edge.",
+          "Even lighting, no vignette, no border, no text, no watermark.",
+        ].join(" ")
+      : isFabric
       ? [
           "Seamless square fabric/material texture for video-game clothing.",
           `The material described: ${parsed.data.prompt}.`,
@@ -92,7 +106,7 @@ router.post("/ai/hero-image", async (req, res): Promise<void> => {
       model: "gpt-image-1",
       prompt: imagePrompt,
       size: "1024x1024",
-      background: isFabric ? "opaque" : "transparent",
+      background: isFabric || isGarment ? "opaque" : "transparent",
       quality: "medium",
     });
 
