@@ -21,3 +21,16 @@ test("each garment validates every physical rectangle exactly once", () => {
     assert.equal(new Set(rectangles).size, rectangles.length);
   }
 });
+
+test("canonical shirt map contains every torso and arm face inside 585x559", () => {
+  const expected = ["torso_front", "torso_back", "torso_left", "torso_right", "torso_top", "torso_bottom"];
+  for (const limb of ["left_arm", "right_arm"])
+    for (const face of ["front", "back", "left", "right", "top", "bottom"])
+      expected.push(`${limb}_${face}`);
+  assert.deepEqual(new Set(CLASSIC_REGIONS.shirt.map((zone) => zone.name)), new Set(expected));
+  for (const zone of CLASSIC_REGIONS.shirt) {
+    assert.ok(zone.x >= 0 && zone.y >= 0 && zone.width > 0 && zone.height > 0);
+    assert.ok(zone.x + zone.width <= CLASSIC_TEXTURE_SIZE.width);
+    assert.ok(zone.y + zone.height <= CLASSIC_TEXTURE_SIZE.height);
+  }
+});

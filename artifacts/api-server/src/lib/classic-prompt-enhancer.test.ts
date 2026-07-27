@@ -5,6 +5,19 @@ import {
   formatEnhancedPrompt,
 } from "../services/ai/classic-prompt-enhancer.ts";
 
+test("English and Norwegian white hoodie requests receive the complete deterministic fallback blueprint", () => {
+  for (const prompt of ["make a white hoodie", "lag en hvit hettegenser"]) {
+    const blueprint = enhanceGarmentPrompt("shirt", prompt);
+    assert.equal(blueprint.garmentType, "hoodie");
+    assert.equal(blueprint.material, "heavyweight cotton");
+    assert.ok(blueprint.front.some((part) => /kangaroo pocket/.test(part)));
+    assert.ok(blueprint.front.some((part) => /drawstrings/.test(part)));
+    assert.ok(blueprint.back.some((part) => /centre-back hood seam/.test(part)));
+    assert.ok(blueprint.sleeves.some((part) => /rib-knit cuffs/.test(part)));
+    assert.notDeepEqual(blueprint.front, blueprint.back);
+  }
+});
+
 test("semantic classification produces a panel-aware garment blueprint", () => {
   const blueprint = enhanceGarmentPrompt(
     "shirt",
