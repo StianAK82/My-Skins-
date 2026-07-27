@@ -11,6 +11,7 @@ import { generateClassicTexture } from "../services/ai/classic-texture.service";
 import { DESIGN_ISSUES } from "../services/ai/design-memory";
 import { recordDesignFeedback } from "../services/ai/design-memory-feedback.service";
 import { generateCompleteOutfit } from "../services/ai/complete-outfit.service";
+import { AiGenerationError } from "../services/ai/ai-errors";
 
 const router: IRouter = Router();
 
@@ -84,8 +85,10 @@ router.post("/ai/complete-outfit", async (req, res): Promise<void> => {
   try {
     res.json(await generateCompleteOutfit(parsed.data.prompt));
   } catch (err) {
-    req.log.error({ err }, "ai.v2.complete_outfit.failed");
-    res.status(502).json({ error: "AI could not create the complete skin" });
+    const failure = err instanceof AiGenerationError ? err : new AiGenerationError("AI generation failed", "AI_GENERATION_FAILED", "complete_outfit", true, 502);
+    req.log.error({ errorName: failure.name, status: failure.status, code: failure.code, stage: failure.stage }, "ai.v2.complete_outfit.failed");
+    const status = failure.code === "AI_RATE_LIMIT" ? 429 : failure.code === "AI_TIMEOUT" ? 504 : 502;
+    res.status(status).json({ error: "AI generation could not finish", code: failure.code, stage: failure.stage, retryable: failure.retryable });
   }
 });
 

@@ -1,10 +1,10 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Download, Loader2, RotateCw, Save, Sparkles, Upload } from "lucide-react";
 import { AvatarPreview } from "@/components/editor/AvatarPreview";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { requestCompleteOutfit, type OutfitApiError } from "@/lib/complete-outfit-api";
 
-const API_BASE = `${import.meta.env.BASE_URL.replace(/\/$/, "")}/api`;
 type Blueprint = { theme: string; completeLook: string; top: { type: string }; bottom: { type: string }; footwear: { type: string } };
 type OutfitResult = {
   preview: { shirtTexture: string; pantsTexture: string };
@@ -26,18 +26,52 @@ export default function Create() {
   const [view, setView] = useState<"front" | "back">("front");
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [progress, setProgress] = useState("Planning your skin…");
+  const requestRef = useRef<{ id: number; controller: AbortController } | null>(null);
+  const requestSequence = useRef(0);
+  const busyRef = useRef(false);
+
+  useEffect(() => {
+    if (!loading) return;
+    const started = Date.now();
+    const timer = window.setInterval(() => {
+      const seconds = Math.floor((Date.now() - started) / 1000);
+      setElapsedSeconds(seconds);
+      setProgress(seconds < 5 ? "Planning your skin…" : seconds < 75 ? "Creating the top…" : seconds < 150 ? "Creating the bottoms…" : "Building the preview…");
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [loading]);
+
+  useEffect(() => () => requestRef.current?.controller.abort(), []);
 
   const generate = useCallback(async () => {
-    if (loading || prompt.trim().length < 3) return;
-    setLoading(true); setMessage("");
+    if (busyRef.current || prompt.trim().length < 3) return;
+    requestRef.current?.controller.abort();
+    const id = ++requestSequence.current;
+    const controller = new AbortController();
+    requestRef.current = { id, controller };
+    busyRef.current = true;
+    setLoading(true); setMessage(""); setElapsedSeconds(0); setProgress("Planning your skin…");
     try {
-      const response = await fetch(`${API_BASE}/ai/complete-outfit`, { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt: prompt.trim() }) });
-      const data = await response.json() as OutfitResult & { error?: string };
-      if (!response.ok || !data.components?.shirtTexture || !data.components?.pantsTexture) throw new Error(data.error);
+      const data = await requestCompleteOutfit<OutfitResult>(prompt.trim(), controller.signal);
+      if (!data.components?.shirtTexture || !data.components?.pantsTexture) throw new Error("Missing outfit textures");
+      if (requestRef.current?.id !== id) return;
+      setProgress("Building the preview…");
       setResult(data); setView("front");
-    } catch { setMessage("AI couldn't finish that skin. Try again!"); }
-    finally { setLoading(false); }
-  }, [loading, prompt]);
+    } catch (caught) {
+      if (controller.signal.aborted || requestRef.current?.id !== id) return;
+      const error = caught as OutfitApiError;
+      setMessage(error.code === "AI_TIMEOUT" || error.code === "AI_RATE_LIMIT" || error.status === 429
+        ? "The AI is busy right now. Please try again in a moment."
+        : "We couldn't finish this skin. Please try again.");
+    } finally {
+      if (requestRef.current?.id === id) {
+        busyRef.current = false;
+        setLoading(false);
+      }
+    }
+  }, [prompt]);
 
   const download = () => {
     if (!result) return;
@@ -64,7 +98,7 @@ export default function Create() {
       </section>
       <section className="relative h-[540px] overflow-hidden rounded-3xl border border-slate-800 bg-slate-900" aria-label="Complete outfit preview">
         <AvatarPreview shirtTextureUrl={result?.components.shirtTexture} pantsTextureUrl={result?.components.pantsTexture} view={view} onViewChange={setView} previewMode="avatar" studioMode animated />
-        {loading && <div className="absolute inset-0 grid place-content-center bg-slate-950/75 text-center"><Loader2 className="mx-auto mb-3 h-10 w-10 animate-spin text-violet-400" /><strong>Creating your whole outfit…</strong><span className="mt-1 text-sm text-slate-300">Top, bottoms, shoes and finishing touches</span></div>}
+        {loading && <div className="absolute inset-0 grid place-content-center bg-slate-950/75 text-center" role="status"><Loader2 className="mx-auto mb-3 h-10 w-10 animate-spin text-violet-400" /><strong>{progress}</strong><span className="mt-1 text-sm text-slate-300">Elapsed time: {elapsedSeconds}s</span></div>}
         {result && <div className="absolute left-4 top-4 rounded-full bg-black/60 px-4 py-2 text-sm backdrop-blur">✨ {result.outfitBlueprint.completeLook}</div>}
       </section>
       <div className="flex flex-wrap justify-center gap-3"><Button variant="outline" onClick={() => setView(view === "front" ? "back" : "front")}><RotateCw className="mr-2" />{view === "front" ? "Show Back" : "Show Front"}</Button><Button variant="outline" onClick={() => void generate()} disabled={!result || loading}><Sparkles className="mr-2" />Try Again</Button><Button onClick={download} disabled={!result}><Download className="mr-2" />Download Skin</Button><Button variant="outline" onClick={save} disabled={!result}><Save className="mr-2" />Save Skin</Button><Button variant="outline" onClick={upload} disabled={!result}><Upload className="mr-2" />Upload to Roblox</Button></div>
