@@ -18,6 +18,8 @@ type PreviewMode = "clothing" | "avatar";
 
 type AvatarPreviewProps = {
   textureUrl?: string;
+  shirtTextureUrl?: string;
+  pantsTextureUrl?: string;
   className?: string;
   avatarType?: string;
   bodyType?: string;
@@ -94,7 +96,7 @@ function buildFallbackAtlas() {
   return canvas;
 }
 
-function useClothingMaps(textureUrl?: string) {
+function useSingleClothingMaps(textureUrl?: string) {
   const [maps, setMaps] = useState<ClothingMaps | null>(null);
   useEffect(() => {
     let alive = true;
@@ -128,6 +130,12 @@ function useClothingMaps(textureUrl?: string) {
     return () => { alive = false; };
   }, [textureUrl]);
   return maps;
+}
+
+function useClothingMaps(textureUrl?: string, shirtTextureUrl?: string, pantsTextureUrl?: string) {
+  const shirt = useSingleClothingMaps(shirtTextureUrl ?? textureUrl);
+  const pants = useSingleClothingMaps(pantsTextureUrl ?? textureUrl);
+  return useMemo(() => shirt && pants ? { ...shirt, pantsFront: pants.pantsFront, pantsBack: pants.pantsBack, pantsSide: pants.pantsSide } : null, [shirt, pants]);
 }
 
 function makeStandardMaterial(part: AvatarRenderPart, color: string, texture: ThreeTexture | null) {
@@ -403,12 +411,12 @@ function PreviewFallback({ textureUrl }: { textureUrl?: string }) {
   );
 }
 
-export function AvatarPreview({ textureUrl, className, avatarType = "neutral", view: controlledView, onViewChange, itemType = "shirt", dimension, previewMode, studioMode = false, animated = false, avatarState }: AvatarPreviewProps) {
+export function AvatarPreview({ textureUrl, shirtTextureUrl, pantsTextureUrl, className, avatarType = "neutral", view: controlledView, onViewChange, itemType = "shirt", dimension, previewMode, studioMode = false, animated = false, avatarState }: AvatarPreviewProps) {
   const resolvedMode: PreviewMode = previewMode ?? (dimension === "3d" ? "avatar" : "clothing");
   const [internalView, setInternalView] = useState<"front" | "back">("front");
   const [zoom, setZoom] = useState(resolvedMode === "clothing" ? 3.6 : 4.9);
   const [rotation, setRotation] = useState(0);
-  const maps = useClothingMaps(textureUrl);
+  const maps = useClothingMaps(textureUrl, shirtTextureUrl, pantsTextureUrl);
   const effectiveAvatar = useMemo(() => ({ ...defaultAvatarState(), ...avatarState, slots: { ...defaultAvatarState().slots, ...(avatarState?.slots ?? {}) } }), [avatarState]);
   const view = controlledView ?? internalView;
   const setView = (next: "front" | "back") => { if (!controlledView) setInternalView(next); onViewChange?.(next); };

@@ -10,6 +10,7 @@ import { aiHistoryService } from "../services/ai/ai-history.service";
 import { generateClassicTexture } from "../services/ai/classic-texture.service";
 import { DESIGN_ISSUES } from "../services/ai/design-memory";
 import { recordDesignFeedback } from "../services/ai/design-memory-feedback.service";
+import { generateCompleteOutfit } from "../services/ai/complete-outfit.service";
 
 const router: IRouter = Router();
 
@@ -70,6 +71,22 @@ router.post("/ai/generate", async (req, res): Promise<void> => {
 const classicTextureRequestSchema = z.object({
   prompt: z.string().trim().min(3).max(600),
   garmentType: z.enum(["shirt", "pants"]),
+});
+
+const completeOutfitRequestSchema = z.object({ prompt: z.string().trim().min(3).max(600) });
+
+router.post("/ai/complete-outfit", async (req, res): Promise<void> => {
+  const parsed = completeOutfitRequestSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Invalid request", details: parsed.error.flatten() });
+    return;
+  }
+  try {
+    res.json(await generateCompleteOutfit(parsed.data.prompt));
+  } catch (err) {
+    req.log.error({ err }, "ai.v2.complete_outfit.failed");
+    res.status(502).json({ error: "AI could not create the complete skin" });
+  }
 });
 
 router.post("/ai/classic-texture", async (req, res): Promise<void> => {
