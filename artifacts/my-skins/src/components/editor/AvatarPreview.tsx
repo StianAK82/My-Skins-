@@ -219,8 +219,11 @@ function BodyPart({ material, args, position, radius, smoothness, maps, skinTone
 
 function RobloxAvatar({ maps, view, itemType, avatar, mode }: { maps: ClothingMaps | null; view: "front" | "back"; itemType: "shirt" | "pants"; avatar: AvatarState; mode: PreviewMode }) {
   if (!maps) return null;
-  const shirtMaps: FaceMaps = { front: itemType === "shirt" ? maps.shirtFront : maps.shirtSide, back: itemType === "shirt" ? maps.shirtBack : maps.shirtSide, side: maps.shirtSide };
-  const pantsMaps: FaceMaps = { front: itemType === "pants" ? maps.pantsFront : maps.pantsSide, back: itemType === "pants" ? maps.pantsBack : maps.pantsSide, side: maps.pantsSide };
+  // Show the full outfit: shirt zones on the torso/arms and pants zones on the legs.
+  void itemType;
+  const shirtMaps: FaceMaps = { front: maps.shirtFront, back: maps.shirtBack, side: maps.shirtSide };
+  // Leg sides sample the front zone: the side zone (x=44) is unpainted in the shirt-template atlas.
+  const pantsMaps: FaceMaps = { front: maps.pantsFront, back: maps.pantsBack, side: maps.pantsFront };
   const baseModel = getAvatarBaseModel(avatar.modelVariant);
   const presetScale = avatar.scalePreset === "slender" ? [0.94, 1.05, 0.92] : avatar.scalePreset === "stocky" ? [1.1, 0.98, 1.1] : [1, 1, 1];
   const poseRotY = avatar.pose === "hero" ? 0.15 : avatar.pose === "walk" ? 0.06 : 0;

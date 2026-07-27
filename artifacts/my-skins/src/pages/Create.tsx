@@ -9,6 +9,13 @@ import { classicTextureAiSchema, parseClassicTextureAiPlan } from "@/lib/editor/
 import { preloadOverlayImages, renderDesignToCanvas } from "@/lib/editor/renderer";
 import { buildAiAvatarLook } from "@/lib/editor/avatar-look";
 import { normalizeAiResponse } from "@/lib/ai/normalize-ai-response";
+import {
+  parsePendingOutfit,
+  pickPantsColors,
+  renderPantsTexture,
+  renderTShirtTexture,
+  type OutfitFiles,
+} from "@/lib/editor/outfit";
 import { resolveAvatarSlotAssets } from "@/lib/ai/asset-resolver";
 
 function clamp(value: number, min: number, max: number) {
@@ -62,9 +69,9 @@ function downloadPng(dataUrl: string, filename: string) {
 }
 
 const STEPS = [
-  { title: "1. Beskriv skinnet", text: "Skriv hva du vil ha i feltet under figuren – hva som helst. AI-en lager designet." },
-  { title: "2. Se det på figuren", text: "Skinnet dukker opp direkte på 3D-figuren. Dra for å rotere og se det fra alle sider." },
-  { title: "3. Last opp til Roblox", text: "10 kr gir 3 opplastinger. Du får en PNG-fil, og Roblox sin opplastingsside åpnes – velg filen der, så er skinnet ditt." },
+  { title: "1. Beskriv skinnet", text: "Skriv hva du vil ha i feltet under figuren – hva som helst. AI-en lager hele antrekket: overdel, bukse og t-skjorte-motiv." },
+  { title: "2. Se det på figuren", text: "Hele antrekket dukker opp direkte på 3D-figuren. Dra for å rotere og se det fra alle sider." },
+  { title: "3. Last opp til Roblox", text: "10 kr gir 3 opplastinger. Du får PNG-filer for overdel (Shirt), bukse (Pants) og t-skjorte, og Roblox sin opplastingsside åpnes – velg filene der." },
 ];
 
 const API_BASE = `${import.meta.env.BASE_URL.replace(/\/$/, "")}/api`;
@@ -89,10 +96,25 @@ async function apiPost<T>(path: string, body?: unknown): Promise<{ status: numbe
   return { status: res.status, data };
 }
 
-function openRobloxWithFile(dataUrl: string) {
-  downloadPng(dataUrl, "roblox-skin.png");
+function openRobloxWithFiles(files: OutfitFiles) {
+  const downloads: Array<[string, string | undefined]> = [
+    ["roblox-overdel-shirt.png", files.shirt],
+    ["roblox-bukse-pants.png", files.pants],
+    ["roblox-tskjorte-motiv.png", files.tshirt],
+  ];
+  // Open Roblox synchronously (before timers) so popup blockers don't eat it,
+  // then stagger the downloads slightly so the browser accepts all of them.
   window.open("https://create.roblox.com/dashboard/creations", "_blank", "noopener");
+  let delay = 0;
+  for (const [name, url] of downloads) {
+    if (!url) continue;
+    window.setTimeout(() => downloadPng(url, name), delay);
+    delay += 400;
+  }
 }
+
+const UPLOAD_DONE_MSG =
+  "Antrekket er lastet ned som tre filer: overdel (Shirt), bukse (Pants) og t-skjorte-motiv. Roblox sin side er åpnet – last opp overdelen som «Shirt», buksa som «Pants» og motivet som «T-Shirt».";
 
 export default function Create() {
   const offscreenCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -105,6 +127,7 @@ export default function Create() {
   const [uploadBusy, setUploadBusy] = useState(false);
   const [skinStatus, setSkinStatus] = useState<SkinStatus | null>(null);
   const [imageRenderNonce, setImageRenderNonce] = useState(0);
+  const outfitRef = useRef<{ pantsBase: string; pantsAccent: string; heroUrl?: string } | null>(null);
 
   const { state, setAiPlanPreview, setAiAvatarPreview, deleteLayer, addLayer, applyAiPlan, setPaintSwatch } = useDesignStore();
   const hasDesign = state.layers.length > 0 || Boolean(state.baseColor);
@@ -127,13 +150,14 @@ export default function Create() {
     (async () => {
       try {
         const { paid } = await apiGet<{ paid: boolean }>(`/payments/verify?session_id=${encodeURIComponent(paidSession)}`);
-        const pending = window.localStorage.getItem(PENDING_SKIN_KEY);
+        const pendingRaw = window.localStorage.getItem(PENDING_SKIN_KEY);
+        const pending = pendingRaw ? parsePendingOutfit(pendingRaw) : null;
         if (paid && pending) {
           const consume = await apiPost<{ ok?: boolean }>("/payments/consume-free");
           if (consume.status === 200 && consume.data.ok) {
-            openRobloxWithFile(pending);
+            openRobloxWithFiles(pending);
             window.localStorage.removeItem(PENDING_SKIN_KEY);
-            setUploadStatus("Betaling godkjent – du har fått 3 opplastinger! Skinnet er lastet ned, og Roblox sin opplastingsside er åpnet – velg «Clothing» der og last opp filen.");
+            setUploadStatus(`Betaling godkjent – du har fått 3 opplastinger! ${UPLOAD_DONE_MSG}`);
           } else {
             setUploadStatus("Betaling godkjent, men opplastingen kunne ikke brukes. Trykk «Last opp til Roblox» igjen.");
           }
@@ -208,10 +232,24 @@ export default function Create() {
       applyAiPlan();
       if (parsed.palette[0]) setPaintSwatch(parsed.palette[0]);
 
+      // Give the outfit matching pants: color the leg zones so the 3D figure wears them too.
+      const pantsColors = pickPantsColors(parsed.palette);
+      outfitRef.current = { pantsBase: pantsColors.base, pantsAccent: pantsColors.accent };
+      for (const legZone of ["left_leg_front", "right_leg_front", "left_leg_back", "right_leg_back"]) {
+        addLayer({
+          name: "Bukse",
+          type: "paintLayerSet",
+          zone: legZone,
+          color: pantsColors.base,
+          transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 },
+        });
+      }
+
       // Then draw the actual artwork described in the prompt and place it on the shirt.
       setAiPhase("Tegner motivet du beskrev… (kan ta opptil ett minutt)");
       const hero = await apiPost<{ imageUrl?: string }>("/ai/hero-image", { prompt });
       if (hero.status === 200 && hero.data.imageUrl) {
+        outfitRef.current = { pantsBase: pantsColors.base, pantsAccent: pantsColors.accent, heroUrl: hero.data.imageUrl };
         addLayer({
           name: "AI-motiv",
           type: "imageLayer",
@@ -235,12 +273,18 @@ export default function Create() {
     }
   };
 
-  const renderExportTexture = async (): Promise<string | null> => {
+  const renderExportFiles = async (): Promise<OutfitFiles | null> => {
     if (!offscreenCanvasRef.current) offscreenCanvasRef.current = document.createElement("canvas");
     const canvas = offscreenCanvasRef.current;
     if (!canvas || !hasDesign) return null;
     await preloadOverlayImages(state);
-    return renderDesignToCanvas(state, canvas, { onOverlayImageReady: handleOverlayImageReady, target: "export" });
+    const shirt = renderDesignToCanvas(state, canvas, { onOverlayImageReady: handleOverlayImageReady, target: "export" });
+    const outfit = outfitRef.current;
+    const pantsBase = outfit?.pantsBase ?? state.baseColor ?? "#1e293b";
+    const pantsAccent = outfit?.pantsAccent ?? state.paintSwatch;
+    const pants = await renderPantsTexture({ base: pantsBase, accent: pantsAccent, motifUrl: outfit?.heroUrl });
+    const tshirt = outfit?.heroUrl ? await renderTShirtTexture(outfit.heroUrl) : undefined;
+    return { shirt, pants: pants || undefined, tshirt };
   };
 
   const uploadToRoblox = async () => {
@@ -248,20 +292,30 @@ export default function Create() {
     setUploadBusy(true);
     setUploadStatus("");
     try {
-      const texture = await renderExportTexture();
-      if (!texture) return;
+      const files = await renderExportFiles();
+      if (!files) return;
 
       const consume = await apiPost<{ ok?: boolean; needsPayment?: boolean }>("/payments/consume-free");
       if (consume.status === 200 && consume.data.ok) {
-        openRobloxWithFile(texture);
-        setUploadStatus("Skinnet er lastet ned som roblox-skin.png. Roblox sin side er åpnet – velg «Clothing» der og last opp filen.");
+        openRobloxWithFiles(files);
+        setUploadStatus(UPLOAD_DONE_MSG);
         await refreshStatus();
         return;
       }
 
       if (consume.status === 402 || consume.data.needsPayment) {
-        // Free skins used up – save the skin and send the user to Stripe checkout.
-        window.localStorage.setItem(PENDING_SKIN_KEY, texture);
+        // Free skins used up – save the outfit and send the user to Stripe checkout.
+        // Never let a storage failure block the payment itself.
+        try {
+          window.localStorage.setItem(PENDING_SKIN_KEY, JSON.stringify(files));
+        } catch {
+          try {
+            // Storage full (data URLs are big) – keep at least the shirt.
+            window.localStorage.setItem(PENDING_SKIN_KEY, files.shirt);
+          } catch {
+            /* storage unavailable – user can regenerate after payment */
+          }
+        }
         setUploadStatus("Sender deg til betaling (10 kr for 3 opplastinger)…");
         const checkout = await apiPost<{ checkoutUrl?: string; error?: string }>("/payments/create-checkout-session");
         if (checkout.data.checkoutUrl) {

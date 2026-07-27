@@ -41,3 +41,17 @@ The editor route `/editor/:id` is intentionally PUBLIC (no AuthGuard) — childr
 Only **Save** and **Export PNG (Roblox-ready)** require login: those handlers short-circuit to a login Dialog when `useGetMe()` returns no user. Landing "start creating" CTAs go straight to `/editor/local`, not `/api/login`.
 **Why:** product is for kids; account/payment only gates persistence + Roblox deployment.
 **How to apply:** keep creation flows account-free. Dashboard/Projects/Settings stay behind AuthGuard. Frontend gating is UX only — any real save/export/deploy/payment endpoint MUST also enforce auth server-side.
+
+## Full classic outfit from one prompt (July 2026)
+One prompt now yields a whole classic outfit: shirt PNG (existing render), pants PNG
+(`lib/editor/outfit.ts` — darkest palette color base + accent leg stripes + AI motif on right leg,
+drawn per pants-template zones), and a 512px t-shirt motif PNG (the hero image). Upload button
+downloads up to 3 files (staggered 400ms) and opens Roblox *synchronously first* (popup blockers).
+Pending-payment localStorage stores JSON of all files (`parsePendingOutfit` accepts the legacy
+plain data-URL); both setItem calls are quota-guarded so storage failure never blocks checkout.
+**Preview gotcha:** avatar legs sample the shirt-template atlas: leg front/back zones line up with
+the preview PANTS zones, but the side zone (x=44,y=288) is unpainted there — AvatarPreview uses
+pantsFront for leg sides. Pants color on the avatar = four `paintLayerSet` layers on the
+shirt-template leg zones added after `applyAiPlan`.
+3D types (layered clothing, hair, accessories, bundles) remain impossible to auto-create/upload —
+told the user; app covers Classic Shirt/Pants/T-Shirt only.
