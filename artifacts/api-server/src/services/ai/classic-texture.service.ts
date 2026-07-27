@@ -12,6 +12,13 @@ import {
   validateGarmentFingerprint,
 } from "./garment-composer";
 import { getLearnedDesignInstructions } from "./design-memory-feedback.service";
+import { buildMaterialPrompt } from "./material-generator.ts";
+import {
+  planOutfitDNA,
+  understandFashionIntent,
+  type OutfitDNA,
+} from "./outfit-dna.ts";
+import { inspectGarment } from "./quality-inspector.ts";
 import type { EnhancedGarmentSpecification } from "./classic-prompt-enhancer";
 import {
   AiGenerationError,
@@ -203,6 +210,7 @@ export async function generateClassicTexture(
     startedAt: number;
     log: (event: string, data: Record<string, unknown>) => void;
   },
+  sharedDNA?: OutfitDNA,
 ) {
   const blank = referencePng(type, false),
     guide = referencePng(type, true),
@@ -213,7 +221,12 @@ export async function generateClassicTexture(
         timeoutMs("AI_TEXT_TIMEOUT_MS", 20_000),
         `${type}_planning`,
       )),
-    references = await qualityReferences(type);
+    references = await qualityReferences(type),
+    dna =
+      sharedDNA ??
+      planOutfitDNA(
+        understandFashionIntent(`${enhanced.garmentType} ${description}`),
+      );
   let learned: string[] = [];
   try {
     learned = await getLearnedDesignInstructions(
@@ -228,13 +241,11 @@ export async function generateClassicTexture(
     failures: string[] = [];
   let attempts = 0;
   for (attempts = 1; attempts <= 2; attempts++) {
-    prompt = buildClassicTexturePrompt(
-      type,
+    prompt = buildMaterialPrompt(
       description,
       enhanced,
+      dna,
       failures.join("; ") || undefined,
-      references.length > 0,
-      learned,
     );
     diagnostics?.log("complete_outfit.ai_request", {
       generationId: diagnostics.generationId,
@@ -268,9 +279,14 @@ export async function generateClassicTexture(
       final = resizeToAtlas(raw);
       const composed = composeGarmentFingerprint(final, enhanced);
       final = composed.png;
+      const inspection = inspectGarment(type, final, {
+        garment: composed.fingerprint.key,
+        appliedModules: composed.fingerprint.required,
+      });
       failures = [
         ...validateClassicTexture(type, final, blank),
         ...validateGarmentFingerprint(enhanced, composed.fingerprint),
+        ...inspection.failures,
       ];
     } catch (error) {
       failures = [
@@ -306,6 +322,14 @@ export async function generateClassicTexture(
       styles: enhanced.designMemory.styles.map((style) => style.key),
       learnedAdjustments: learned,
     },
+    outfitDNA: dna,
+    pipelineStages: [
+      "intent",
+      "fashion-planner",
+      "material-generator",
+      "garment-constructor",
+      "quality-inspector",
+    ],
     model: "gpt-image-1",
     requestMode: "images.edit",
     sourceSize: "1536x1024",
