@@ -1,0 +1,21 @@
+{
+  "instructions": "Populate output fields only from real live runs; never fabricate results. Scores are integers 1-5 and average excludes null textAccuracy.",
+  "cases": [
+    { "id": "shirt-01", "garmentType": "shirt", "prompt": "White heavyweight cotton zip hoodie with silver zipper, white drawstrings, kangaroo pockets, ribbed cuffs, visible seams, realistic folds and soft grey shadows." },
+    { "id": "shirt-02", "garmentType": "shirt", "prompt": "Black denim jacket with silver buttons, structured collar, chest pockets, contrast stitching, faded seams and natural folds." },
+    { "id": "shirt-03", "garmentType": "shirt", "prompt": "Pastel pink knitted sweater with ribbed collar and cuffs, visible knit texture, soft folds and a small embroidered heart on the chest." },
+    { "id": "shirt-04", "garmentType": "shirt", "prompt": "Red football jersey with white shoulder panels, breathable sports fabric, clean seams, sleeve cuffs and number 10 on the back." },
+    { "id": "shirt-05", "garmentType": "shirt", "prompt": "Dark brown leather jacket with structured collar, metal zipper, side pockets, stitched panels and subtle leather highlights." },
+    { "id": "pants-01", "garmentType": "pants", "prompt": "Dark grey cargo trousers with belt loops, large side pockets, reinforced knees, visible seams and natural wrinkles." },
+    { "id": "pants-02", "garmentType": "pants", "prompt": "Blue denim jeans with waistband, belt loops, front pockets, back pockets, contrast stitching and subtle faded areas." },
+    { "id": "pants-03", "garmentType": "pants", "prompt": "Black tracksuit trousers with elastic waistband, side stripes, zip pockets and lightweight sports fabric." }
+  ],
+  "resultTemplate": {
+    "originalPrompt": null, "enhancedInternalPrompt": null, "finalImagePrompt": null,
+    "rawImageModelResult": null, "finalPng": null, "frontScreenshot": null,
+    "backScreenshot": null, "generationTimeMs": null, "retryCount": null,
+    "modelMetadata": null,
+    "scores": { "realism": null, "correctUvPlacement": null, "frontBackConsistency": null, "sleeveOrLegConsistency": null, "fabricDetail": null, "garmentConstruction": null, "textAccuracy": null, "overallUsability": null },
+    "average": null, "visibleProblems": []
+  }
+}
