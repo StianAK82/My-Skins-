@@ -1,7 +1,6 @@
 import { Component, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
 import { OrbitControls, RoundedBox, Environment, Lightformer, ContactShadows, SoftShadows } from "@react-three/drei";
-import { EffectComposer, Bloom } from "@react-three/postprocessing";
 import * as THREE from "three";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -12,9 +11,13 @@ import { defaultAvatarState } from "@/lib/editor/design-state";
 import { getAvatarAssetById, getAvatarBaseModel, type AvatarRenderPart } from "@/lib/editor/assets";
 import { resolveSlotPosition } from "@/lib/editor/avatar-slots";
 import { CLASSIC_SHIRT_UV } from "@/lib/editor/classic-shirt-uv";
+import { RobloxAvatarModel } from "@/components/editor/avatar/RobloxAvatarModel";
+import { GarmentPreview } from "@/components/editor/garments/GarmentPreview";
+import type { OutfitDNA } from "@/lib/editor/garment-preview-material";
 
 type ThreeTexture = ReturnType<typeof makeTextureFromZone>;
 type PreviewMode = "clothing" | "avatar";
+export type PreviewRepresentation = "classic" | "enhanced";
 
 type AvatarPreviewProps = {
   textureUrl?: string;
@@ -36,6 +39,9 @@ type AvatarPreviewProps = {
   garmentVariant?: string;
   accessories?: { hair?: string; hat?: string; glasses?: string; beard?: string; backpack?: string };
   avatarState?: AvatarState;
+  outfitDNA?: OutfitDNA;
+  representation?: PreviewRepresentation;
+  onRepresentationChange?: (representation: PreviewRepresentation) => void;
 };
 
 type Zone = { left: number; top: number; width: number; height: number };
@@ -208,35 +214,7 @@ function AvatarCosmetic({ slot, avatar, mode }: { slot: AvatarCosmeticSlot; avat
   );
 }
 
-function BodyPart({ material, args, position, radius, smoothness, maps, skinTone }: {
-  material: "skin" | "shirt" | "pants";
-  args: [number, number, number];
-  position: [number, number, number];
-  radius: number;
-  smoothness: number;
-  maps: { shirt: FaceMaps; pants: FaceMaps };
-  skinTone: string;
-}) {
-  if (material === "skin") {
-    return <RoundedBox args={args} radius={radius} smoothness={smoothness} position={position} castShadow><meshStandardMaterial color={skinTone} roughness={0.35} metalness={0.05} /></RoundedBox>;
-  }
-  const mapSet = material === "shirt" ? maps.shirt : maps.pants;
-  const baseColor = material === "shirt" ? "#f8fafc" : "#e2e8f0";
-  const topColor = material === "shirt" ? "#dbeafe" : "#cbd5e1";
-  const bottomColor = material === "shirt" ? "#e2e8f0" : "#bfdbfe";
-  return (
-    <RoundedBox args={args} radius={radius} smoothness={smoothness} position={position} castShadow>
-      <meshStandardMaterial attach="material-0" map={mapSet.side} color={baseColor} roughness={0.4} metalness={0.05} />
-      <meshStandardMaterial attach="material-1" map={mapSet.side} color={baseColor} roughness={0.4} metalness={0.05} />
-      <meshStandardMaterial attach="material-2" color={topColor} roughness={0.4} metalness={0.05} />
-      <meshStandardMaterial attach="material-3" color={bottomColor} roughness={0.4} metalness={0.05} />
-      <meshStandardMaterial attach="material-4" map={mapSet.front} color={baseColor} roughness={0.4} metalness={0.05} />
-      <meshStandardMaterial attach="material-5" map={mapSet.back} color={baseColor} roughness={0.4} metalness={0.05} />
-    </RoundedBox>
-  );
-}
-
-function RobloxAvatar({ maps, view, itemType, avatar, mode }: { maps: ClothingMaps | null; view: "front" | "back"; itemType: "shirt" | "pants"; avatar: AvatarState; mode: PreviewMode }) {
+function RobloxAvatar({ maps, view, itemType, avatar, mode, representation, outfitDNA }: { maps: ClothingMaps | null; view: "front" | "back"; itemType: "shirt" | "pants"; avatar: AvatarState; mode: PreviewMode; representation: PreviewRepresentation; outfitDNA?: OutfitDNA }) {
   if (!maps) return null;
   // Show the full outfit: shirt zones on the torso/arms and pants zones on the legs.
   void itemType;
@@ -248,12 +226,6 @@ function RobloxAvatar({ maps, view, itemType, avatar, mode }: { maps: ClothingMa
   const baseModel = getAvatarBaseModel(avatar.modelVariant);
   const presetScale = avatar.scalePreset === "slender" ? [0.94, 1.05, 0.92] : avatar.scalePreset === "stocky" ? [1.1, 0.98, 1.1] : [1, 1, 1];
   const poseRotY = avatar.pose === "hero" ? 0.15 : avatar.pose === "walk" ? 0.06 : 0;
-  const partScaleForId = (partId: string): [number, number, number] => {
-    if (partId.includes("head")) return [avatar.bodyScale.head, avatar.bodyScale.head, avatar.bodyScale.head];
-    if (partId.includes("Leg")) return [1, avatar.bodyScale.legs, 1];
-    return [1, 1, 1];
-  };
-
   return (
     <group rotation-y={view === "back" ? Math.PI : 0} scale={[
       baseModel.proportions.x * presetScale[0] * avatar.bodyScale.width,
@@ -261,11 +233,13 @@ function RobloxAvatar({ maps, view, itemType, avatar, mode }: { maps: ClothingMa
       baseModel.proportions.z * presetScale[2],
     ]}>
       <group rotation-y={poseRotY}>
-        {baseModel.bodyParts.map((part) => (
-          <group key={part.id} position={part.position} scale={partScaleForId(part.id)}>
-            <BodyPart material={part.material} args={part.args} position={[0, 0, 0]} radius={part.radius} smoothness={part.smoothness} maps={{ shirt: part.id.toLowerCase().includes("leftarm") ? leftArmMaps : part.id.toLowerCase().includes("rightarm") ? rightArmMaps : torsoMaps, pants: pantsMaps }} skinTone={avatar.skinTone} />
-          </group>
-        ))}
+        <RobloxAvatarModel surfaces={{
+          torso: <meshStandardMaterial map={view === "back" ? torsoMaps.back : torsoMaps.front} roughness={.76} />,
+          leftArm: <meshStandardMaterial map={view === "back" ? leftArmMaps.back : leftArmMaps.front} roughness={.76} />,
+          rightArm: <meshStandardMaterial map={view === "back" ? rightArmMaps.back : rightArmMaps.front} roughness={.76} />,
+          pants: <meshStandardMaterial map={view === "back" ? pantsMaps.back : pantsMaps.front} roughness={.72} />,
+          skin: <meshStandardMaterial color={avatar.skinTone} roughness={.48} />,
+        }}>{representation === "enhanced" && <GarmentPreview dna={outfitDNA} />}</RobloxAvatarModel>
       </group>
       {(["face", "hair", "hat", "neck", "leftShoulder", "rightShoulder", "back", "leftFootwear", "rightFootwear", "aura"] as AvatarCosmeticSlot[]).map((slot) => <AvatarCosmetic key={slot} slot={slot} avatar={avatar} mode={mode} />)}
     </group>
@@ -277,8 +251,8 @@ function StudioEnvironment() {
     <Environment resolution={256} frames={1}>
       <color attach="background" args={["#050811"]} />
       <Lightformer intensity={3} rotation-x={Math.PI / 2} position={[0, 5, -2]} scale={[12, 12, 1]} color="#ffffff" />
-      <Lightformer intensity={2} rotation-y={Math.PI / 2} position={[-5, 2, 0]} scale={[10, 10, 1]} color="#ec4899" />
-      <Lightformer intensity={2} rotation-y={-Math.PI / 2} position={[5, 2, 0]} scale={[10, 10, 1]} color="#38bdf8" />
+      <Lightformer intensity={1.2} rotation-y={Math.PI / 2} position={[-5, 2, 0]} scale={[10, 10, 1]} color="#f4f1ea" />
+      <Lightformer intensity={.8} rotation-y={-Math.PI / 2} position={[5, 2, 0]} scale={[10, 10, 1]} color="#e8edf2" />
       <Lightformer intensity={1.5} rotation-y={Math.PI} position={[0, 2, 4]} scale={[8, 6, 1]} color="#ffffff" />
     </Environment>
   );
@@ -329,7 +303,7 @@ function IdleGroup({ children, enabled }: { children: ReactNode; enabled: boolea
   return <group ref={groupRef}>{children}</group>;
 }
 
-function SceneContent({ maps, view, itemType, rotation, avatar, mode, animated = false }: { maps: ClothingMaps | null; view: "front" | "back"; itemType: "shirt" | "pants"; rotation: number; avatar: AvatarState; mode: PreviewMode; animated?: boolean }) {
+function SceneContent({ maps, view, itemType, rotation, avatar, mode, representation, outfitDNA, animated = false }: { maps: ClothingMaps | null; view: "front" | "back"; itemType: "shirt" | "pants"; rotation: number; avatar: AvatarState; mode: PreviewMode; representation: PreviewRepresentation; outfitDNA?: OutfitDNA; animated?: boolean }) {
   const cameraTarget: [number, number, number] = mode === "clothing" ? [0, 1.2, 0] : [0, 1.15, 0];
   return (
     <>
@@ -351,20 +325,16 @@ function SceneContent({ maps, view, itemType, rotation, avatar, mode, animated =
         shadow-bias={-0.0001}
       />
       
-      <spotLight position={[-4, 4, -4]} intensity={5} color="#ec4899" penumbra={1} distance={15} />
-      <spotLight position={[4, 3, -4]} intensity={5} color="#38bdf8" penumbra={1} distance={15} />
+      <spotLight position={[-4, 4, -4]} intensity={1.1} color="#f4f1ea" penumbra={1} distance={15} />
+      <spotLight position={[4, 3, -4]} intensity={.8} color="#e8edf2" penumbra={1} distance={15} />
 
       <Stage />
 
       <group rotation-y={rotation}>
         <IdleGroup enabled={animated}>
-          <RobloxAvatar maps={maps} view={view} itemType={itemType} avatar={avatar} mode={mode} />
+          <RobloxAvatar maps={maps} view={view} itemType={itemType} avatar={avatar} mode={mode} representation={representation} outfitDNA={outfitDNA} />
         </IdleGroup>
       </group>
-
-      <EffectComposer multisampling={0}>
-        <Bloom luminanceThreshold={2.0} mipmapBlur intensity={1.0} />
-      </EffectComposer>
 
       <OrbitControls enablePan={false} enableDamping dampingFactor={0.08} minPolarAngle={0.2} maxPolarAngle={Math.PI / 1.8} minDistance={2.2} maxDistance={6.2} target={cameraTarget} />
     </>
@@ -411,17 +381,20 @@ function PreviewFallback({ textureUrl }: { textureUrl?: string }) {
   );
 }
 
-export function AvatarPreview({ textureUrl, shirtTextureUrl, pantsTextureUrl, className, avatarType = "neutral", view: controlledView, onViewChange, itemType = "shirt", dimension, previewMode, studioMode = false, animated = false, avatarState }: AvatarPreviewProps) {
+export function AvatarPreview({ textureUrl, shirtTextureUrl, pantsTextureUrl, className, avatarType = "neutral", view: controlledView, onViewChange, itemType = "shirt", dimension, previewMode, studioMode = false, animated = false, avatarState, outfitDNA, representation: controlledRepresentation, onRepresentationChange }: AvatarPreviewProps) {
   const resolvedMode: PreviewMode = previewMode ?? (dimension === "3d" ? "avatar" : "clothing");
   const [internalView, setInternalView] = useState<"front" | "back">("front");
   const [zoom, setZoom] = useState(resolvedMode === "clothing" ? 3.6 : 4.9);
   const [rotation, setRotation] = useState(0);
+  const [internalRepresentation, setInternalRepresentation] = useState<PreviewRepresentation>("enhanced");
   const maps = useClothingMaps(textureUrl, shirtTextureUrl, pantsTextureUrl);
   const effectiveAvatar = useMemo(() => ({ ...defaultAvatarState(), ...avatarState, slots: { ...defaultAvatarState().slots, ...(avatarState?.slots ?? {}) } }), [avatarState]);
   const view = controlledView ?? internalView;
   const setView = (next: "front" | "back") => { if (!controlledView) setInternalView(next); onViewChange?.(next); };
   const subtitle = resolvedMode === "clothing" ? "Clothing Preview" : "Avatar Look Preview";
   const webglAvailable = useWebGLAvailable();
+  const representation = controlledRepresentation ?? internalRepresentation;
+  const setRepresentation = (next: PreviewRepresentation) => { if (!controlledRepresentation) setInternalRepresentation(next); onRepresentationChange?.(next); };
 
   const scene = !webglAvailable ? (
     <PreviewFallback textureUrl={textureUrl} />
@@ -434,13 +407,13 @@ export function AvatarPreview({ textureUrl, shirtTextureUrl, pantsTextureUrl, cl
         camera={{ position: [0, 1.3, zoom], fov: resolvedMode === "clothing" ? 34 : 38 }}
         className="w-full h-full"
       >
-        <SceneContent maps={maps} view={view} itemType={itemType} rotation={rotation} avatar={effectiveAvatar} mode={resolvedMode} animated={animated} />
+        <SceneContent maps={maps} view={view} itemType={itemType} rotation={rotation} avatar={effectiveAvatar} mode={resolvedMode} representation={representation} outfitDNA={outfitDNA} animated={animated} />
       </Canvas>
     </WebGLBoundary>
   );
 
   if (studioMode) {
-    return <div className="relative w-full h-full">{scene}<div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-2 bg-black/60 backdrop-blur rounded-full px-4 py-2 border border-white/10"><button onClick={() => setView("front")} className={`text-xs px-3 py-1 rounded-full ${view === "front" ? "bg-white/20 text-white" : "text-white/50 hover:text-white"}`}>Front</button><button onClick={() => setView("back")} className={`text-xs px-3 py-1 rounded-full ${view === "back" ? "bg-white/20 text-white" : "text-white/50 hover:text-white"}`}>Back</button><button onClick={() => setRotation((p) => p + 0.3)} className="text-white/60 hover:text-white p-1" title="Rotate"><RotateCw className="w-3.5 h-3.5" /></button><button onClick={() => setZoom((p) => Math.min(6, p + 0.4))} className="text-white/60 hover:text-white p-1" title="Zoom out"><ZoomOut className="w-3.5 h-3.5" /></button><button onClick={() => setZoom((p) => Math.max(2.2, p - 0.4))} className="text-white/60 hover:text-white p-1" title="Zoom in"><ZoomIn className="w-3.5 h-3.5" /></button></div><div className="absolute top-4 left-4 text-[10px] uppercase tracking-widest text-white/35 font-medium">{avatarType} · {subtitle}</div></div>;
+    return <div className="relative w-full h-full">{scene}<div className="absolute right-4 top-4 flex rounded-full border border-white/15 bg-black/70 p-1 backdrop-blur"><button onClick={() => setRepresentation("enhanced")} className={`rounded-full px-3 py-1.5 text-xs ${representation === "enhanced" ? "bg-violet-500 text-white" : "text-white/65"}`}>Enhanced Preview</button><button onClick={() => setRepresentation("classic")} className={`rounded-full px-3 py-1.5 text-xs ${representation === "classic" ? "bg-violet-500 text-white" : "text-white/65"}`}>Roblox Classic</button></div><div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-2 bg-black/60 backdrop-blur rounded-full px-4 py-2 border border-white/10"><button onClick={() => setView("front")} className={`text-xs px-3 py-1 rounded-full ${view === "front" ? "bg-white/20 text-white" : "text-white/50 hover:text-white"}`}>Front</button><button onClick={() => setView("back")} className={`text-xs px-3 py-1 rounded-full ${view === "back" ? "bg-white/20 text-white" : "text-white/50 hover:text-white"}`}>Back</button><button onClick={() => setRotation((p) => p + 0.3)} className="text-white/60 hover:text-white p-1" title="Rotate"><RotateCw className="w-3.5 h-3.5" /></button><button onClick={() => setZoom((p) => Math.min(6, p + 0.4))} className="text-white/60 hover:text-white p-1" title="Zoom out"><ZoomOut className="w-3.5 h-3.5" /></button><button onClick={() => setZoom((p) => Math.max(2.2, p - 0.4))} className="text-white/60 hover:text-white p-1" title="Zoom in"><ZoomIn className="w-3.5 h-3.5" /></button></div><div className="absolute left-4 top-4 text-[10px] uppercase tracking-widest text-white/35 font-medium">{avatarType} · {subtitle}<span className="mt-2 block max-w-48 normal-case tracking-normal text-white/55">The 3D garment shape is an enhanced preview. Your Roblox Classic Clothing download contains the texture.</span></div></div>;
   }
 
   return (
