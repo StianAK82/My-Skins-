@@ -1,6 +1,7 @@
 import { Component, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
 import { OrbitControls, RoundedBox, Environment, Lightformer, ContactShadows, SoftShadows } from "@react-three/drei";
+import { EffectComposer, Bloom } from "@react-three/postprocessing";
 import * as THREE from "three";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -125,7 +126,7 @@ function makeStandardMaterial(part: AvatarRenderPart, color: string, texture: Th
       color={part.useAssetColor ? color : (part.color ?? "#94a3b8")}
       map={texture ?? undefined}
       emissive={part.emissive}
-      emissiveIntensity={part.emissiveIntensity ?? 0}
+      emissiveIntensity={part.emissiveIntensity ? part.emissiveIntensity * 3 : 0}
       transparent={part.transparent}
       opacity={part.opacity ?? 1}
       metalness={part.metalness ?? 0.1}
@@ -199,7 +200,7 @@ function BodyPart({ material, args, position, radius, smoothness, maps, skinTone
   skinTone: string;
 }) {
   if (material === "skin") {
-    return <RoundedBox args={args} radius={radius} smoothness={smoothness} position={position} castShadow><meshStandardMaterial color={skinTone} roughness={0.42} metalness={0.02} /></RoundedBox>;
+    return <RoundedBox args={args} radius={radius} smoothness={smoothness} position={position} castShadow><meshStandardMaterial color={skinTone} roughness={0.35} metalness={0.05} /></RoundedBox>;
   }
   const mapSet = material === "shirt" ? maps.shirt : maps.pants;
   const baseColor = material === "shirt" ? "#f8fafc" : "#e2e8f0";
@@ -207,12 +208,12 @@ function BodyPart({ material, args, position, radius, smoothness, maps, skinTone
   const bottomColor = material === "shirt" ? "#e2e8f0" : "#bfdbfe";
   return (
     <RoundedBox args={args} radius={radius} smoothness={smoothness} position={position} castShadow>
-      <meshStandardMaterial attach="material-0" map={mapSet.side} color={baseColor} roughness={0.69} metalness={0.02} />
-      <meshStandardMaterial attach="material-1" map={mapSet.side} color={baseColor} roughness={0.69} metalness={0.02} />
-      <meshStandardMaterial attach="material-2" color={topColor} roughness={0.74} />
-      <meshStandardMaterial attach="material-3" color={bottomColor} roughness={0.74} />
-      <meshStandardMaterial attach="material-4" map={mapSet.front} color={baseColor} roughness={0.66} metalness={0.02} />
-      <meshStandardMaterial attach="material-5" map={mapSet.back} color={baseColor} roughness={0.66} metalness={0.02} />
+      <meshStandardMaterial attach="material-0" map={mapSet.side} color={baseColor} roughness={0.4} metalness={0.05} />
+      <meshStandardMaterial attach="material-1" map={mapSet.side} color={baseColor} roughness={0.4} metalness={0.05} />
+      <meshStandardMaterial attach="material-2" color={topColor} roughness={0.4} metalness={0.05} />
+      <meshStandardMaterial attach="material-3" color={bottomColor} roughness={0.4} metalness={0.05} />
+      <meshStandardMaterial attach="material-4" map={mapSet.front} color={baseColor} roughness={0.4} metalness={0.05} />
+      <meshStandardMaterial attach="material-5" map={mapSet.back} color={baseColor} roughness={0.4} metalness={0.05} />
     </RoundedBox>
   );
 }
@@ -254,23 +255,56 @@ function RobloxAvatar({ maps, view, itemType, avatar, mode }: { maps: ClothingMa
 function StudioEnvironment() {
   return (
     <Environment resolution={256} frames={1}>
-      <color attach="background" args={["#10131c"]} />
-      <Lightformer intensity={2.4} rotation-x={Math.PI / 2} position={[0, 5, -2]} scale={[12, 12, 1]} color="#ffffff" />
-      <Lightformer intensity={1.1} rotation-y={Math.PI / 2} position={[-5, 1.5, 0]} scale={[6, 8, 1]} color="#bcd4ff" />
-      <Lightformer intensity={1.1} rotation-y={-Math.PI / 2} position={[5, 1.5, 0]} scale={[6, 8, 1]} color="#ffe6c2" />
-      <Lightformer intensity={1.6} rotation-y={Math.PI} position={[0, 2, 4]} scale={[8, 6, 1]} color="#ffffff" />
+      <color attach="background" args={["#050811"]} />
+      <Lightformer intensity={3} rotation-x={Math.PI / 2} position={[0, 5, -2]} scale={[12, 12, 1]} color="#ffffff" />
+      <Lightformer intensity={2} rotation-y={Math.PI / 2} position={[-5, 2, 0]} scale={[10, 10, 1]} color="#ec4899" />
+      <Lightformer intensity={2} rotation-y={-Math.PI / 2} position={[5, 2, 0]} scale={[10, 10, 1]} color="#38bdf8" />
+      <Lightformer intensity={1.5} rotation-y={Math.PI} position={[0, 2, 4]} scale={[8, 6, 1]} color="#ffffff" />
     </Environment>
   );
 }
 
+function Stage() {
+  return (
+    <group position={[0, -0.42, 0]}>
+      <mesh rotation-x={-Math.PI / 2} receiveShadow position={[0, 0, 0]}>
+        <cylinderGeometry args={[2.8, 2.8, 0.1, 64]} />
+        <meshStandardMaterial color="#05070d" roughness={0.2} metalness={0.6} />
+      </mesh>
+      
+      {/* Inner glowing ring */}
+      <mesh rotation-x={-Math.PI / 2} position={[0, 0.052, 0]}>
+        <ringGeometry args={[1.4, 1.45, 64]} />
+        <meshBasicMaterial color={new THREE.Color("#38bdf8").multiplyScalar(5)} toneMapped={false} transparent opacity={0.9} />
+      </mesh>
+      
+      {/* Outer glowing ring */}
+      <mesh rotation-x={-Math.PI / 2} position={[0, 0.052, 0]}>
+        <ringGeometry args={[2.5, 2.55, 64]} />
+        <meshBasicMaterial color={new THREE.Color("#ec4899").multiplyScalar(5)} toneMapped={false} transparent opacity={0.9} />
+      </mesh>
+      
+      <ContactShadows position={[0, 0.055, 0]} scale={4} far={2} blur={1.5} opacity={0.8} color="#000000" />
+    </group>
+  );
+}
+
 function IdleGroup({ children, enabled }: { children: ReactNode; enabled: boolean }) {
-  const groupRef = useRef<{ rotation: { y: number; z: number }; position: { y: number } } | null>(null);
+  const groupRef = useRef<{
+    rotation: { x: number; y: number; z: number };
+    position: { y: number };
+    scale: { x: number; y: number; z: number; set: (x: number, y: number, z: number) => void };
+  } | null>(null);
   useFrame(({ clock }) => {
     if (!enabled || !groupRef.current) return;
     const t = clock.getElapsedTime();
-    groupRef.current.rotation.y = Math.sin(t * 0.45) * 0.28;
-    groupRef.current.position.y = Math.sin(t * 1.6) * 0.02;
-    groupRef.current.rotation.z = Math.sin(t * 0.8) * 0.012;
+    groupRef.current.position.y = Math.abs(Math.sin(t * 3)) * 0.08;
+    groupRef.current.rotation.y = Math.sin(t * 1.5) * 0.2;
+    groupRef.current.rotation.z = Math.sin(t * 3) * 0.06;
+    groupRef.current.rotation.x = Math.sin(t * 1.5) * 0.05;
+    const stretch = 1 + Math.sin(t * 3) * 0.03;
+    const squash = 1 - Math.sin(t * 3) * 0.015;
+    groupRef.current.scale.set(squash, stretch, squash);
   });
   return <group ref={groupRef}>{children}</group>;
 }
@@ -279,34 +313,40 @@ function SceneContent({ maps, view, itemType, rotation, avatar, mode, animated =
   const cameraTarget: [number, number, number] = mode === "clothing" ? [0, 1.2, 0] : [0, 1.05, 0];
   return (
     <>
-      <color attach="background" args={["#0b0f1a"]} />
-      <fog attach="fog" args={["#0b0f1a", 7.5, 16]} />
-      <SoftShadows size={26} samples={14} focus={0.85} />
+      <color attach="background" args={["#050811"]} />
+      <fog attach="fog" args={["#050811", 5, 14]} />
+      <SoftShadows size={12} samples={8} focus={0.5} />
       <StudioEnvironment />
-      <ambientLight intensity={mode === "clothing" ? 0.32 : 0.26} />
-      <hemisphereLight intensity={0.45} color="#f1f5ff" groundColor="#0b0f1a" />
-      <directionalLight
-        position={[4.8, 8.2, 5.2]}
-        intensity={mode === "clothing" ? 2.5 : 2.1}
-        color="#fff6e8"
+      
+      <hemisphereLight intensity={1.2} color="#ffffff" groundColor="#0f172a" />
+      
+      <spotLight
+        position={[3, 7, 5]}
+        intensity={mode === "clothing" ? 4.5 : 4}
+        color="#ffffff"
         castShadow
-        shadow-mapSize-width={2048}
-        shadow-mapSize-height={2048}
-        shadow-bias={-0.00035}
-        shadow-normalBias={0.02}
-        shadow-camera-near={1}
-        shadow-camera-far={24}
-        shadow-camera-left={-4}
-        shadow-camera-right={4}
-        shadow-camera-top={5}
-        shadow-camera-bottom={-2}
+        penumbra={1}
+        angle={0.7}
+        shadow-mapSize={[1024, 1024]}
+        shadow-bias={-0.0001}
       />
-      <directionalLight position={[-5, 3.4, -3.2]} intensity={0.9} color="#8fb6ff" />
-      <pointLight position={[0, 1.6, -3]} intensity={0.7} color="#cfe0ff" />
-      <group rotation-y={rotation}><IdleGroup enabled={animated}><RobloxAvatar maps={maps} view={view} itemType={itemType} avatar={avatar} mode={mode} /></IdleGroup></group>
-      <ContactShadows position={[0, -0.4, 0]} scale={6} far={4} blur={2.6} opacity={0.6} resolution={1024} color="#05070d" />
-      <mesh rotation-x={-Math.PI / 2} position={[0, -0.402, 0]}><ringGeometry args={[1.0, 2.6, 80]} /><meshBasicMaterial color="#38507a" transparent opacity={0.22} /></mesh>
-      <OrbitControls enablePan={false} enableDamping dampingFactor={0.08} minPolarAngle={0.35} maxPolarAngle={Math.PI / 1.75} minDistance={2.2} maxDistance={6.2} target={cameraTarget} />
+      
+      <spotLight position={[-4, 4, -4]} intensity={5} color="#ec4899" penumbra={1} distance={15} />
+      <spotLight position={[4, 3, -4]} intensity={5} color="#38bdf8" penumbra={1} distance={15} />
+
+      <Stage />
+
+      <group rotation-y={rotation}>
+        <IdleGroup enabled={animated}>
+          <RobloxAvatar maps={maps} view={view} itemType={itemType} avatar={avatar} mode={mode} />
+        </IdleGroup>
+      </group>
+
+      <EffectComposer multisampling={0}>
+        <Bloom luminanceThreshold={2.0} mipmapBlur intensity={1.0} />
+      </EffectComposer>
+
+      <OrbitControls enablePan={false} enableDamping dampingFactor={0.08} minPolarAngle={0.2} maxPolarAngle={Math.PI / 1.8} minDistance={2.2} maxDistance={6.2} target={cameraTarget} />
     </>
   );
 }
@@ -369,7 +409,7 @@ export function AvatarPreview({ textureUrl, className, avatarType = "neutral", v
     <WebGLBoundary fallback={<PreviewFallback textureUrl={textureUrl} />}>
       <Canvas
         shadows
-        dpr={[1, 2]}
+        dpr={[1, 1.5]}
         gl={{ antialias: true, alpha: false, powerPreference: "high-performance", toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.05 }}
         camera={{ position: [0, 1.3, zoom], fov: resolvedMode === "clothing" ? 34 : 38 }}
         className="w-full h-full"
