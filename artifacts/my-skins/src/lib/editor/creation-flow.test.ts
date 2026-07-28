@@ -7,12 +7,13 @@ const source = readFileSync(resolve(process.cwd(), "src/pages/Create.tsx"), "utf
 
 test("creation UI has one child-friendly complete-skin action and no garment selector", () => {
   assert.match(source, />Describe your skin</);
-  assert.match(source, /Create Skin/);
+  assert.match(source, /Create<\/Button/);
   assert.doesNotMatch(source, /setGarmentType|Clothing type|Classic \{type/);
 });
 
 test("complete preview and all result actions stay in one flow", () => {
-  for (const label of ["Show Back", "Try Again", "Download Skin", "Save Skin", "Upload to Roblox"]) assert.match(source, new RegExp(label));
+  for (const label of ["Show Back", "Try Again", "Download PNG files", "Save", "Change something", "Classic Shirt"]) assert.match(source, new RegExp(label));
+  assert.doesNotMatch(source, />Upload to Roblox</);
   assert.match(source, /shirtTextureUrl=.*pantsTextureUrl=/s);
   assert.match(source, /robloxItemCount/);
 });

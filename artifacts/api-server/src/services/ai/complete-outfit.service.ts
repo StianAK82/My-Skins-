@@ -10,6 +10,7 @@ import {
 } from "./ai-errors.ts";
 import { planOutfitBlueprint } from "./outfit-blueprint.ts";
 import { planOutfitDNA, understandFashionIntent } from "./outfit-dna.ts";
+import { assessGenerationSafety } from "./generation-safety.ts";
 
 type Dependencies = {
   plan: typeof planOutfitBlueprint;
@@ -45,6 +46,9 @@ export async function generateCompleteOutfit(
       ...extra,
     });
   emit("complete_outfit.request_received");
+
+  const safety = assessGenerationSafety(description);
+  if (safety.decision === "block") throw new AiGenerationError(safety.userMessage, "AI_GENERATION_FAILED", "safety", false, 400);
 
   try {
     return await withAiTimeout(
