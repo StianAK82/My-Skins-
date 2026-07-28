@@ -87,6 +87,22 @@ const aiResponseSchema = z.object({
       recommendedPreset: z.string(),
       notes: z.array(z.string()),
     }),
+    // The AI's full structured outfit plan (handles typos/Norwegian, lists every requested item).
+    outfit: z.object({
+      top: z.enum(["hoodie", "sweater", "tshirt", "jacket", "dress", "none"]),
+      bottom: z.enum(["pants", "shorts", "skirt", "none"]),
+      shoes: z.enum(["none", "sneakers", "boots"]),
+      hair: z.object({
+        style: z.enum(["none", "short", "long", "ponytail", "twintails", "spiky", "curly", "braids"]),
+        color: z.string(),
+      }),
+      accessories: z.array(z.object({
+        kind: z.enum(["cap", "beanie", "hat", "helmet", "crown", "glasses", "mask", "wings", "backpack", "bag", "necklace", "scarf", "horns", "tail", "belt", "gloves"]),
+        color: z.string(),
+      })).max(6),
+      unsupported: z.array(z.string()),
+      reason: z.string(),
+    }).optional(),
     // The AI's own reading of which clothing pieces the user asked for (handles typos/Norwegian).
     garments: z.object({
       top: z.enum(["hoodie", "sweater", "tshirt", "jacket", "none"]),

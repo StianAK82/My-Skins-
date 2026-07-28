@@ -16,9 +16,9 @@ type ThreeTexture = ReturnType<typeof makeTextureFromZone>;
 type PreviewMode = "clothing" | "avatar";
 
 export type GarmentConfig = {
-  top?: "hoodie" | "sweater" | "tshirt" | null;
-  bottom?: "pants" | "shorts" | null;
-  shoes?: "sneakers" | null;
+  top?: "hoodie" | "sweater" | "tshirt" | "jacket" | "dress" | null;
+  bottom?: "pants" | "shorts" | "skirt" | null;
+  shoes?: "sneakers" | "boots" | null;
 };
 
 type AvatarPreviewProps = {
@@ -345,8 +345,46 @@ function GarmentOverlay({
             </group>
           )}
 
+          {/* JACKET COLLAR - fold-over style */}
+          {top === "jacket" && isMainTorso && (
+            <group position={[0, args[1]/2 - 0.03, args[2]/2 + 0.01]}>
+              <RoundedBox args={[args[0] * 0.5, 0.14, 0.08]} radius={0.03} smoothness={4} castShadow receiveShadow rotation={[0.3, 0, 0]}>
+                <meshStandardMaterial map={shirtMapFront} color={shirtColor} roughness={0.7} metalness={0.05} />
+              </RoundedBox>
+            </group>
+          )}
+
+          {/* JACKET FRONT PLACKET (vertical opening) */}
+          {top === "jacket" && isMainTorso && (
+            <>
+              <group position={[0.08, 0, args[2]/2 + 0.015]}>
+                <RoundedBox args={[0.06, args[1] * 0.9, 0.02]} radius={0.01} smoothness={4} castShadow receiveShadow>
+                  <meshStandardMaterial color="#1e293b" roughness={0.6} metalness={0.1} />
+                </RoundedBox>
+              </group>
+              <group position={[-0.08, 0, args[2]/2 + 0.015]}>
+                <RoundedBox args={[0.06, args[1] * 0.9, 0.02]} radius={0.01} smoothness={4} castShadow receiveShadow>
+                  <meshStandardMaterial color="#1e293b" roughness={0.6} metalness={0.1} />
+                </RoundedBox>
+              </group>
+            </>
+          )}
+
+          {/* DRESS - fitted bodice */}
+          {top === "dress" && (isMainTorso || isBottomTorso) && (
+            <BodyPart
+              material="shirt"
+              args={[args[0] * 1.04, args[1] * 0.98, args[2] * 1.04]}
+              position={[0, 0, 0]}
+              radius={0.06}
+              smoothness={4}
+              maps={maps}
+              skinTone={skinTone}
+            />
+          )}
+
           {/* RIBBED HEM (TORSO) */}
-          {(top === "hoodie" || top === "sweater") && isBottomTorso && (
+          {(top === "hoodie" || top === "sweater" || top === "jacket") && isBottomTorso && (
             <group position={[0, -args[1]/2 + 0.06, 0]}>
               <RoundedBox args={[args[0] * 1.05, 0.12, args[2] * 1.05]} radius={0.02} smoothness={4} castShadow receiveShadow>
                 <meshStandardMaterial map={shirtMapFront} color={shirtColor} roughness={0.8} metalness={0.05} />
@@ -359,8 +397,8 @@ function GarmentOverlay({
             </group>
           )}
 
-          {/* ARM CUFFS (HOODIE & SWEATER) */}
-          {(top === "hoodie" || top === "sweater") && (isBlockyArm || isR15BottomArm) && (
+          {/* ARM CUFFS (HOODIE, SWEATER, JACKET) */}
+          {(top === "hoodie" || top === "sweater" || top === "jacket") && (isBlockyArm || isR15BottomArm) && (
             <group position={[0, -args[1]/2 + 0.05, 0]}>
               <RoundedBox args={[args[0] * 1.1, 0.12, args[2] * 1.1]} radius={0.02} smoothness={4} castShadow receiveShadow>
                 <meshStandardMaterial map={shirtMapSide} color={shirtColor} roughness={0.8} metalness={0.05} />
@@ -388,8 +426,8 @@ function GarmentOverlay({
             </>
           )}
 
-          {/* FULL ARM PADDING (HOODIE & SWEATER) */}
-          {(top === "hoodie" || top === "sweater") && (isBlockyArm || isR15TopArm || isR15BottomArm) && (
+          {/* FULL ARM PADDING (HOODIE, SWEATER, JACKET) */}
+          {(top === "hoodie" || top === "sweater" || top === "jacket") && (isBlockyArm || isR15TopArm || isR15BottomArm) && (
             <BodyPart
               material="shirt"
               args={[args[0] * 1.05, args[1] * 0.98, args[2] * 1.05]}
@@ -506,6 +544,38 @@ function GarmentOverlay({
         </>
       )}
 
+      {/* SKIRT */}
+      {bottom === "skirt" && isTopLeg && (
+        <group position={[0, baseModelId === 'proportioned_r15' ? 0 : args[1]*0.15, 0]}>
+          {/* Fitted waistband */}
+          <group position={[0, args[1]/2 - 0.04, 0]}>
+            <RoundedBox args={[args[0] * 1.1, 0.08, args[2] * 1.1]} radius={0.02} smoothness={4} castShadow receiveShadow>
+              <meshStandardMaterial map={maps.pants.front} color={pantsColor} roughness={0.8} metalness={0.05} />
+            </RoundedBox>
+          </group>
+          {/* Flared A-line skirt volume */}
+          <group position={[0, baseModelId === 'proportioned_r15' ? -0.05 : 0.1, 0]}>
+            <mesh castShadow receiveShadow rotation={[0, 0, 0]}>
+              <cylinderGeometry args={[args[0] * 1.4, args[0] * 1.12, baseModelId === 'proportioned_r15' ? args[1] * 0.85 : args[1] * 0.65, 16]} />
+              <meshStandardMaterial map={maps.pants.front} color={pantsColor} roughness={0.75} metalness={0.05} />
+            </mesh>
+          </group>
+        </group>
+      )}
+
+      {/* DRESS SKIRT (when dress is the top) */}
+      {top === "dress" && isTopLeg && (
+        <group position={[0, baseModelId === 'proportioned_r15' ? 0 : args[1]*0.15, 0]}>
+          {/* A-line flare */}
+          <group position={[0, baseModelId === 'proportioned_r15' ? -0.05 : 0.1, 0]}>
+            <mesh castShadow receiveShadow rotation={[0, 0, 0]}>
+              <cylinderGeometry args={[args[0] * 1.5, args[0] * 1.08, baseModelId === 'proportioned_r15' ? args[1] * 0.9 : args[1] * 0.7, 16]} />
+              <meshStandardMaterial map={maps.shirt.front} color={shirtColor} roughness={0.75} metalness={0.05} />
+            </mesh>
+          </group>
+        </group>
+      )}
+
       {/* SNEAKERS */}
       {shoes === "sneakers" && isBottomLeg && (
         <>
@@ -554,6 +624,46 @@ function GarmentOverlay({
                     <cylinderGeometry args={[0.015, 0.015, args[0] * 0.65, 8]} />
                     <meshStandardMaterial color={laceColor} roughness={0.85} />
                   </mesh>
+                </group>
+              </group>
+            );
+          })()}
+        </>
+      )}
+
+      {/* BOOTS - taller than sneakers, chunkier */}
+      {shoes === "boots" && isBottomLeg && (
+        <>
+          {(() => {
+            const bootBodyColor = sampleTextureColor(maps.pants.front) !== "#ffffff" ? sampleTextureColor(maps.pants.front) : "#1e293b";
+            const bootSoleColor = "#475569";
+            
+            return (
+              <group position={[0, -args[1]/2 - 0.02, 0]}>
+                {/* Main boot shaft - tall, reaching up the leg */}
+                <RoundedBox args={[args[0] * 1.2, args[1] * 0.7, args[2] * 1.32]} radius={0.09} smoothness={6} castShadow receiveShadow>
+                  <meshStandardMaterial color={bootBodyColor} roughness={0.6} metalness={0.12} />
+                </RoundedBox>
+                
+                {/* Chunky sole platform */}
+                <group position={[0, -args[1] * 0.35 - 0.08, 0.02]}>
+                  <RoundedBox args={[args[0] * 1.24, 0.16, args[2] * 1.36]} radius={0.05} smoothness={6} castShadow receiveShadow>
+                    <meshStandardMaterial color={bootSoleColor} roughness={0.8} metalness={0.15} />
+                  </RoundedBox>
+                </group>
+                
+                {/* Toe guard reinforcement */}
+                <group position={[0, -args[1] * 0.3, args[2] * 0.66 + 0.02]}>
+                  <RoundedBox args={[args[0] * 1.18, 0.2, args[2] * 0.26]} radius={0.09} smoothness={6} castShadow receiveShadow>
+                    <meshStandardMaterial color={bootSoleColor} roughness={0.65} metalness={0.18} />
+                  </RoundedBox>
+                </group>
+                
+                {/* Upper cuff/collar */}
+                <group position={[0, args[1] * 0.35 - 0.04, 0]}>
+                  <RoundedBox args={[args[0] * 1.22, 0.1, args[2] * 1.34]} radius={0.03} smoothness={4} castShadow receiveShadow>
+                    <meshStandardMaterial color={bootSoleColor} roughness={0.7} metalness={0.1} />
+                  </RoundedBox>
                 </group>
               </group>
             );

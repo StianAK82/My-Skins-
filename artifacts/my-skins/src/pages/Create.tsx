@@ -152,6 +152,11 @@ export default function Create() {
   const outfitRef = useRef<{ pantsBase: string; pantsAccent: string; heroUrl?: string; fabricUrl?: string } | null>(null);
   const [garmentConfig, setGarmentConfig] = useState<GarmentConfig>({ top: "tshirt", bottom: "pants" });
   const generateLockRef = useRef(false);
+  const [outfitItems, setOutfitItems] = useState<{
+    uploadable: string[];
+    previewOnly: string[];
+    unsupported: string[];
+  } | null>(null);
 
   const { state, setAiPlanPreview, setAiAvatarPreview, deleteLayer, addLayer, applyAiPlan, setPaintSwatch } = useDesignStore();
   const hasDesign = state.layers.length > 0 || Boolean(state.baseColor);
@@ -277,6 +282,7 @@ export default function Create() {
     setAiError("");
     setUploadStatus("");
     setAiPhase("Lager designet…");
+    setOutfitItems(null);
     try {
       const response = normalizeAiResponse(await aiGenerateDesign({ prompt: usedPrompt, itemType: "classic_shirt", style: "AI velger", theme: usedPrompt }));
 
@@ -304,7 +310,7 @@ export default function Create() {
       let wantsTop: boolean;
       let wantsBottom: boolean;
       let wantsShoes: boolean;
-      let topType: "hoodie" | "sweater" | "tshirt" = "sweater";
+      let topType: "hoodie" | "sweater" | "tshirt" | "jacket" | "dress" = "sweater";
       let bottomType: "pants" | "shorts" = "pants";
 
       if (aiGarments) {
@@ -313,7 +319,8 @@ export default function Create() {
         wantsShoes = aiGarments.shoes;
         if (aiGarments.top === "hoodie") topType = "hoodie";
         else if (aiGarments.top === "tshirt") topType = "tshirt";
-        else topType = "sweater"; // sweater + jacket both get the plump sweater look
+        else if (aiGarments.top === "jacket") topType = "jacket";
+        else topType = "sweater";
         bottomType = aiGarments.bottom === "shorts" ? "shorts" : "pants";
       } else {
         // Fallback: word matching on prompt + AI text.
@@ -329,11 +336,22 @@ export default function Create() {
         if (/shorts/i.test(combined)) bottomType = "shorts";
       }
 
-      setGarmentConfig({
-        top: wantsTop ? topType : null,
-        bottom: wantsBottom ? bottomType : null,
-        shoes: wantsShoes ? "sneakers" : null,
-      });
+      // Use outfit plan if available, otherwise fall back to garment detection
+      const outfit = response.result.outfit;
+      if (outfit) {
+        // AI gave us a full structured outfit plan
+        setGarmentConfig({
+          top: outfit.top === "none" ? null : (outfit.top as "hoodie" | "sweater" | "tshirt" | "jacket" | "dress"),
+          bottom: outfit.bottom === "none" ? null : outfit.bottom as "pants" | "shorts" | "skirt",
+          shoes: outfit.shoes === "none" ? null : outfit.shoes as "sneakers" | "boots",
+        });
+      } else {
+        setGarmentConfig({
+          top: wantsTop ? topType : null,
+          bottom: wantsBottom ? bottomType : null,
+          shoes: wantsShoes ? "sneakers" : null,
+        });
+      }
       const previewAvatar = buildAiAvatarLook(
         [response.result.style, ...response.result.intent.styleVibes].join(" "),
         response.result.colorPalette,
@@ -371,6 +389,111 @@ export default function Create() {
             rotation: { x: 0, y: 0, z: 0 },
           },
         };
+      }
+
+      // Apply outfit accessories and hair if available
+      if (outfit) {
+        const unsupportedItems: string[] = [...(outfit.unsupported ?? [])];
+        
+        // Hair mapping
+        if (outfit.hair.style !== "none") {
+          const hairMap: Record<string, string> = {
+            short: "hair_short",
+            long: "hair_long",
+            ponytail: "hair_ponytail",
+            twintails: "hair_twin_tail_pop",
+            spiky: "hair_spiky_ember",
+            curly: "hair_curly",
+            braids: "hair_braids",
+          };
+          const hairAssetId = hairMap[outfit.hair.style];
+          if (hairAssetId) {
+            previewAvatar.slots = {
+              ...previewAvatar.slots,
+              hair: {
+                assetId: hairAssetId,
+                scale: 1,
+                visible: true,
+                color: outfit.hair.color,
+                offset: { x: 0, y: 0.05, z: 0 },
+                rotation: { x: 0, y: 0, z: 0 },
+              },
+            };
+          }
+        }
+
+        // Accessory mapping
+        const accessoryMap: Record<string, { slot: string; assetId: string }> = {
+          cap: { slot: "hat", assetId: "hat_street_cap" },
+          beanie: { slot: "hat", assetId: "hat_beanie_soft" },
+          hat: { slot: "hat", assetId: "hat_beanie_soft" },
+          helmet: { slot: "hat", assetId: "hat_helmet" },
+          crown: { slot: "hat", assetId: "hat_crown" },
+          glasses: { slot: "hat", assetId: "hat_glasses" },
+          mask: { slot: "hat", assetId: "hat_mask" },
+          wings: { slot: "back", assetId: "back_wings" },
+          backpack: { slot: "back", assetId: "back_backpack" },
+          bag: { slot: "back", assetId: "back_bag" },
+          tail: { slot: "back", assetId: "back_tail" },
+          necklace: { slot: "neck", assetId: "neck_chain_gold" },
+          scarf: { slot: "neck", assetId: "neck_scarf_neo" },
+          horns: { slot: "hat", assetId: "hat_cyber_horns" },
+          belt: { slot: "neck", assetId: "neck_belt" },
+          gloves: { slot: "neck", assetId: "neck_gloves" },
+        };
+
+        const usedSlots: Record<string, boolean> = {};
+        for (const acc of outfit.accessories) {
+          const mapped = accessoryMap[acc.kind];
+          if (!mapped) continue;
+          
+          // Only one item per slot; first wins
+          if (usedSlots[mapped.slot]) {
+            unsupportedItems.push(`${acc.kind} (kun plass til én ting i ${mapped.slot === 'hat' ? 'hode' : mapped.slot === 'back' ? 'rygg' : 'hals'}-sporet)`);
+            continue;
+          }
+          
+          usedSlots[mapped.slot] = true;
+          previewAvatar.slots = {
+            ...previewAvatar.slots,
+            [mapped.slot]: {
+              assetId: mapped.assetId,
+              scale: 1,
+              visible: true,
+              color: acc.color,
+              offset: { x: 0, y: 0, z: 0 },
+              rotation: { x: 0, y: 0, z: 0 },
+            },
+          };
+        }
+
+        // Build item list for UI
+        const uploadable: string[] = [];
+        const previewOnlyItems: string[] = [];
+        
+        if (outfit.top !== "none") uploadable.push(`Overdel (${outfit.top})`);
+        if (outfit.bottom !== "none") uploadable.push(`Underdel (${outfit.bottom})`);
+        
+        if (outfit.shoes !== "none") previewOnlyItems.push(`Sko (${outfit.shoes})`);
+        if (outfit.hair.style !== "none") previewOnlyItems.push(`Hår (${outfit.hair.style})`);
+        for (const acc of outfit.accessories) {
+          if (!accessoryMap[acc.kind] || unsupportedItems.some(s => s.includes(acc.kind))) continue;
+          previewOnlyItems.push(acc.kind.charAt(0).toUpperCase() + acc.kind.slice(1));
+        }
+        
+        setOutfitItems({
+          uploadable,
+          previewOnly: previewOnlyItems,
+          unsupported: unsupportedItems,
+        });
+      } else {
+        // No outfit plan – just show what we rendered
+        const uploadable: string[] = [];
+        const previewOnlyItems: string[] = [];
+        if (wantsTop) uploadable.push("Overdel");
+        if (wantsBottom) uploadable.push("Underdel");
+        if (wantsShoes) previewOnlyItems.push("Sko");
+        setOutfitItems({ uploadable, previewOnly: previewOnlyItems, unsupported: [] });
       }
       const payload = {
         model: "ClassicTextureAI.v3",
@@ -577,6 +700,57 @@ export default function Create() {
               garment={garmentConfig}
             />
           </div>
+          
+          {outfitItems && (outfitItems.uploadable.length > 0 || outfitItems.previewOnly.length > 0 || outfitItems.unsupported.length > 0) && (
+            <div className="mt-4 rounded-xl border border-slate-700 bg-slate-900/60 p-4 space-y-3 text-sm">
+              {outfitItems.uploadable.length > 0 && (
+                <div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <Upload className="h-4 w-4 text-emerald-400" />
+                    <span className="font-semibold text-emerald-400">Lastes opp til Roblox</span>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {outfitItems.uploadable.map((item, i) => (
+                      <span key={i} className="px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-xs">
+                        {item}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+              
+              {outfitItems.previewOnly.length > 0 && (
+                <div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <Sparkles className="h-4 w-4 text-sky-400" />
+                    <span className="font-semibold text-sky-400">Kun forhåndsvisning</span>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {outfitItems.previewOnly.map((item, i) => (
+                      <span key={i} className="px-3 py-1 rounded-full bg-sky-500/20 text-sky-300 border border-sky-500/30 text-xs">
+                        {item}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+              
+              {outfitItems.unsupported.length > 0 && (
+                <div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="font-semibold text-slate-400">⚠️ Ikke støttet</span>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {outfitItems.unsupported.map((item, i) => (
+                      <span key={i} className="px-3 py-1 rounded-full bg-slate-700/40 text-slate-400 border border-slate-600/40 text-xs">
+                        {item}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </section>
 
         <section className="w-full space-y-4">

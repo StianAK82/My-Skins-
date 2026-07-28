@@ -58,3 +58,6 @@ told the user; app covers Classic Shirt/Pants/T-Shirt only.
 
 ## 3D garment geometry (July 2026)
 Flat textures on the blocky body never read as real clothes. AvatarPreview now has a `GarmentOverlay` (procedural hood, drawstrings, kangaroo pocket, hems/cuffs, trouser volume) driven by a `garment` prop; Create.tsx detects garment type from prompt keywords (hettegenser/hoodie, bukse/jeans, shorts). Plain clothing prompts also strip cosmetic slots (hat/neck/aura etc.) via a `wantsCosmetics` regex so the avatar stays clean like the Roblox editor.
+
+## Universal outfit spec (July 2026)
+/ai/generate now returns `result.outfit` {top,bottom,shoes,hair,accessories[],unsupported[],reason} — the AI itself parses kid-Norwegian/typos into structured items (schema in ai-contracts.ts `aiOutfitSchema`, client zod in normalize-ai-response.ts). Create.tsx maps it to GarmentOverlay geometry (hoodie/sweater/tshirt/jacket/dress, pants/shorts/skirt, sneakers/boots) + accessory/hair part kits in assets.ts, with slot-conflict handling (one hat, one back item; wings beat backpack) and an honest Norwegian item-list card (uploads vs preview-only vs unsupported). Rule: never silently substitute items; extend the enum + a part kit instead. 3D accessories are preview-only — Roblox only accepts classic clothing PNGs from the app.

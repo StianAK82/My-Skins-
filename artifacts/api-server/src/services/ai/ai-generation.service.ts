@@ -173,19 +173,24 @@ export class AiGenerationService {
       '    "recommendedPreset": "string",',
       '    "notes": ["string"]',
       "  },",
-      '  "garments": {',
-      '    "top": "hoodie|sweater|tshirt|jacket|none",',
-      '    "bottom": "pants|shorts|none",',
-      '    "shoes": true,',
+      '  "outfit": {',
+      '    "top": "hoodie|sweater|tshirt|jacket|dress|none",',
+      '    "bottom": "pants|shorts|skirt|none",',
+      '    "shoes": "none|sneakers|boots",',
+      '    "hair": {"style": "none|short|long|ponytail|twintails|spiky|curly|braids", "color": "#RRGGBB"},',
+      '    "accessories": [{"kind": "cap|beanie|hat|helmet|crown|glasses|mask|wings|backpack|bag|necklace|scarf|horns|tail|belt|gloves", "color": "#RRGGBB"}],',
+      '    "unsupported": ["string"],',
       '    "reason": "string"',
       "  }",
       "}",
       "",
-      "Garments rule (strict): `garments` states EXACTLY which clothing pieces the user asked for, nothing more.",
-      "The prompt is often written by a child in Norwegian with typos — interpret the intent (e.g. 't-sjhortet' means t-skjorte).",
-      "Norwegian glossary: hettegenser=hoodie, genser/collegegenser=sweater, t-skjorte/skjorte=tshirt, jakke=jacket, bukse/olabukse/jeans/joggebukse=pants, shorts=shorts, sko/joggesko=shoes.",
-      "Full-outfit words mean top AND bottom: treningsdress/trening dress/tracksuit=jacket+pants+shoes true, dress/suit=jacket+pants, kostyme/antrekk/outfit/skin=top+bottom.",
-      "If the user only asks for one piece (e.g. only a t-shirt), set the other pieces to \"none\" and shoes to false.",
+      "Outfit rule (strict): `outfit` lists EXACTLY the items the user asked for — every requested item, nothing extra, no substitutions.",
+      "The prompt is often written by a child in Norwegian with typos — interpret the intent (e.g. 't-sjhortet' means t-skjorte, 'capps' means caps).",
+      "Norwegian glossary: hettegenser=hoodie, genser/collegegenser=sweater, t-skjorte/skjorte=tshirt, jakke/vinterjakke=jacket, kjole=dress, skjørt=skirt, bukse/olabukse/jeans/joggebukse/cargobukse=pants, shorts=shorts, sko/joggesko=sneakers, støvler=boots, caps=cap, lue=beanie, hatt=hat, hjelm=helmet, krone=crown, briller=glasses, maske=mask, vinger=wings, ryggsekk/sekk=backpack, veske/bag=bag, kjede/halskjede=necklace, skjerf=scarf, hansker=gloves, belte=belt, hale=tail, hår=hair.",
+      "Full-outfit words mean top AND bottom: treningsdress/tracksuit=jacket+pants+sneakers, dress/suit=jacket+pants, fotballdrakt/football kit=tshirt+shorts+sneakers, ninja/kostyme/antrekk/outfit=top+bottom. The word 'skin' alone means a complete look (top+bottom).",
+      "hair.style is \"none\" unless the user asks for hair. accessories only contains requested items (max 6).",
+      "Everything in the outfit schema (shoes, hair, all listed accessory kinds) IS supported in the 3D preview — never list those in `unsupported`. Only put something in `unsupported` when it truly cannot be represented (e.g. a specific brand logo, an animal companion).",
+      "If the user only asks for one piece (e.g. only a t-shirt), set every other field to none/empty.",
       "",
       "Placement rule (strict):",
       placementRule,
@@ -310,17 +315,43 @@ export class AiGenerationService {
       avatarSlotPlan.push({ slot: "hair", assetHint: intent.styleVibes.includes("anime") ? "hair_anime_layered" : "hair_wavy_midnight", role: "support", rationale: "Hair establishes style silhouette", color: colorPalette[1] });
     }
 
-    const garmentsSource = (source.garments && typeof source.garments === "object") ? source.garments as Record<string, unknown> : {};
-    const topOptions = ["hoodie", "sweater", "tshirt", "jacket", "none"] as const;
-    const bottomOptions = ["pants", "shorts", "none"] as const;
+    const outfitSource = (source.outfit && typeof source.outfit === "object") ? source.outfit as Record<string, unknown> : {};
+    const topOptions = ["hoodie", "sweater", "tshirt", "jacket", "dress", "none"] as const;
+    const bottomOptions = ["pants", "shorts", "skirt", "none"] as const;
+    const shoeOptions = ["none", "sneakers", "boots"] as const;
+    const hairStyles = ["none", "short", "long", "ponytail", "twintails", "spiky", "curly", "braids"] as const;
+    const accessoryKinds = ["cap", "beanie", "hat", "helmet", "crown", "glasses", "mask", "wings", "backpack", "bag", "necklace", "scarf", "horns", "tail", "belt", "gloves"] as const;
+
+    const hairSource = (outfitSource.hair && typeof outfitSource.hair === "object") ? outfitSource.hair as Record<string, unknown> : {};
+    const accessoriesSource = Array.isArray(outfitSource.accessories) ? outfitSource.accessories : [];
+    const outfit = {
+      top: topOptions.includes(outfitSource.top as typeof topOptions[number]) ? outfitSource.top as typeof topOptions[number] : "sweater",
+      bottom: bottomOptions.includes(outfitSource.bottom as typeof bottomOptions[number]) ? outfitSource.bottom as typeof bottomOptions[number] : "pants",
+      shoes: shoeOptions.includes(outfitSource.shoes as typeof shoeOptions[number]) ? outfitSource.shoes as typeof shoeOptions[number] : "none",
+      hair: {
+        style: hairStyles.includes(hairSource.style as typeof hairStyles[number]) ? hairSource.style as typeof hairStyles[number] : "none",
+        color: normalizeHex(hairSource.color) ?? "#1f2937",
+      },
+      accessories: accessoriesSource.slice(0, 6).flatMap((entry) => {
+        const row = (entry && typeof entry === "object") ? entry as Record<string, unknown> : {};
+        if (!accessoryKinds.includes(row.kind as typeof accessoryKinds[number])) return [];
+        return [{ kind: row.kind as typeof accessoryKinds[number], color: normalizeHex(row.color) ?? colorPalette[0] ?? "#334155" }];
+      }),
+      unsupported: Array.isArray(outfitSource.unsupported)
+        ? outfitSource.unsupported.filter((entry): entry is string => typeof entry === "string" && Boolean(entry.trim())).slice(0, 6)
+        : [],
+      reason: typeof outfitSource.reason === "string" ? outfitSource.reason.slice(0, 300) : "",
+    };
+    // Backwards-compatible summary used by older clients.
     const garments = {
-      top: topOptions.includes(garmentsSource.top as typeof topOptions[number]) ? garmentsSource.top as typeof topOptions[number] : "sweater",
-      bottom: bottomOptions.includes(garmentsSource.bottom as typeof bottomOptions[number]) ? garmentsSource.bottom as typeof bottomOptions[number] : "pants",
-      shoes: typeof garmentsSource.shoes === "boolean" ? garmentsSource.shoes : false,
-      reason: typeof garmentsSource.reason === "string" ? garmentsSource.reason.slice(0, 200) : "",
+      top: (outfit.top === "dress" ? "jacket" : outfit.top) as "hoodie" | "sweater" | "tshirt" | "jacket" | "none",
+      bottom: (outfit.bottom === "skirt" ? "shorts" : outfit.bottom) as "pants" | "shorts" | "none",
+      shoes: outfit.shoes !== "none",
+      reason: outfit.reason,
     };
 
     return {
+      outfit,
       garments,
       title: typeof source.title === "string" && source.title.trim() ? source.title.trim() : "Generated Roblox Design",
       itemType,
