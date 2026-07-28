@@ -279,14 +279,26 @@ export default function Create() {
     setAiPhase("Lager designet…");
     try {
       const pLow = usedPrompt.toLowerCase();
+      // Only make the pieces the user actually asked for.
+      const mentionsTop = /hettegenser|hette|hoodie|genser|sweater|skjorte|shirt|jakke|jacket|topp|overdel/i.test(pLow);
+      const mentionsBottom = /shorts|bukse|olabukse|jeans|jogge|pants|underdel/i.test(pLow);
+      const mentionsShoes = /\bsko\b|joggesko|sneakers|boots|støvle/i.test(pLow);
+      // If no specific garment is named ("lag et drage-skin"), make the whole outfit.
+      const fullOutfit = !mentionsTop && !mentionsBottom && !mentionsShoes;
+      const wantsTop = mentionsTop || fullOutfit;
+      const wantsBottom = mentionsBottom || fullOutfit;
+
       let topType: "hoodie" | "tshirt" = "tshirt";
       if (/hettegenser|hette|hoodie/i.test(pLow)) topType = "hoodie";
 
       let bottomType: "pants" | "shorts" = "pants";
       if (/shorts/i.test(pLow)) bottomType = "shorts";
-      else if (/bukse|olabukse|jeans|jogge|pants/i.test(pLow)) bottomType = "pants";
 
-      setGarmentConfig({ top: topType, bottom: bottomType });
+      setGarmentConfig({
+        top: wantsTop ? topType : null,
+        bottom: wantsBottom ? bottomType : null,
+        shoes: mentionsShoes ? "sneakers" : null,
+      });
 
       const response = normalizeAiResponse(await aiGenerateDesign({ prompt: usedPrompt, itemType: "classic_shirt", style: "AI velger", theme: usedPrompt }));
       const previewAvatar = buildAiAvatarLook(
@@ -345,25 +357,30 @@ export default function Create() {
       applyAiPlan();
       if (parsed.palette[0]) setPaintSwatch(parsed.palette[0]);
 
-      // Give the outfit matching pants: color the leg zones so the 3D figure wears them too.
+      // Color the leg zones only when the outfit actually includes a bottom.
       const pantsColors = pickPantsColors(parsed.palette);
       outfitRef.current = { pantsBase: pantsColors.base, pantsAccent: pantsColors.accent };
-      for (const legZone of ["left_leg_front", "right_leg_front", "left_leg_back", "right_leg_back"]) {
-        addLayer({
-          name: "Bukse",
-          type: "paintLayerSet",
-          zone: legZone,
-          color: pantsColors.base,
-          transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 },
-        });
+      if (wantsBottom) {
+        for (const legZone of ["left_leg_front", "right_leg_front", "left_leg_back", "right_leg_back"]) {
+          addLayer({
+            name: "Bukse",
+            type: "paintLayerSet",
+            zone: legZone,
+            color: pantsColors.base,
+            transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 },
+          });
+        }
       }
 
-      // Then draw the real clothing: one texture for the top garment, one for the bottom, plus the motif.
+      // Draw only the pieces that were asked for. A standalone motif is only added
+      // when the prompt asks for one (logo, trykk, motiv, figur …) or is a themed skin.
+      const wantsMotif = fullOutfit || /logo|motiv|trykk|bilde|figur|mønster|print/i.test(pLow) || wantsCosmetics;
       setAiPhase("Tegner klærne du beskrev… (kan ta opptil ett minutt)");
+      const skipped = { status: 0, data: {} as { imageUrl?: string } };
       const [top, bottom, hero] = await Promise.all([
-        apiPost<{ imageUrl?: string }>("/ai/hero-image", { prompt: usedPrompt.slice(0, 600), kind: "garment-top" }),
-        apiPost<{ imageUrl?: string }>("/ai/hero-image", { prompt: usedPrompt.slice(0, 600), kind: "garment-bottom" }),
-        apiPost<{ imageUrl?: string }>("/ai/hero-image", { prompt: usedPrompt }),
+        wantsTop ? apiPost<{ imageUrl?: string }>("/ai/hero-image", { prompt: usedPrompt.slice(0, 600), kind: "garment-top" }) : Promise.resolve(skipped),
+        wantsBottom ? apiPost<{ imageUrl?: string }>("/ai/hero-image", { prompt: usedPrompt.slice(0, 600), kind: "garment-bottom" }) : Promise.resolve(skipped),
+        wantsMotif ? apiPost<{ imageUrl?: string }>("/ai/hero-image", { prompt: usedPrompt }) : Promise.resolve(skipped),
       ]);
 
       const topUrl = top.status === 200 ? top.data.imageUrl : undefined;
@@ -404,7 +421,7 @@ export default function Create() {
         });
       } else {
         outfitRef.current = { pantsBase: pantsColors.base, pantsAccent: pantsColors.accent, fabricUrl: bottomUrl };
-        if (!topUrl && !bottomUrl) setAiError("Designet er klart, men selve motivet kunne ikke tegnes. Prøv «Lag skin» igjen.");
+        if ((wantsTop && !topUrl) || (wantsBottom && !bottomUrl)) setAiError("Designet er klart, men selve motivet kunne ikke tegnes. Prøv «Lag skin» igjen.");
       }
     } catch (error) {
       const status = (error as { status?: number })?.status;

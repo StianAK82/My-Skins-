@@ -18,6 +18,7 @@ type PreviewMode = "clothing" | "avatar";
 export type GarmentConfig = {
   top?: "hoodie" | "tshirt" | null;
   bottom?: "pants" | "shorts" | null;
+  shoes?: "sneakers" | null;
 };
 
 type AvatarPreviewProps = {
@@ -227,6 +228,22 @@ function BodyPart({ material, args, position, radius, smoothness, maps, skinTone
   );
 }
 
+function sampleTextureColor(texture: ThreeTexture | null): string {
+  if (!texture?.image) return "#ffffff";
+  try {
+    const canvas = document.createElement("canvas");
+    canvas.width = 1;
+    canvas.height = 1;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return "#ffffff";
+    ctx.drawImage(texture.image, 0, 0, 1, 1);
+    const pixel = ctx.getImageData(0, 0, 1, 1).data;
+    return `rgb(${pixel[0]}, ${pixel[1]}, ${pixel[2]})`;
+  } catch {
+    return "#ffffff";
+  }
+}
+
 function GarmentOverlay({
   partId, args, maps, garment, baseModelId, skinTone
 }: {
@@ -235,6 +252,7 @@ function GarmentOverlay({
   if (!garment) return null;
   const top = garment.top || "tshirt";
   const bottom = garment.bottom || "pants";
+  const shoes = garment.shoes;
 
   const isMainTorso = partId === "torso" || partId === "upperTorso";
   const isBottomTorso = partId === "torso" || partId === "lowerTorso" || partId === "hips";
@@ -428,6 +446,61 @@ function GarmentOverlay({
               </group>
             </group>
           )}
+        </>
+      )}
+
+      {/* SNEAKERS */}
+      {shoes === "sneakers" && isBottomLeg && (
+        <>
+          {(() => {
+            const shoeBodyColor = sampleTextureColor(maps.pants.front) !== "#ffffff" ? sampleTextureColor(maps.pants.front) : "#f8fafc";
+            const soleColor = "#cbd5e1";
+            const laceColor = "#0f172a";
+            
+            return (
+              <group position={[0, -args[1]/2 - 0.02, 0]}>
+                {/* Main shoe body - chunky rounded box wrapping the foot */}
+                <RoundedBox args={[args[0] * 1.18, 0.22, args[2] * 1.3]} radius={0.08} smoothness={6} castShadow receiveShadow>
+                  <meshStandardMaterial color={shoeBodyColor} roughness={0.65} metalness={0.08} />
+                </RoundedBox>
+                
+                {/* Sole slab underneath - lighter and wider */}
+                <group position={[0, -0.14, 0.02]}>
+                  <RoundedBox args={[args[0] * 1.22, 0.08, args[2] * 1.34]} radius={0.04} smoothness={6} castShadow receiveShadow>
+                    <meshStandardMaterial color={soleColor} roughness={0.75} metalness={0.1} />
+                  </RoundedBox>
+                </group>
+                
+                {/* Toe cap - rounded protective front */}
+                <group position={[0, -0.04, args[2] * 0.65 + 0.02]}>
+                  <RoundedBox args={[args[0] * 1.16, 0.16, args[2] * 0.24]} radius={0.08} smoothness={6} castShadow receiveShadow>
+                    <meshStandardMaterial color={soleColor} roughness={0.7} metalness={0.12} />
+                  </RoundedBox>
+                </group>
+                
+                {/* Tongue hint - small padded piece near ankle */}
+                <group position={[0, 0.08, args[2] * 0.3]}>
+                  <RoundedBox args={[args[0] * 0.6, 0.18, 0.08]} radius={0.04} smoothness={4} castShadow receiveShadow>
+                    <meshStandardMaterial color={shoeBodyColor} roughness={0.68} metalness={0.05} />
+                  </RoundedBox>
+                </group>
+                
+                {/* Lace hints - two small horizontal bars */}
+                <group position={[0, 0.04, args[2] * 0.4]}>
+                  <mesh castShadow>
+                    <cylinderGeometry args={[0.015, 0.015, args[0] * 0.7, 8]} />
+                    <meshStandardMaterial color={laceColor} roughness={0.85} />
+                  </mesh>
+                </group>
+                <group position={[0, 0.08, args[2] * 0.25]}>
+                  <mesh castShadow rotation={[0, 0, Math.PI / 2]}>
+                    <cylinderGeometry args={[0.015, 0.015, args[0] * 0.65, 8]} />
+                    <meshStandardMaterial color={laceColor} roughness={0.85} />
+                  </mesh>
+                </group>
+              </group>
+            );
+          })()}
         </>
       )}
     </>
