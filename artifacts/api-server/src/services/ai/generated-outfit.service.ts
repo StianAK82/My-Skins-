@@ -12,6 +12,7 @@ export type StoredGeneration = {
   generationId:string; originalPrompt:string; normalisedPrompt:string;
   generatedOutfitSpec:GeneratedOutfitSpec|null; validation:GenerationValidationReport;
   modelLatencyMs:number; repairAttemptCount:number; modelProviderError:string|null;
+  generationSource:"openai"|"deterministic-test-fixture";
 };
 type ModelCall = (messages:{role:"system"|"user";content:string}[], repair:boolean) => Promise<unknown>;
 export const generationStore = new Map<string, StoredGeneration>();
@@ -29,6 +30,11 @@ const defaultModelCall:ModelCall = async (messages, repair) => {
   return JSON.parse(content);
 };
 
+export async function generateStructuredOutfit(prompt:string, modelCall:ModelCall=defaultModelCall, generationSource:"openai"|"deterministic-test-fixture"="openai"): Promise<StoredGeneration> {
+  const generationId=randomUUID(); const originalPrompt=prompt; const normalisedPrompt=prompt.trim().replace(/\s+/g," ");
+  const safety=assessGenerationSafety(normalisedPrompt); const started=Date.now(); let repairAttemptCount=0; let modelProviderError:string|null=null;
+  const record:StoredGeneration={generationId,originalPrompt,normalisedPrompt,generatedOutfitSpec:null,validation:invalidReport(false),modelLatencyMs:0,repairAttemptCount,modelProviderError,generationSource};
+  if(safety.decision==="block"){generationStore.set(generationId,record);throw new AiGenerationError(safety.userMessage,"AI_GENERATION_FAILED","safety",false,400)}
 function deterministicWhiteHoodie(prompt:string):GeneratedOutfitSpec {
   const norwegian=/\b(hvit|hettegenser|lag en)\b/i.test(prompt);const oversized=/oversized/i.test(prompt);
   return {requestLanguage:norwegian?"no":"en",originalPrompt:prompt,normalisedPrompt:prompt.trim().toLowerCase(),outfitName:"White Hoodie",overallStyle:oversized?"oversized":"minimal",palette:["#f4f4f2","#d5d8dc"],top:{id:"top",category:"hoodie",slot:"top",color:"#f4f4f2",material:"cotton-fleece",construction:{fit:oversized?"oversized":"regular",torsoWidth:oversized?1.42:1.12,torsoLength:1.1,torsoDepth:oversized?.78:.68,shoulderDrop:oversized?.22:.12,sleeveLength:1,sleeveFullness:oversized?1.28:1,cuffHeight:.16,waistbandHeight:.14,hoodHeight:.96,hoodDepth:.44,hoodOpeningWidth:.43,hoodOpeningHeight:.66,pocketType:"kangaroo",pocketWidth:.72,pocketHeight:.32,drawstringEnabled:true,drawstringLength:.38}},bottom:null,footwear:{category:"none",previewOnly:true},graphics:[],classicExportPlan:{shirt:true,pants:false,width:585,height:559,exportType:"roblox-classic",previewRepresentation:"procedural-hoodie",hasReal3DExport:false},safetyDecision:"allow",modelConfidence:1,generationSeed:"deterministic-white-hoodie"};
@@ -46,6 +52,7 @@ export async function generateStructuredOutfit(prompt:string, modelCall:ModelCal
     if(!parsed.success) throw new AiGenerationError("Model response failed GeneratedOutfitSpec validation","SCHEMA_REPAIR_FAILED","outfit_schema",false,422);
     const validation=generationValidationReportSchema.parse({schemaValid:true,safetyApproved:true,mandatoryParts,missingParts:[],severeIntersections:[],classicValid:true});
     Object.assign(record,{generatedOutfitSpec:parsed.data,validation,modelLatencyMs:Date.now()-started,repairAttemptCount});generationStore.set(generationId,record);
+    console.info("ai.outfit_spec.generated", { generationId, generationSource });
     return record;
   } catch(error) {
     modelProviderError=error instanceof Error?error.message:"Unknown model/provider error";

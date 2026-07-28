@@ -96,6 +96,12 @@ router.post("/ai/complete-outfit", async (req, res): Promise<void> => {
 
 router.post("/ai/outfit-spec", async (req,res):Promise<void>=>{
   const parsed=completeOutfitRequestSchema.safeParse(req.body);if(!parsed.success){res.status(400).json({error:"Invalid request",details:parsed.error.flatten()});return}
+  try{
+    const fixturesEnabled=process.env.MY_SKINS_USE_DETERMINISTIC_AI_FIXTURES==="true";
+    if(fixturesEnabled && !["test","development"].includes(process.env.NODE_ENV??"")) throw new AiGenerationError("Deterministic AI fixtures are forbidden in production","AI_GENERATION_FAILED","configuration",false,503);
+    const generated=await generateStructuredOutfit(parsed.data.prompt);
+    res.json({...generated,outfitSpec:generated.generatedOutfitSpec,exports:generated.generatedOutfitSpec?.classicExportPlan.shirt?[{garment:"Shirt Classic",width:585,height:559}]:[]});
+  }catch(error){const failure=error instanceof AiGenerationError?error:new AiGenerationError("Generation failed","AI_GENERATION_FAILED","outfit_model",true,502);res.status(failure.status ?? 502).json({error:failure.message,code:failure.code,stage:failure.stage})}
   try{res.json(await generateOutfitSpecResponse(parsed.data.prompt))}catch(error){const failure=error instanceof AiGenerationError?error:new AiGenerationError("Generation failed","MODEL_REQUEST_FAILED","outfit_model",true,502);req.log.error({code:failure.code,stage:failure.stage,requestId:req.id,stack:process.env.NODE_ENV==="development"?failure.stack:undefined},"ai.v2.outfit_spec.failed");res.status(failure.status ?? 502).json({error:failure.message,code:failure.code,stage:failure.stage,retryable:failure.retryable,requestId:req.id})}
 });
 
