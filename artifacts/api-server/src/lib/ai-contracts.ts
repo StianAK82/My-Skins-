@@ -119,7 +119,7 @@ export const aiOutfitSchema = z.object({
     color: hexColorSchema,
   }).strict(),
   accessories: z.array(z.object({
-    kind: z.enum(["cap", "beanie", "hat", "helmet", "crown", "glasses", "mask", "wings", "backpack", "bag", "necklace", "scarf", "horns", "tail", "belt", "gloves"]),
+    kind: z.enum(["cap", "beanie", "hat", "helmet", "crown", "glasses", "mask", "wings", "backpack", "bag", "necklace", "scarf", "horns", "tail", "belt", "gloves", "unicorn_horn", "dragon_hood"]),
     color: hexColorSchema,
   }).strict()).max(6),
   unsupported: z.array(z.string()).max(6),

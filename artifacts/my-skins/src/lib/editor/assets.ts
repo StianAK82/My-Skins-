@@ -280,6 +280,44 @@ export const AVATAR_ASSETS: AvatarAsset[] = [
   { id: "hat_glasses", name: "Glasses", category: "hat", slot: "hat", color: "#0f172a", renderMode: "part_kit", modelPath: "/avatar/hat/glasses.glb", parts: [makePart("torus", [0.08, 0.02, 12, 20], { position: [-0.14, 0, 0.28], rotation: [Math.PI / 2, 0, 0], useAssetColor: true }), makePart("torus", [0.08, 0.02, 12, 20], { position: [0.14, 0, 0.28], rotation: [Math.PI / 2, 0, 0], useAssetColor: true }), makePart("cylinder", [0.015, 0.015, 0.08, 8], { position: [0, 0, 0.28], rotation: [0, 0, Math.PI / 2], color: "#475569" })], styleTags: ["casual", "smart"], previewOnly: true, exportable: false },
   { id: "hat_mask", name: "Mask", category: "hat", slot: "hat", color: "#1e293b", renderMode: "part_kit", modelPath: "/avatar/hat/mask.glb", parts: [makePart("roundedBox", [0.5, 0.24, 0.1], { radius: 0.08, position: [0, -0.08, 0.3], useAssetColor: true })], styleTags: ["tactical", "dark"], previewOnly: true, exportable: false },
 
+  { id: "hat_unicorn", name: "Unicorn Hat", category: "hat", slot: "hat", color: "#fbbf24", renderMode: "part_kit", modelPath: "/avatar/hat/unicorn.glb", parts: [
+    // White headband/cap base sitting on head
+    makePart("roundedBox", [0.66, 0.18, 0.6], { radius: 0.12, position: [0, 0.01, 0], color: "#f8fafc" }),
+    // Left ear - white with pink inner
+    makePart("cone", [0.08, 0.16, 12], { position: [-0.24, 0.16, 0.04], rotation: [0.2, 0, -0.4], color: "#f8fafc" }),
+    makePart("cone", [0.05, 0.11, 12], { position: [-0.24, 0.16, 0.05], rotation: [0.2, 0, -0.4], color: "#fda4af" }),
+    // Right ear - white with pink inner
+    makePart("cone", [0.08, 0.16, 12], { position: [0.24, 0.16, 0.04], rotation: [0.2, 0, 0.4], color: "#f8fafc" }),
+    makePart("cone", [0.05, 0.11, 12], { position: [0.24, 0.16, 0.05], rotation: [0.2, 0, 0.4], color: "#fda4af" }),
+    // Gold spiral horn (stacked tapering cones) - tinted by AI color
+    makePart("cone", [0.055, 0.14, 16], { position: [0, 0.18, 0.14], rotation: [0.15, 0, 0], useAssetColor: true, metalness: 0.5, roughness: 0.3 }),
+    makePart("cone", [0.045, 0.12, 16], { position: [0, 0.28, 0.16], rotation: [0.12, 0.1, 0], useAssetColor: true, metalness: 0.5, roughness: 0.3 }),
+    makePart("cone", [0.035, 0.1, 16], { position: [0, 0.36, 0.18], rotation: [0.1, 0.15, 0], useAssetColor: true, metalness: 0.5, roughness: 0.3 }),
+    // Pastel rainbow mane strip down the back (pink/purple/turquoise segments)
+    makePart("roundedBox", [0.16, 0.08, 0.12], { radius: 0.04, position: [0, 0.1, -0.24], color: "#fbcfe8" }),
+    makePart("roundedBox", [0.14, 0.08, 0.1], { radius: 0.04, position: [0, 0.04, -0.32], color: "#e9d5ff" }),
+    makePart("roundedBox", [0.12, 0.08, 0.08], { radius: 0.04, position: [0, -0.02, -0.38], color: "#a5f3fc" }),
+  ], styleTags: ["fantasy", "cute"], fantasyTags: ["unicorn"], previewOnly: true, exportable: false },
+
+  { id: "hat_dragon", name: "Dragon Hood", category: "hat", slot: "hat", color: "#22c55e", renderMode: "part_kit", modelPath: "/avatar/hat/dragon.glb", parts: [
+    // Hood shell over top/back of head - uses asset color
+    makePart("roundedBox", [0.68, 0.32, 0.58], { radius: 0.16, position: [0, 0.04, -0.04], useAssetColor: true }),
+    // Protruding snout box in front (above the face)
+    makePart("roundedBox", [0.24, 0.18, 0.28], { radius: 0.08, position: [0, -0.02, 0.38], useAssetColor: true }),
+    // White teeth under snout edge
+    makePart("cone", [0.03, 0.08, 8], { position: [-0.06, -0.12, 0.48], rotation: [Math.PI, 0, 0], color: "#f8fafc" }),
+    makePart("cone", [0.03, 0.08, 8], { position: [0.06, -0.12, 0.48], rotation: [Math.PI, 0, 0], color: "#f8fafc" }),
+    // Two small horns/back-spikes on top
+    makePart("cone", [0.045, 0.12, 12], { position: [-0.12, 0.22, -0.06], rotation: [-0.3, 0, -0.2], useAssetColor: true }),
+    makePart("cone", [0.045, 0.12, 12], { position: [0.12, 0.22, -0.06], rotation: [-0.3, 0, 0.2], useAssetColor: true }),
+    // Left cartoon eye bump (white sphere + dark pupil)
+    makePart("sphere", [0.08, 12, 12], { position: [-0.16, 0.08, 0.26], color: "#f8fafc" }),
+    makePart("sphere", [0.04, 12, 12], { position: [-0.18, 0.08, 0.32], color: "#0f172a" }),
+    // Right cartoon eye bump (white sphere + dark pupil)
+    makePart("sphere", [0.08, 12, 12], { position: [0.16, 0.08, 0.26], color: "#f8fafc" }),
+    makePart("sphere", [0.04, 12, 12], { position: [0.18, 0.08, 0.32], color: "#0f172a" }),
+  ], styleTags: ["fantasy", "cute"], fantasyTags: ["dragon"], previewOnly: true, exportable: false },
+
   { id: "neck_chain_gold", name: "Gold Chain", category: "neck", slot: "neck", color: "#facc15", renderMode: "part_kit", modelPath: "/avatar/neck/gold-chain.glb", parts: [makePart("torus", [0.2, 0.03, 16, 36], { rotation: [Math.PI / 2, 0, 0], useAssetColor: true, metalness: 0.74, roughness: 0.35 }), makePart("sphere", [0.05, 12, 12], { position: [0, -0.12, 0.08], color: "#fde68a", metalness: 0.66, roughness: 0.3 })], styleTags: ["street", "luxury"], previewOnly: true, exportable: false },
   { id: "neck_scarf_neo", name: "Neo Scarf", category: "neck", slot: "neck", color: "#22c55e", renderMode: "part_kit", modelPath: "/avatar/neck/neo-scarf.glb", parts: [makePart("torus", [0.24, 0.06, 12, 30], { rotation: [Math.PI / 2, 0, 0], useAssetColor: true }), makePart("roundedBox", [0.12, 0.3, 0.08], { radius: 0.03, position: [0.1, -0.2, 0.2], useAssetColor: true })], styleTags: ["cyber", "winter"], previewOnly: true, exportable: false },
   
