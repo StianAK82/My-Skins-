@@ -71,6 +71,8 @@ export type AvatarAsset = {
   compatibilityNotes?: string;
   defaultScale?: number;
   defaultOffset?: { x: number; y: number; z: number };
+  /** Per-body-model placement corrections (offset added to slot anchor, scale multiplied). */
+  modelAdjustments?: Partial<Record<AvatarBaseModel["id"], { offset?: { x: number; y: number; z: number }; scale?: number }>>;
   parts?: AvatarRenderPart[];
 };
 
@@ -271,14 +273,25 @@ export const AVATAR_ASSETS: AvatarAsset[] = [
   { id: "hair_curly", name: "Curly Hair", category: "hair", slot: "hair", color: "#2d1f1a", renderMode: "part_kit", modelPath: "/avatar/hair/curly.glb", parts: hairCurlyParts, styleTags: ["playful"], previewOnly: true, exportable: false },
   { id: "hair_braids", name: "Braids", category: "hair", slot: "hair", color: "#2d1f1a", renderMode: "part_kit", modelPath: "/avatar/hair/braids.glb", parts: hairBraidsParts, styleTags: ["elegant"], previewOnly: true, exportable: false },
 
-  { id: "hat_street_cap", name: "Street Cap", category: "hat", slot: "hat", color: "#0f172a", renderMode: "part_kit", modelPath: "/avatar/hat/street-cap.glb", parts: [makePart("roundedBox", [0.65, 0.22, 0.6], { radius: 0.15, position: [0, 0.04, 0], useAssetColor: true }), makePart("roundedBox", [0.38, 0.05, 0.23], { radius: 0.03, position: [0, 0.01, 0.37], useAssetColor: true })], styleTags: ["street", "sport"], previewOnly: true, exportable: false },
-  { id: "hat_beanie_soft", name: "Soft Beanie", category: "hat", slot: "hat", color: "#334155", renderMode: "part_kit", modelPath: "/avatar/hat/soft-beanie.glb", parts: [makePart("roundedBox", [0.62, 0.32, 0.58], { radius: 0.17, useAssetColor: true }), makePart("roundedBox", [0.66, 0.09, 0.62], { radius: 0.05, position: [0, -0.14, 0], color: "#0f172a" })], styleTags: ["dark", "winter"], previewOnly: true, exportable: false },
+  { id: "hat_street_cap", name: "Street Cap", category: "hat", slot: "hat", color: "#0f172a", renderMode: "part_kit", modelPath: "/avatar/hat/street-cap.glb", parts: [makePart("roundedBox", [0.65, 0.22, 0.6], { radius: 0.15, position: [0, 0.04, 0], useAssetColor: true }), makePart("roundedBox", [0.38, 0.05, 0.23], { radius: 0.03, position: [0, 0.01, 0.37], useAssetColor: true })], styleTags: ["street", "sport"], previewOnly: true, exportable: false, defaultOffset: { x: 0, y: 0.08, z: 0 } },
+  { id: "hat_beanie_soft", name: "Soft Beanie", category: "hat", slot: "hat", color: "#334155", renderMode: "part_kit", modelPath: "/avatar/hat/soft-beanie.glb", parts: [makePart("roundedBox", [0.62, 0.32, 0.58], { radius: 0.17, useAssetColor: true }), makePart("roundedBox", [0.66, 0.09, 0.62], { radius: 0.05, position: [0, -0.14, 0], color: "#0f172a" })], styleTags: ["dark", "winter"], previewOnly: true, exportable: false, defaultOffset: { x: 0, y: 0.08, z: 0 } },
   { id: "hat_cyber_horns", name: "Cyber Horns", category: "hat", slot: "hat", color: "#38bdf8", renderMode: "part_kit", modelPath: "/avatar/hat/cyber-horns.glb", parts: [makePart("cone", [0.06, 0.34, 16], { position: [-0.2, 0.1, -0.1], rotation: [0, 0, 0.35], useAssetColor: true, emissive: "#38bdf8", emissiveIntensity: 0.28 }), makePart("cone", [0.06, 0.34, 16], { position: [0.2, 0.1, -0.1], rotation: [0, 0, -0.35], useAssetColor: true, emissive: "#38bdf8", emissiveIntensity: 0.28 })], styleTags: ["cyber", "tech"], fantasyTags: ["demon", "dragon"], silhouetteTags: ["horns"], role: "headwear", importance: "hero", exportable: false, previewOnly: true },
   
-  { id: "hat_helmet", name: "Helmet", category: "hat", slot: "hat", color: "#94a3b8", renderMode: "part_kit", modelPath: "/avatar/hat/helmet.glb", parts: [makePart("roundedBox", [0.68, 0.38, 0.64], { radius: 0.18, useAssetColor: true, metalness: 0.5, roughness: 0.4 }), makePart("roundedBox", [0.7, 0.12, 0.66], { radius: 0.08, position: [0, -0.16, 0], color: "#64748b", metalness: 0.55, roughness: 0.38 })], styleTags: ["tactical", "sport"], previewOnly: true, exportable: false },
-  { id: "hat_crown", name: "Crown", category: "hat", slot: "hat", color: "#fbbf24", renderMode: "part_kit", modelPath: "/avatar/hat/crown.glb", parts: [makePart("torus", [0.32, 0.06, 16, 32], { rotation: [Math.PI / 2, 0, 0], position: [0, 0.02, 0], useAssetColor: true, metalness: 0.7, roughness: 0.3 }), makePart("cone", [0.05, 0.14, 12], { position: [-0.22, 0.14, 0], useAssetColor: true, metalness: 0.7, roughness: 0.3 }), makePart("cone", [0.05, 0.14, 12], { position: [-0.11, 0.14, 0.1], useAssetColor: true, metalness: 0.7, roughness: 0.3 }), makePart("cone", [0.05, 0.14, 12], { position: [0, 0.14, 0.13], useAssetColor: true, metalness: 0.7, roughness: 0.3 }), makePart("cone", [0.05, 0.14, 12], { position: [0.11, 0.14, 0.1], useAssetColor: true, metalness: 0.7, roughness: 0.3 }), makePart("cone", [0.05, 0.14, 12], { position: [0.22, 0.14, 0], useAssetColor: true, metalness: 0.7, roughness: 0.3 })], styleTags: ["fantasy", "luxury"], previewOnly: true, exportable: false },
-  { id: "hat_glasses", name: "Glasses", category: "hat", slot: "hat", color: "#0f172a", renderMode: "part_kit", modelPath: "/avatar/hat/glasses.glb", parts: [makePart("torus", [0.08, 0.02, 12, 20], { position: [-0.14, 0, 0.28], rotation: [Math.PI / 2, 0, 0], useAssetColor: true }), makePart("torus", [0.08, 0.02, 12, 20], { position: [0.14, 0, 0.28], rotation: [Math.PI / 2, 0, 0], useAssetColor: true }), makePart("cylinder", [0.015, 0.015, 0.08, 8], { position: [0, 0, 0.28], rotation: [0, 0, Math.PI / 2], color: "#475569" })], styleTags: ["casual", "smart"], previewOnly: true, exportable: false },
-  { id: "hat_mask", name: "Mask", category: "hat", slot: "hat", color: "#1e293b", renderMode: "part_kit", modelPath: "/avatar/hat/mask.glb", parts: [makePart("roundedBox", [0.5, 0.24, 0.1], { radius: 0.08, position: [0, -0.08, 0.3], useAssetColor: true })], styleTags: ["tactical", "dark"], previewOnly: true, exportable: false },
+  { id: "hat_helmet", name: "Helmet", category: "hat", slot: "hat", color: "#94a3b8", renderMode: "part_kit", modelPath: "/avatar/hat/helmet.glb", parts: [makePart("roundedBox", [0.68, 0.38, 0.64], { radius: 0.18, useAssetColor: true, metalness: 0.5, roughness: 0.4 }), makePart("roundedBox", [0.7, 0.12, 0.66], { radius: 0.08, position: [0, -0.16, 0], color: "#64748b", metalness: 0.55, roughness: 0.38 })], styleTags: ["tactical", "sport"], previewOnly: true, exportable: false, defaultOffset: { x: 0, y: 0.06, z: 0 } },
+  { id: "hat_crown", name: "Crown", category: "hat", slot: "hat", color: "#fbbf24", renderMode: "part_kit", modelPath: "/avatar/hat/crown.glb", parts: [makePart("torus", [0.32, 0.06, 16, 32], { rotation: [Math.PI / 2, 0, 0], position: [0, 0.02, 0], useAssetColor: true, metalness: 0.7, roughness: 0.3 }), makePart("cone", [0.05, 0.14, 12], { position: [-0.22, 0.14, 0], useAssetColor: true, metalness: 0.7, roughness: 0.3 }), makePart("cone", [0.05, 0.14, 12], { position: [-0.11, 0.14, 0.1], useAssetColor: true, metalness: 0.7, roughness: 0.3 }), makePart("cone", [0.05, 0.14, 12], { position: [0, 0.14, 0.13], useAssetColor: true, metalness: 0.7, roughness: 0.3 }), makePart("cone", [0.05, 0.14, 12], { position: [0.11, 0.14, 0.1], useAssetColor: true, metalness: 0.7, roughness: 0.3 }), makePart("cone", [0.05, 0.14, 12], { position: [0.22, 0.14, 0], useAssetColor: true, metalness: 0.7, roughness: 0.3 })], styleTags: ["fantasy", "luxury"], previewOnly: true, exportable: false, defaultOffset: { x: 0, y: -0.1, z: 0 } },
+  { id: "hat_glasses", name: "Glasses", category: "hat", slot: "hat", color: "#0f172a", renderMode: "part_kit", modelPath: "/avatar/hat/glasses.glb", parts: [
+    // Lenses face forward (torus lies in the XY plane by default) at eye height below the head-top anchor.
+    makePart("torus", [0.09, 0.02, 12, 24], { position: [-0.15, -0.26, 0.33], useAssetColor: true }),
+    makePart("torus", [0.09, 0.02, 12, 24], { position: [0.15, -0.26, 0.33], useAssetColor: true }),
+    makePart("cylinder", [0.015, 0.015, 0.12, 8], { position: [0, -0.26, 0.33], rotation: [0, 0, Math.PI / 2], color: "#475569" }),
+    makePart("cylinder", [0.013, 0.013, 0.3, 8], { position: [-0.26, -0.26, 0.18], rotation: [Math.PI / 2, 0, 0], useAssetColor: true }),
+    makePart("cylinder", [0.013, 0.013, 0.3, 8], { position: [0.26, -0.26, 0.18], rotation: [Math.PI / 2, 0, 0], useAssetColor: true }),
+  ], styleTags: ["casual", "smart"], previewOnly: true, exportable: false, modelAdjustments: { classic_blocky: { offset: { x: 0, y: 0, z: 0.03 } } } },
+  { id: "hat_mask", name: "Mask", category: "hat", slot: "hat", color: "#1e293b", renderMode: "part_kit", modelPath: "/avatar/hat/mask.glb", parts: [
+    // Band wrapping the head at eye height plus a face plate in front.
+    makePart("roundedBox", [0.66, 0.24, 0.66], { radius: 0.08, position: [0, -0.28, 0], useAssetColor: true }),
+    makePart("roundedBox", [0.5, 0.16, 0.08], { radius: 0.05, position: [0, -0.28, 0.34], color: "#0f172a" }),
+  ], styleTags: ["tactical", "dark"], previewOnly: true, exportable: false },
 
   { id: "hat_unicorn", name: "Unicorn Hat", category: "hat", slot: "hat", color: "#fbbf24", renderMode: "part_kit", modelPath: "/avatar/hat/unicorn.glb", parts: [
     // White headband/cap base sitting on head
@@ -322,14 +335,24 @@ export const AVATAR_ASSETS: AvatarAsset[] = [
   { id: "neck_scarf_neo", name: "Neo Scarf", category: "neck", slot: "neck", color: "#22c55e", renderMode: "part_kit", modelPath: "/avatar/neck/neo-scarf.glb", parts: [makePart("torus", [0.24, 0.06, 12, 30], { rotation: [Math.PI / 2, 0, 0], useAssetColor: true }), makePart("roundedBox", [0.12, 0.3, 0.08], { radius: 0.03, position: [0.1, -0.2, 0.2], useAssetColor: true })], styleTags: ["cyber", "winter"], previewOnly: true, exportable: false },
   
   { id: "neck_belt", name: "Belt", category: "neck", slot: "neck", color: "#78350f", renderMode: "part_kit", modelPath: "/avatar/neck/belt.glb", parts: [
-    makePart("torus", [0.36, 0.025, 16, 32], { rotation: [Math.PI / 2, 0, 0], position: [0, -0.65, 0], useAssetColor: true }),
-    makePart("roundedBox", [0.08, 0.06, 0.04], { radius: 0.02, position: [0, -0.65, 0.36], color: "#fbbf24", metalness: 0.6, roughness: 0.3 }),
-  ], styleTags: ["casual", "western"], previewOnly: true, exportable: false },
+    // Elliptical band hugging the waist (local Y squashed -> world Z after the X rotation), buckle in front.
+    makePart("torus", [0.5, 0.04, 16, 40], { rotation: [Math.PI / 2, 0, 0], scale: [1, 0.62, 1], useAssetColor: true }),
+    makePart("roundedBox", [0.14, 0.1, 0.06], { radius: 0.02, position: [0, 0, 0.33], color: "#fbbf24", metalness: 0.6, roughness: 0.3 }),
+  ], styleTags: ["casual", "western"], previewOnly: true, exportable: false, modelAdjustments: {
+    classic_blocky: { offset: { x: 0, y: -1.05, z: -0.2 }, scale: 1.06 },
+    proportioned_r15: { offset: { x: 0, y: -0.55, z: -0.2 }, scale: 0.95 },
+    heroic: { offset: { x: 0, y: -0.73, z: -0.2 }, scale: 1.05 },
+  } },
   
   { id: "neck_gloves", name: "Gloves", category: "neck", slot: "neck", color: "#0f172a", renderMode: "part_kit", modelPath: "/avatar/neck/gloves.glb", parts: [
-    makePart("roundedBox", [0.46, 0.2, 0.48], { radius: 0.08, position: [-0.73, -0.92, 0], useAssetColor: true }),
-    makePart("roundedBox", [0.46, 0.2, 0.48], { radius: 0.08, position: [0.73, -0.92, 0], useAssetColor: true }),
-  ], styleTags: ["tactical", "winter"], previewOnly: true, exportable: false },
+    // Authored at unit hand spacing; per-model scale pulls them onto the hands.
+    makePart("roundedBox", [0.66, 0.34, 0.68], { radius: 0.1, position: [-1, 0, 0], useAssetColor: true }),
+    makePart("roundedBox", [0.66, 0.34, 0.68], { radius: 0.1, position: [1, 0, 0], useAssetColor: true }),
+  ], styleTags: ["tactical", "winter"], previewOnly: true, exportable: false, modelAdjustments: {
+    classic_blocky: { offset: { x: 0, y: -1.1, z: -0.2 }, scale: 0.73 },
+    proportioned_r15: { offset: { x: 0, y: -1.0, z: -0.2 }, scale: 0.58 },
+    heroic: { offset: { x: 0, y: -0.99, z: -0.2 }, scale: 0.66 },
+  } },
 
   { id: "shoulder_orb_left", name: "Left Shoulder Pet", category: "shoulder", slot: "leftShoulder", color: "#60a5fa", renderMode: "part_kit", modelPath: "/avatar/shoulder/orb-left.glb", parts: [makePart("sphere", [0.13, 18, 18], { useAssetColor: true, roughness: 0.45 }), makePart("sphere", [0.07, 12, 12], { position: [0, -0.04, 0.1], color: "#f8fafc" }), makePart("sphere", [0.01, 8, 8], { position: [-0.035, 0.03, 0.12], color: "#0f172a" }), makePart("sphere", [0.01, 8, 8], { position: [0.035, 0.03, 0.12], color: "#0f172a" })] },
   { id: "shoulder_orb_right", name: "Right Shoulder Pet", category: "shoulder", slot: "rightShoulder", color: "#60a5fa", renderMode: "part_kit", modelPath: "/avatar/shoulder/orb-right.glb", parts: [makePart("sphere", [0.13, 18, 18], { useAssetColor: true, roughness: 0.45 }), makePart("sphere", [0.07, 12, 12], { position: [0, -0.04, 0.1], color: "#f8fafc" }), makePart("sphere", [0.01, 8, 8], { position: [-0.035, 0.03, 0.12], color: "#0f172a" }), makePart("sphere", [0.01, 8, 8], { position: [0.035, 0.03, 0.12], color: "#0f172a" })] },
@@ -340,13 +363,13 @@ export const AVATAR_ASSETS: AvatarAsset[] = [
   { id: "back_blade_rig", name: "Blade Rig", category: "back", slot: "back", color: "#64748b", renderMode: "part_kit", modelPath: "/avatar/back/blade-rig.glb", parts: [makePart("box", [0.05, 0.65, 0.08], { position: [-0.12, 0.2, 0.1], rotation: [0.2, 0, -0.5], color: "#e2e8f0", metalness: 0.7, roughness: 0.34 }), makePart("box", [0.05, 0.65, 0.08], { position: [0.1, 0.14, 0.06], rotation: [0.2, 0, 0.5], color: "#cbd5e1", metalness: 0.72, roughness: 0.36 }), makePart("roundedBox", [0.25, 0.18, 0.14], { radius: 0.03, position: [0, -0.06, 0], useAssetColor: true })], styleTags: ["dark", "flame", "tactical"], fantasyTags: ["dragon", "demon"], silhouetteTags: ["wing_like"], role: "wings", importance: "hero", exportable: false, previewOnly: true },
   
   { id: "back_wings", name: "Wings", category: "back", slot: "back", color: "#e0f2fe", renderMode: "part_kit", modelPath: "/avatar/back/wings.glb", parts: [
-    makePart("roundedBox", [0.16, 0.5, 0.08], { radius: 0.06, position: [-0.28, 0.08, -0.08], rotation: [0, 0, -0.4], useAssetColor: true, opacity: 0.85, transparent: true }),
-    makePart("roundedBox", [0.14, 0.42, 0.06], { radius: 0.05, position: [-0.42, 0.02, -0.12], rotation: [0, 0, -0.5], useAssetColor: true, opacity: 0.8, transparent: true }),
-    makePart("roundedBox", [0.12, 0.34, 0.05], { radius: 0.04, position: [-0.54, -0.06, -0.14], rotation: [0, 0, -0.6], useAssetColor: true, opacity: 0.75, transparent: true }),
-    makePart("roundedBox", [0.16, 0.5, 0.08], { radius: 0.06, position: [0.28, 0.08, -0.08], rotation: [0, 0, 0.4], useAssetColor: true, opacity: 0.85, transparent: true }),
-    makePart("roundedBox", [0.14, 0.42, 0.06], { radius: 0.05, position: [0.42, 0.02, -0.12], rotation: [0, 0, 0.5], useAssetColor: true, opacity: 0.8, transparent: true }),
-    makePart("roundedBox", [0.12, 0.34, 0.05], { radius: 0.04, position: [0.54, -0.06, -0.14], rotation: [0, 0, 0.6], useAssetColor: true, opacity: 0.75, transparent: true }),
-  ], styleTags: ["fantasy", "angel"], previewOnly: true, exportable: false },
+    makePart("roundedBox", [0.2, 0.6, 0.06], { radius: 0.06, position: [-0.24, 0.1, -0.08], rotation: [0, 0, 0.3], useAssetColor: true, opacity: 0.85, transparent: true }),
+    makePart("roundedBox", [0.17, 0.5, 0.05], { radius: 0.05, position: [-0.44, 0.02, -0.12], rotation: [0, 0, 0.55], useAssetColor: true, opacity: 0.8, transparent: true }),
+    makePart("roundedBox", [0.14, 0.4, 0.05], { radius: 0.04, position: [-0.6, -0.1, -0.14], rotation: [0, 0, 0.8], useAssetColor: true, opacity: 0.75, transparent: true }),
+    makePart("roundedBox", [0.2, 0.6, 0.06], { radius: 0.06, position: [0.24, 0.1, -0.08], rotation: [0, 0, -0.3], useAssetColor: true, opacity: 0.85, transparent: true }),
+    makePart("roundedBox", [0.17, 0.5, 0.05], { radius: 0.05, position: [0.44, 0.02, -0.12], rotation: [0, 0, -0.55], useAssetColor: true, opacity: 0.8, transparent: true }),
+    makePart("roundedBox", [0.14, 0.4, 0.05], { radius: 0.04, position: [0.6, -0.1, -0.14], rotation: [0, 0, -0.8], useAssetColor: true, opacity: 0.75, transparent: true }),
+  ], styleTags: ["fantasy", "angel"], previewOnly: true, exportable: false, defaultOffset: { x: 0, y: 0.12, z: -0.02 } },
   
   { id: "back_backpack", name: "Backpack", category: "back", slot: "back", color: "#475569", renderMode: "part_kit", modelPath: "/avatar/back/backpack.glb", parts: [
     makePart("roundedBox", [0.42, 0.52, 0.22], { radius: 0.08, useAssetColor: true }),
@@ -365,7 +388,7 @@ export const AVATAR_ASSETS: AvatarAsset[] = [
     makePart("cylinder", [0.055, 0.07, 0.16, 12], { position: [0, -0.3, -0.14], rotation: [0.6, 0, 0], useAssetColor: true }),
     makePart("cylinder", [0.05, 0.06, 0.14, 12], { position: [0, -0.44, -0.2], rotation: [0.75, 0, 0], useAssetColor: true }),
     makePart("cone", [0.055, 0.12, 12], { position: [0, -0.54, -0.26], rotation: [0.9, 0, 0], useAssetColor: true }),
-  ], styleTags: ["fantasy", "creature"], previewOnly: true, exportable: false },
+  ], styleTags: ["fantasy", "creature"], previewOnly: true, exportable: false, defaultOffset: { x: 0, y: -0.4, z: 0.05 } },
 
   { id: "footwear_runner_black", name: "Runner Black", category: "footwear", slot: "leftFootwear", color: "#111111", renderMode: "part_kit", modelPath: "/avatar/footwear/runner-left.glb", parts: [makePart("roundedBox", [0.27, 0.18, 0.4], { radius: 0.06, useAssetColor: true }), makePart("roundedBox", [0.25, 0.05, 0.42], { radius: 0.02, position: [0, -0.08, 0], color: "#e2e8f0" })], styleTags: ["street", "sport"] },
   { id: "footwear_runner_black_right", name: "Runner Black (Right)", category: "footwear", slot: "rightFootwear", color: "#111111", renderMode: "part_kit", modelPath: "/avatar/footwear/runner-right.glb", parts: [makePart("roundedBox", [0.27, 0.18, 0.4], { radius: 0.06, useAssetColor: true }), makePart("roundedBox", [0.25, 0.05, 0.42], { radius: 0.02, position: [0, -0.08, 0], color: "#e2e8f0" })], styleTags: ["street", "sport"] },

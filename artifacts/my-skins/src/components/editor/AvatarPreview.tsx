@@ -10,7 +10,7 @@ import type { StylizedOutfitConcept } from "@/lib/ai/stylized-outfit-client";
 import type { AvatarCosmeticSlot, AvatarState } from "@/lib/editor/design-state";
 import { defaultAvatarState } from "@/lib/editor/design-state";
 import { getAvatarAssetById, getAvatarBaseModel, type AvatarRenderPart } from "@/lib/editor/assets";
-import { resolveSlotPosition } from "@/lib/editor/avatar-slots";
+import { getSlotFit, resolveSlotPosition } from "@/lib/editor/avatar-slots";
 
 type ThreeTexture = ReturnType<typeof makeTextureFromZone>;
 type PreviewMode = "clothing" | "avatar";
@@ -156,7 +156,10 @@ function RenderAssetPart({ part, assetColor }: { part: AvatarRenderPart; assetCo
   } as const;
 
   if (part.primitive === "roundedBox") {
-    return <RoundedBox args={part.args as [number, number, number]} radius={part.radius ?? 0.04} smoothness={part.smoothness ?? 4} {...shared}>{makeStandardMaterial(part, assetColor, texture)}</RoundedBox>;
+    // Radius must stay below half the smallest dimension or the geometry folds into spikes.
+    const maxRadius = Math.max(0.005, Math.min(part.args[0], part.args[1], part.args[2]) / 2 - 0.005);
+    const radius = Math.min(part.radius ?? 0.04, maxRadius);
+    return <RoundedBox args={part.args as [number, number, number]} radius={radius} smoothness={part.smoothness ?? 4} {...shared}>{makeStandardMaterial(part, assetColor, texture)}</RoundedBox>;
   }
   if (part.primitive === "box") {
     return <mesh {...shared}><boxGeometry args={part.args as [number, number, number]} />{makeStandardMaterial(part, assetColor, texture)}</mesh>;
@@ -183,9 +186,18 @@ function AvatarCosmetic({ slot, avatar, mode }: { slot: AvatarCosmeticSlot; avat
   if (!asset) return null;
 
   const color = item.color ?? asset.color;
-  const position = resolveSlotPosition(slot, avatar);
+  const anchor = resolveSlotPosition(slot, avatar);
+  const modelAdjust = asset.modelAdjustments?.[avatar.modelVariant];
+  const fit = getSlotFit(slot, avatar.modelVariant);
+  const assetOffset = asset.defaultOffset ?? { x: 0, y: 0, z: 0 };
+  const adjustOffset = modelAdjust?.offset ?? { x: 0, y: 0, z: 0 };
+  const position: [number, number, number] = [
+    anchor[0] + assetOffset.x + adjustOffset.x + fit.dx,
+    anchor[1] + assetOffset.y + adjustOffset.y + fit.dy,
+    anchor[2] + assetOffset.z + adjustOffset.z + fit.dz,
+  ];
   const rotation: [number, number, number] = [THREE.MathUtils.degToRad(item.rotation.x), THREE.MathUtils.degToRad(item.rotation.y), THREE.MathUtils.degToRad(item.rotation.z)];
-  const scale = item.scale * (asset.defaultScale ?? 1);
+  const scale = item.scale * (asset.defaultScale ?? 1) * (modelAdjust?.scale ?? 1) * fit.scale;
   const texture = useMemo(() => makeImageTexture(asset.decalTexture), [asset.decalTexture]);
   useEffect(() => () => texture?.dispose(), [texture]);
 
@@ -704,7 +716,9 @@ function RobloxAvatar({ maps, view, itemType, avatar, mode, garment }: { maps: C
           </group>
         ))}
       </group>
-      {(["face", "hair", "hat", "neck", "leftShoulder", "rightShoulder", "back", "leftFootwear", "rightFootwear", "aura"] as AvatarCosmeticSlot[]).map((slot) => <AvatarCosmetic key={slot} slot={slot} avatar={avatar} mode={mode} />)}
+      {(["face", "hair", "hat", "neck", "leftShoulder", "rightShoulder", "back", "leftFootwear", "rightFootwear", "aura"] as AvatarCosmeticSlot[])
+        .filter((slot) => !(garment?.shoes && (slot === "leftFootwear" || slot === "rightFootwear")))
+        .map((slot) => <AvatarCosmetic key={slot} slot={slot} avatar={avatar} mode={mode} />)}
     </group>
   );
 }

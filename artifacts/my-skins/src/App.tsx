@@ -4,6 +4,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/not-found";
 import Create from "@/pages/Create";
+import FitCheck from "@/pages/FitCheck";
 
 const queryClient = new QueryClient();
 
@@ -11,6 +12,7 @@ function Router() {
   return (
     <Switch>
       <Route path="/" component={Create} />
+      <Route path="/fit-check" component={FitCheck} />
       <Route component={NotFound} />
     </Switch>
   );
