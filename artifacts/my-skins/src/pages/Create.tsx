@@ -131,6 +131,103 @@ const DIRECT_ITEMS: Array<{ key: keyof OutfitFiles; type: string; name: string; 
   { key: "tshirt", type: "tshirt", name: "My Skins t-skjorte", label: "t-skjorta" },
 ];
 
+// The AI's structured outfit plan (subset of the server response we act on).
+type OutfitPlan = NonNullable<ReturnType<typeof normalizeAiResponse>["result"]["outfit"]>;
+
+// Hair style → preview asset (shared by first-generation and revision flows).
+const HAIR_ASSET_MAP: Record<string, string> = {
+  short: "hair_short",
+  long: "hair_long",
+  ponytail: "hair_ponytail",
+  twintails: "hair_twin_tail_pop",
+  spiky: "hair_spiky_ember",
+  curly: "hair_curly",
+  braids: "hair_braids",
+};
+
+// Accessory kind → preview slot + asset (shared by first-generation and revision flows).
+const ACCESSORY_ASSET_MAP: Record<string, { slot: "hat" | "back" | "neck"; assetId: string }> = {
+  cap: { slot: "hat", assetId: "hat_street_cap" },
+  beanie: { slot: "hat", assetId: "hat_beanie_soft" },
+  hat: { slot: "hat", assetId: "hat_beanie_soft" },
+  helmet: { slot: "hat", assetId: "hat_helmet" },
+  crown: { slot: "hat", assetId: "hat_crown" },
+  glasses: { slot: "hat", assetId: "hat_glasses" },
+  mask: { slot: "hat", assetId: "hat_mask" },
+  wings: { slot: "back", assetId: "back_wings" },
+  backpack: { slot: "back", assetId: "back_backpack" },
+  bag: { slot: "back", assetId: "back_bag" },
+  tail: { slot: "back", assetId: "back_tail" },
+  necklace: { slot: "neck", assetId: "neck_chain_gold" },
+  scarf: { slot: "neck", assetId: "neck_scarf_neo" },
+  horns: { slot: "hat", assetId: "hat_cyber_horns" },
+  belt: { slot: "neck", assetId: "neck_belt" },
+  gloves: { slot: "neck", assetId: "neck_gloves" },
+};
+
+const SLOT_NB: Record<string, string> = { hat: "hode", back: "rygg", neck: "hals" };
+
+// Kid-friendly Norwegian names for outfit values shown in the item/changed lists.
+const NB_NAME: Record<string, string> = {
+  hoodie: "hettegenser", sweater: "genser", tshirt: "t-skjorte", jacket: "jakke", dress: "kjole",
+  pants: "bukse", shorts: "shorts", skirt: "skjørt", sneakers: "joggesko", boots: "støvler",
+  cap: "caps", beanie: "lue", hat: "hatt", helmet: "hjelm", crown: "krone", glasses: "briller",
+  mask: "maske", wings: "vinger", backpack: "ryggsekk", bag: "veske", necklace: "kjede",
+  scarf: "skjerf", horns: "horn", tail: "hale", belt: "belte", gloves: "hansker",
+  short: "kort", long: "langt", ponytail: "hestehale", twintails: "to haler", spiky: "piggete",
+  curly: "krøllete", braids: "fletter", none: "ingen",
+};
+const nb = (value: string) => NB_NAME[value] ?? value;
+
+// Which outfit fields changed between two plans – shown in the item list after a revision.
+function diffOutfits(prev: OutfitPlan, next: OutfitPlan): string[] {
+  const changes: string[] = [];
+  if (prev.top !== next.top) changes.push(`Overdel: ${nb(prev.top)} → ${nb(next.top)}`);
+  if (prev.bottom !== next.bottom) changes.push(`Underdel: ${nb(prev.bottom)} → ${nb(next.bottom)}`);
+  if (prev.shoes !== next.shoes) changes.push(`Sko: ${nb(prev.shoes)} → ${nb(next.shoes)}`);
+  if (prev.hair.style !== next.hair.style) changes.push(`Hår: ${nb(prev.hair.style)} → ${nb(next.hair.style)}`);
+  else if (next.hair.style !== "none" && prev.hair.color !== next.hair.color) changes.push("Hår: ny farge");
+  const prevAcc = new Map(prev.accessories.map((a) => [a.kind, a.color]));
+  const nextAcc = new Map(next.accessories.map((a) => [a.kind, a.color]));
+  for (const [kind] of prevAcc) if (!nextAcc.has(kind)) changes.push(`Fjernet: ${nb(kind)}`);
+  for (const [kind, color] of nextAcc) {
+    if (!prevAcc.has(kind)) changes.push(`Ny: ${nb(kind)}`);
+    else if (prevAcc.get(kind) !== color) changes.push(`${nb(kind)}: ny farge`);
+  }
+  return changes;
+}
+
+// Map an outfit's accessories to preview slots (one item per slot, first wins).
+function mapOutfitToSlots(outfit: OutfitPlan): { slots: Record<string, { assetId: string; color: string }>; conflicts: string[] } {
+  const slots: Record<string, { assetId: string; color: string }> = {};
+  const conflicts: string[] = [];
+  for (const acc of outfit.accessories) {
+    const mapped = ACCESSORY_ASSET_MAP[acc.kind];
+    if (!mapped) continue;
+    if (slots[mapped.slot]) {
+      conflicts.push(`${acc.kind} (kun plass til én ting i ${SLOT_NB[mapped.slot] ?? mapped.slot}-sporet)`);
+      continue;
+    }
+    slots[mapped.slot] = { assetId: mapped.assetId, color: acc.color };
+  }
+  return { slots, conflicts };
+}
+
+// Item list (uploadable vs preview-only) for the UI panel.
+function buildOutfitItemLists(outfit: OutfitPlan, conflicts: string[]): { uploadable: string[]; previewOnly: string[] } {
+  const uploadable: string[] = [];
+  const previewOnly: string[] = [];
+  if (outfit.top !== "none") uploadable.push(`Overdel (${outfit.top})`);
+  if (outfit.bottom !== "none") uploadable.push(`Underdel (${outfit.bottom})`);
+  if (outfit.shoes !== "none") previewOnly.push(`Sko (${outfit.shoes})`);
+  if (outfit.hair.style !== "none") previewOnly.push(`Hår (${outfit.hair.style})`);
+  for (const acc of outfit.accessories) {
+    if (!ACCESSORY_ASSET_MAP[acc.kind] || conflicts.some((s) => s.includes(acc.kind))) continue;
+    previewOnly.push(acc.kind.charAt(0).toUpperCase() + acc.kind.slice(1));
+  }
+  return { uploadable, previewOnly };
+}
+
 const UPLOAD_DONE_MSG =
   "Antrekket er lastet ned som tre filer: overdel (Shirt), bukse (Pants) og t-skjorte-motiv. Roblox sin side er åpnet – last opp overdelen som «Shirt», buksa som «Pants» og motivet som «T-Shirt».";
 
@@ -156,9 +253,14 @@ export default function Create() {
     uploadable: string[];
     previewOnly: string[];
     unsupported: string[];
+    changed?: string[];
   } | null>(null);
+  // Last applied outfit plan + prompt, so a change request can patch instead of rebuild.
+  const [lastOutfit, setLastOutfit] = useState<OutfitPlan | null>(null);
+  const lastPromptRef = useRef("");
+  const [reviseText, setReviseText] = useState("");
 
-  const { state, setAiPlanPreview, setAiAvatarPreview, deleteLayer, addLayer, applyAiPlan, setPaintSwatch } = useDesignStore();
+  const { state, setAiPlanPreview, setAiAvatarPreview, deleteLayer, addLayer, applyAiPlan, setPaintSwatch, setAvatarSlot } = useDesignStore();
   const hasDesign = state.layers.length > 0 || Boolean(state.baseColor);
 
   const refreshStatus = useCallback(async () => {
@@ -397,16 +499,7 @@ export default function Create() {
         
         // Hair mapping
         if (outfit.hair.style !== "none") {
-          const hairMap: Record<string, string> = {
-            short: "hair_short",
-            long: "hair_long",
-            ponytail: "hair_ponytail",
-            twintails: "hair_twin_tail_pop",
-            spiky: "hair_spiky_ember",
-            curly: "hair_curly",
-            braids: "hair_braids",
-          };
-          const hairAssetId = hairMap[outfit.hair.style];
+          const hairAssetId = HAIR_ASSET_MAP[outfit.hair.style];
           if (hairAssetId) {
             previewAvatar.slots = {
               ...previewAvatar.slots,
@@ -422,45 +515,17 @@ export default function Create() {
           }
         }
 
-        // Accessory mapping
-        const accessoryMap: Record<string, { slot: string; assetId: string }> = {
-          cap: { slot: "hat", assetId: "hat_street_cap" },
-          beanie: { slot: "hat", assetId: "hat_beanie_soft" },
-          hat: { slot: "hat", assetId: "hat_beanie_soft" },
-          helmet: { slot: "hat", assetId: "hat_helmet" },
-          crown: { slot: "hat", assetId: "hat_crown" },
-          glasses: { slot: "hat", assetId: "hat_glasses" },
-          mask: { slot: "hat", assetId: "hat_mask" },
-          wings: { slot: "back", assetId: "back_wings" },
-          backpack: { slot: "back", assetId: "back_backpack" },
-          bag: { slot: "back", assetId: "back_bag" },
-          tail: { slot: "back", assetId: "back_tail" },
-          necklace: { slot: "neck", assetId: "neck_chain_gold" },
-          scarf: { slot: "neck", assetId: "neck_scarf_neo" },
-          horns: { slot: "hat", assetId: "hat_cyber_horns" },
-          belt: { slot: "neck", assetId: "neck_belt" },
-          gloves: { slot: "neck", assetId: "neck_gloves" },
-        };
-
-        const usedSlots: Record<string, boolean> = {};
-        for (const acc of outfit.accessories) {
-          const mapped = accessoryMap[acc.kind];
-          if (!mapped) continue;
-          
-          // Only one item per slot; first wins
-          if (usedSlots[mapped.slot]) {
-            unsupportedItems.push(`${acc.kind} (kun plass til én ting i ${mapped.slot === 'hat' ? 'hode' : mapped.slot === 'back' ? 'rygg' : 'hals'}-sporet)`);
-            continue;
-          }
-          
-          usedSlots[mapped.slot] = true;
+        // Accessory mapping (one item per slot; first wins)
+        const { slots: accessorySlots, conflicts } = mapOutfitToSlots(outfit);
+        unsupportedItems.push(...conflicts);
+        for (const [slot, item] of Object.entries(accessorySlots)) {
           previewAvatar.slots = {
             ...previewAvatar.slots,
-            [mapped.slot]: {
-              assetId: mapped.assetId,
+            [slot]: {
+              assetId: item.assetId,
               scale: 1,
               visible: true,
-              color: acc.color,
+              color: item.color,
               offset: { x: 0, y: 0, z: 0 },
               rotation: { x: 0, y: 0, z: 0 },
             },
@@ -468,22 +533,10 @@ export default function Create() {
         }
 
         // Build item list for UI
-        const uploadable: string[] = [];
-        const previewOnlyItems: string[] = [];
-        
-        if (outfit.top !== "none") uploadable.push(`Overdel (${outfit.top})`);
-        if (outfit.bottom !== "none") uploadable.push(`Underdel (${outfit.bottom})`);
-        
-        if (outfit.shoes !== "none") previewOnlyItems.push(`Sko (${outfit.shoes})`);
-        if (outfit.hair.style !== "none") previewOnlyItems.push(`Hår (${outfit.hair.style})`);
-        for (const acc of outfit.accessories) {
-          if (!accessoryMap[acc.kind] || unsupportedItems.some(s => s.includes(acc.kind))) continue;
-          previewOnlyItems.push(acc.kind.charAt(0).toUpperCase() + acc.kind.slice(1));
-        }
-        
+        const { uploadable, previewOnly } = buildOutfitItemLists(outfit, conflicts);
         setOutfitItems({
           uploadable,
-          previewOnly: previewOnlyItems,
+          previewOnly,
           unsupported: unsupportedItems,
         });
       } else {
@@ -495,6 +548,9 @@ export default function Create() {
         if (wantsShoes) previewOnlyItems.push("Sko");
         setOutfitItems({ uploadable, previewOnly: previewOnlyItems, unsupported: [] });
       }
+      // Remember the plan so the child can revise it («gjør vingene større») without starting over.
+      setLastOutfit(outfit ?? null);
+      lastPromptRef.current = usedPrompt;
       const payload = {
         model: "ClassicTextureAI.v3",
         garmentType: "shirt",
@@ -585,6 +641,143 @@ export default function Create() {
         setAiError("AI-en er opptatt eller grensen er nådd. Prøv igjen om litt.");
       } else {
         setAiError("Noe gikk galt med AI-en. Prøv igjen, gjerne med en litt annen beskrivelse.");
+      }
+    } finally {
+      generateLockRef.current = false;
+      setAiLoading(false);
+      setAiPhase("");
+    }
+  };
+
+  // Revise the existing skin («gjør vingene større», «fjern sekken») without rebuilding
+  // everything: only fields the AI changed are re-applied; unchanged textures are kept.
+  const revise = async () => {
+    const text = reviseText.trim();
+    if (generateLockRef.current || aiLoading || !text) return;
+    if (!lastOutfit) {
+      // Nothing to patch – treat it as a fresh design request.
+      setPrompt(text);
+      setReviseText("");
+      await generate(text);
+      return;
+    }
+    generateLockRef.current = true;
+    setAiLoading(true);
+    setAiError("");
+    setUploadStatus("");
+    setAiPhase("Endrer skinnet…");
+    try {
+      const res = await apiPost<unknown>("/ai/generate", {
+        prompt: text,
+        itemType: "classic_shirt",
+        style: "AI velger",
+        theme: text,
+        previousOutfit: lastOutfit,
+      });
+      if (res.status !== 200) {
+        const err = new Error(`revise failed ${res.status}`) as Error & { status?: number };
+        err.status = res.status;
+        throw err;
+      }
+      const response = normalizeAiResponse(res.data);
+      const outfit = response.result.outfit;
+      if (!outfit) throw new Error("AI returned no outfit plan");
+
+      const changed = diffOutfits(lastOutfit, outfit);
+
+      // Garment config drives the 3D preview meshes.
+      setGarmentConfig({
+        top: outfit.top === "none" ? null : (outfit.top as "hoodie" | "sweater" | "tshirt" | "jacket" | "dress"),
+        bottom: outfit.bottom === "none" ? null : outfit.bottom as "pants" | "shorts" | "skirt",
+        shoes: outfit.shoes === "none" ? null : outfit.shoes as "sneakers" | "boots",
+      });
+
+      // Only touch the avatar slots that actually changed – everything else stays put.
+      const hairChanged = lastOutfit.hair.style !== outfit.hair.style || lastOutfit.hair.color !== outfit.hair.color;
+      if (hairChanged) {
+        const hairAssetId = outfit.hair.style !== "none" ? HAIR_ASSET_MAP[outfit.hair.style] : undefined;
+        setAvatarSlot("hair", hairAssetId ? {
+          assetId: hairAssetId,
+          scale: 1,
+          visible: true,
+          color: outfit.hair.color,
+          offset: { x: 0, y: 0.05, z: 0 },
+          rotation: { x: 0, y: 0, z: 0 },
+        } : null);
+      }
+      const prevSlots = mapOutfitToSlots(lastOutfit).slots;
+      const { slots: nextSlots, conflicts } = mapOutfitToSlots(outfit);
+      for (const slot of new Set([...Object.keys(prevSlots), ...Object.keys(nextSlots)])) {
+        const before = prevSlots[slot];
+        const after = nextSlots[slot];
+        if (before?.assetId === after?.assetId && before?.color === after?.color) continue;
+        setAvatarSlot(slot as "hat" | "back" | "neck", after ? {
+          assetId: after.assetId,
+          scale: 1,
+          visible: true,
+          color: after.color,
+          offset: { x: 0, y: 0, z: 0 },
+          rotation: { x: 0, y: 0, z: 0 },
+        } : null);
+      }
+
+      // Item list: what the skin contains now + what was just changed.
+      const unsupportedItems = [...(outfit.unsupported ?? []), ...conflicts];
+      const { uploadable, previewOnly } = buildOutfitItemLists(outfit, conflicts);
+      setOutfitItems({ uploadable, previewOnly, unsupported: unsupportedItems, changed });
+
+      // Textures: only regenerate garment art for pieces that changed; keep the rest.
+      const topChanged = lastOutfit.top !== outfit.top;
+      const bottomChanged = lastOutfit.bottom !== outfit.bottom;
+      const combinedPrompt = `${lastPromptRef.current}. Endring: ${text}`.slice(0, 600);
+      const layersNow = () => useDesignStore.getState().state.layers;
+      if (topChanged || bottomChanged) {
+        setAiPhase("Tegner de nye klærne… (kan ta opptil ett minutt)");
+        const skipped = { status: 0, data: {} as { imageUrl?: string } };
+        const [top, bottom] = await Promise.all([
+          topChanged && outfit.top !== "none" ? apiPost<{ imageUrl?: string }>("/ai/hero-image", { prompt: combinedPrompt, kind: "garment-top" }) : Promise.resolve(skipped),
+          bottomChanged && outfit.bottom !== "none" ? apiPost<{ imageUrl?: string }>("/ai/hero-image", { prompt: combinedPrompt, kind: "garment-bottom" }) : Promise.resolve(skipped),
+        ]);
+        if (topChanged) {
+          for (const layer of layersNow().filter((l) => l.name === "AI-overdel")) deleteLayer(layer.id);
+          const topUrl = top.status === 200 ? top.data.imageUrl : undefined;
+          if (topUrl) {
+            for (const zone of ["front", "back", "left_sleeve", "right_sleeve"]) {
+              addLayer({ name: "AI-overdel", type: "imageLayer", zone, image: topUrl, transform: { x: 0, y: 0, scale: 1.6, rotation: 0, opacity: 1 } });
+            }
+          } else if (outfit.top !== "none") {
+            setAiError("Endringen er lagret, men den nye overdelen kunne ikke tegnes. Prøv igjen.");
+          }
+        }
+        if (bottomChanged) {
+          for (const layer of layersNow().filter((l) => l.name === "AI-bukse" || l.name === "Bukse")) deleteLayer(layer.id);
+          const bottomUrl = bottom.status === 200 ? bottom.data.imageUrl : undefined;
+          if (outfit.bottom !== "none") {
+            const pantsColors = pickPantsColors(response.result.colorPalette);
+            for (const legZone of ["left_leg_front", "right_leg_front", "left_leg_back", "right_leg_back"]) {
+              addLayer({ name: "Bukse", type: "paintLayerSet", zone: legZone, color: pantsColors.base, transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 } });
+            }
+            if (bottomUrl) {
+              for (const zone of ["left_leg_front", "right_leg_front", "left_leg_back", "right_leg_back"]) {
+                addLayer({ name: "AI-bukse", type: "imageLayer", zone, image: bottomUrl, transform: { x: 0, y: 0, scale: 2.4, rotation: 0, opacity: 1 } });
+              }
+            }
+            outfitRef.current = { pantsBase: pantsColors.base, pantsAccent: pantsColors.accent, heroUrl: outfitRef.current?.heroUrl, fabricUrl: bottomUrl };
+          } else {
+            outfitRef.current = outfitRef.current ? { ...outfitRef.current, fabricUrl: undefined } : null;
+          }
+        }
+      }
+
+      setLastOutfit(outfit);
+      lastPromptRef.current = `${lastPromptRef.current}. ${text}`.slice(0, 900);
+      setReviseText("");
+    } catch (error) {
+      const status = (error as { status?: number })?.status;
+      if (status === 401 || status === 429) {
+        setAiError("AI-en er opptatt eller grensen er nådd. Prøv igjen om litt.");
+      } else {
+        setAiError("Endringen gikk ikke gjennom. Prøv igjen, gjerne med litt andre ord.");
       }
     } finally {
       generateLockRef.current = false;
@@ -701,8 +894,22 @@ export default function Create() {
             />
           </div>
           
-          {outfitItems && (outfitItems.uploadable.length > 0 || outfitItems.previewOnly.length > 0 || outfitItems.unsupported.length > 0) && (
+          {outfitItems && (outfitItems.uploadable.length > 0 || outfitItems.previewOnly.length > 0 || outfitItems.unsupported.length > 0 || (outfitItems.changed?.length ?? 0) > 0) && (
             <div className="mt-4 rounded-xl border border-slate-700 bg-slate-900/60 p-4 space-y-3 text-sm">
+              {(outfitItems.changed?.length ?? 0) > 0 && (
+                <div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="font-semibold text-amber-400">🔁 Endret nå</span>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {outfitItems.changed?.map((item, i) => (
+                      <span key={i} className="px-3 py-1 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 text-xs">
+                        {item}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
               {outfitItems.uploadable.length > 0 && (
                 <div>
                   <div className="flex items-center gap-2 mb-2">
@@ -818,6 +1025,31 @@ export default function Create() {
             ) : null}
             {!hasDesign && !aiLoading ? <p className="text-sm text-slate-500">Trykk på et bilde øverst for å lage skinnet ditt! 👆</p> : null}
           </div>
+
+          {hasDesign && lastOutfit && !aiLoading ? (
+            <div className="w-full rounded-xl border-2 border-sky-500/40 bg-sky-500/5 p-4">
+              <p className="mb-2 text-sm font-semibold text-sky-300">🪄 Vil du endre noe? Skriv det her – resten beholdes!</p>
+              <form
+                className="flex flex-col sm:flex-row gap-2"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void revise();
+                }}
+              >
+                <Input
+                  value={reviseText}
+                  onChange={(event) => setReviseText(event.target.value)}
+                  placeholder="F.eks. «gjør vingene større» eller «bare capsen blå»"
+                  className="h-12 bg-slate-900 border-slate-700 text-base"
+                  disabled={aiLoading}
+                />
+                <Button type="submit" size="lg" className="h-12 px-6 bg-sky-500 text-sky-950 hover:bg-sky-400" disabled={aiLoading || !reviseText.trim()}>
+                  <Sparkles className="mr-2 h-5 w-5" />
+                  Endre
+                </Button>
+              </form>
+            </div>
+          ) : null}
 
           <details className="w-full rounded-xl border border-slate-800 bg-slate-900/50 p-4">
             <summary className="cursor-pointer text-sm font-semibold text-slate-300">✏️ Skriv ditt eget skin (for store barn og voksne)</summary>

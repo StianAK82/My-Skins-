@@ -181,6 +181,9 @@ export const aiGenerateRequestSchema = z.object({
   itemType: itemTypeSchema,
   style: z.string().optional(),
   theme: z.string().optional(),
+  // Revision mode: the previous outfit plan. When present, `prompt` is a change
+  // request («gjør vingene større») and the AI must only patch the mentioned fields.
+  previousOutfit: aiOutfitSchema.optional(),
 }).strict();
 
 export const stylizedOutfitPieceSchema = z.object({

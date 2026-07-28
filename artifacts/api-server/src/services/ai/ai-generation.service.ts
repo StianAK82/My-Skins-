@@ -191,6 +191,15 @@ export class AiGenerationService {
       "hair.style is \"none\" unless the user asks for hair. accessories only contains requested items (max 6).",
       "Everything in the outfit schema (shoes, hair, all listed accessory kinds) IS supported in the 3D preview — never list those in `unsupported`. Only put something in `unsupported` when it truly cannot be represented (e.g. a specific brand logo, an animal companion).",
       "If the user only asks for one piece (e.g. only a t-shirt), set every other field to none/empty.",
+      ...(input.previousOutfit ? [
+        "",
+        "REVISION MODE (strict): This is an EDIT of an existing outfit, NOT a new design.",
+        `previousOutfit=${JSON.stringify(input.previousOutfit)}`,
+        "The prompt is a change request from a child (e.g. «gjør vingene større», «bare capsen blå», «fjern sekken»).",
+        "Return the FULL outfit object: copy every field from previousOutfit EXACTLY as-is, and change ONLY what the change request explicitly mentions.",
+        "Do not add, remove, restyle or recolor anything that is not mentioned. Keep the accessories array identical except for the mentioned items (removals only when asked to remove).",
+        "In revision mode the single-piece rule above does NOT apply — never reset unmentioned fields to none/empty.",
+      ] : []),
       "",
       "Placement rule (strict):",
       placementRule,
@@ -323,16 +332,19 @@ export class AiGenerationService {
     const accessoryKinds = ["cap", "beanie", "hat", "helmet", "crown", "glasses", "mask", "wings", "backpack", "bag", "necklace", "scarf", "horns", "tail", "belt", "gloves"] as const;
 
     const hairSource = (outfitSource.hair && typeof outfitSource.hair === "object") ? outfitSource.hair as Record<string, unknown> : {};
-    const accessoriesSource = Array.isArray(outfitSource.accessories) ? outfitSource.accessories : [];
+    const accessoriesSource = Array.isArray(outfitSource.accessories) ? outfitSource.accessories : null;
+    // In revision mode any missing/invalid field falls back to the previous outfit,
+    // so unmentioned parts are never reset by a sloppy model response.
+    const prev = input.previousOutfit;
     const outfit = {
-      top: topOptions.includes(outfitSource.top as typeof topOptions[number]) ? outfitSource.top as typeof topOptions[number] : "sweater",
-      bottom: bottomOptions.includes(outfitSource.bottom as typeof bottomOptions[number]) ? outfitSource.bottom as typeof bottomOptions[number] : "pants",
-      shoes: shoeOptions.includes(outfitSource.shoes as typeof shoeOptions[number]) ? outfitSource.shoes as typeof shoeOptions[number] : "none",
+      top: topOptions.includes(outfitSource.top as typeof topOptions[number]) ? outfitSource.top as typeof topOptions[number] : (prev?.top ?? "sweater"),
+      bottom: bottomOptions.includes(outfitSource.bottom as typeof bottomOptions[number]) ? outfitSource.bottom as typeof bottomOptions[number] : (prev?.bottom ?? "pants"),
+      shoes: shoeOptions.includes(outfitSource.shoes as typeof shoeOptions[number]) ? outfitSource.shoes as typeof shoeOptions[number] : (prev?.shoes ?? "none"),
       hair: {
-        style: hairStyles.includes(hairSource.style as typeof hairStyles[number]) ? hairSource.style as typeof hairStyles[number] : "none",
-        color: normalizeHex(hairSource.color) ?? "#1f2937",
+        style: hairStyles.includes(hairSource.style as typeof hairStyles[number]) ? hairSource.style as typeof hairStyles[number] : (prev?.hair.style ?? "none"),
+        color: normalizeHex(hairSource.color) ?? prev?.hair.color ?? "#1f2937",
       },
-      accessories: accessoriesSource.slice(0, 6).flatMap((entry) => {
+      accessories: (accessoriesSource ?? prev?.accessories ?? []).slice(0, 6).flatMap((entry) => {
         const row = (entry && typeof entry === "object") ? entry as Record<string, unknown> : {};
         if (!accessoryKinds.includes(row.kind as typeof accessoryKinds[number])) return [];
         return [{ kind: row.kind as typeof accessoryKinds[number], color: normalizeHex(row.color) ?? colorPalette[0] ?? "#334155" }];
