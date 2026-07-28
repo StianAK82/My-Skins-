@@ -278,35 +278,50 @@ export default function Create() {
     setUploadStatus("");
     setAiPhase("Lager designet…");
     try {
+      const response = normalizeAiResponse(await aiGenerateDesign({ prompt: usedPrompt, itemType: "classic_shirt", style: "AI velger", theme: usedPrompt }));
+
+      // Detect which garments were asked for. Kids misspell ("t-sjhortet"), so we
+      // combine the raw prompt with the AI's own interpretation (title/style/placement) —
+      // the AI understands typos even when exact word-matching fails.
+      const r = response.result as unknown as {
+        title?: string; style?: string; theme?: string;
+        designElements?: string[];
+        placement?: { front?: string; leftLeg?: string; rightLeg?: string };
+      };
       const pLow = usedPrompt.toLowerCase();
-      // Only make the pieces the user actually asked for.
-      const mentionsTop = /hettegenser|hette|hoodie|genser|sweater|skjorte|shirt|jakke|jacket|topp|overdel/i.test(pLow);
-      const mentionsBottom = /shorts|bukse|olabukse|jeans|jogge|pants|underdel/i.test(pLow);
-      const mentionsShoes = /\bsko\b|joggesko|sneakers|boots|støvle/i.test(pLow);
+      const aiText = [r.title, r.style, r.theme, ...(r.designElements ?? []), r.placement?.front]
+        .filter(Boolean).join(" ").toLowerCase();
+      const combined = `${pLow} ${aiText}`;
+      const aiUsesLegs = Boolean(
+        (r.placement?.leftLeg && r.placement.leftLeg !== "not_used") ||
+        (r.placement?.rightLeg && r.placement.rightLeg !== "not_used"),
+      );
+
+      const mentionsTop = /hettegenser|hette|hoodie|genser|sweater|skjort|sjort|shirt|jakke|jacket|topp|overdel|hood/i.test(combined);
+      const mentionsBottom = /shorts|bukse|olabukse|jeans|jogge|pants|underdel/i.test(combined);
+      const mentionsShoes = /\bsko\b|joggesko|sneakers|boots|støvle|shoe/i.test(combined);
       // If no specific garment is named ("lag et drage-skin"), make the whole outfit.
       const fullOutfit = !mentionsTop && !mentionsBottom && !mentionsShoes;
       const wantsTop = mentionsTop || fullOutfit;
-      const wantsBottom = mentionsBottom || fullOutfit;
+      const wantsBottom = mentionsBottom || (fullOutfit && aiUsesLegs) || (fullOutfit && !aiText);
 
       let topType: "hoodie" | "sweater" | "tshirt" = "sweater";
-      if (/hettegenser|hette|hoodie/i.test(pLow)) {
+      if (/hettegenser|hette|hoodie|hood/i.test(combined)) {
         topType = "hoodie";
-      } else if (/genser|sweater|collegegenser/i.test(pLow)) {
-        topType = "sweater";
-      } else if (/tskjorte|t-skjorte|t-shirt|tshirt|skjorte|topp/i.test(pLow)) {
+      } else if (/tskjorte|t-skjorte|t-shirt|tshirt|skjort|sjort|shirt|topp/i.test(combined)) {
         topType = "tshirt";
+      } else if (/genser|sweater|collegegenser/i.test(combined)) {
+        topType = "sweater";
       }
 
       let bottomType: "pants" | "shorts" = "pants";
-      if (/shorts/i.test(pLow)) bottomType = "shorts";
+      if (/shorts/i.test(combined)) bottomType = "shorts";
 
       setGarmentConfig({
         top: wantsTop ? topType : null,
         bottom: wantsBottom ? bottomType : null,
         shoes: mentionsShoes ? "sneakers" : null,
       });
-
-      const response = normalizeAiResponse(await aiGenerateDesign({ prompt: usedPrompt, itemType: "classic_shirt", style: "AI velger", theme: usedPrompt }));
       const previewAvatar = buildAiAvatarLook(
         [response.result.style, ...response.result.intent.styleVibes].join(" "),
         response.result.colorPalette,
