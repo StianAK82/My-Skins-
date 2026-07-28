@@ -15,6 +15,11 @@ import { resolveSlotPosition } from "@/lib/editor/avatar-slots";
 type ThreeTexture = ReturnType<typeof makeTextureFromZone>;
 type PreviewMode = "clothing" | "avatar";
 
+export type GarmentConfig = {
+  top?: "hoodie" | "tshirt" | null;
+  bottom?: "pants" | "shorts" | null;
+};
+
 type AvatarPreviewProps = {
   textureUrl?: string;
   className?: string;
@@ -33,6 +38,7 @@ type AvatarPreviewProps = {
   garmentVariant?: string;
   accessories?: { hair?: string; hat?: string; glasses?: string; beard?: string; backpack?: string };
   avatarState?: AvatarState;
+  garment?: GarmentConfig;
 };
 
 type Zone = { left: number; top: number; width: number; height: number };
@@ -221,7 +227,214 @@ function BodyPart({ material, args, position, radius, smoothness, maps, skinTone
   );
 }
 
-function RobloxAvatar({ maps, view, itemType, avatar, mode }: { maps: ClothingMaps | null; view: "front" | "back"; itemType: "shirt" | "pants"; avatar: AvatarState; mode: PreviewMode }) {
+function GarmentOverlay({
+  partId, args, maps, garment, baseModelId, skinTone
+}: {
+  partId: string; args: [number, number, number]; maps: { shirt: FaceMaps; pants: FaceMaps }; garment?: GarmentConfig; baseModelId: string; skinTone: string;
+}) {
+  if (!garment) return null;
+  const top = garment.top || "tshirt";
+  const bottom = garment.bottom || "pants";
+
+  const isMainTorso = partId === "torso" || partId === "upperTorso";
+  const isBottomTorso = partId === "torso" || partId === "lowerTorso" || partId === "hips";
+
+  const isBottomArm = (baseModelId === "proportioned_r15" && (partId === "leftLowerArm" || partId === "rightLowerArm")) ||
+                      (baseModelId !== "proportioned_r15" && (partId === "leftUpperArm" || partId === "rightUpperArm"));
+                      
+  const isTopArm = (baseModelId === "proportioned_r15" && (partId === "leftUpperArm" || partId === "rightUpperArm")) ||
+                   (baseModelId !== "proportioned_r15" && (partId === "leftUpperArm" || partId === "rightUpperArm"));
+                      
+  const isBottomLeg = (baseModelId === "proportioned_r15" && (partId === "leftLowerLeg" || partId === "rightLowerLeg")) ||
+                      (baseModelId !== "proportioned_r15" && (partId === "leftLeg" || partId === "rightLeg"));
+                      
+  const isTopLeg = (baseModelId === "proportioned_r15" && (partId === "leftUpperLeg" || partId === "rightUpperLeg")) ||
+                   (baseModelId !== "proportioned_r15" && (partId === "leftLeg" || partId === "rightLeg"));
+
+  const shirtColor = "#f8fafc";
+  const pantsColor = "#e2e8f0";
+  const shirtMapFront = maps.shirt.front;
+  const shirtMapBack = maps.shirt.back;
+  const shirtMapSide = maps.shirt.side;
+
+  return (
+    <>
+      {top === "hoodie" && (
+        <>
+          {/* HOOD - resting behind neck on main torso */}
+          {isMainTorso && (
+            <group position={[0, args[1]/2 - 0.05, -args[2]/2 - 0.05]}>
+              <RoundedBox args={[args[0] * 0.8, 0.25, 0.3]} radius={0.08} smoothness={4} castShadow receiveShadow rotation={[-0.2, 0, 0]}>
+                <meshStandardMaterial map={shirtMapBack} color={shirtColor} roughness={0.7} metalness={0.05} />
+              </RoundedBox>
+            </group>
+          )}
+
+          {/* HOOD FOLDS - draped over shoulders */}
+          {isMainTorso && (
+            <group position={[0, args[1]/2 - 0.02, 0]}>
+              <RoundedBox args={[args[0] * 0.9, 0.15, args[2] * 1.05]} radius={0.05} smoothness={4} castShadow receiveShadow>
+                <meshStandardMaterial map={shirtMapFront} color={shirtColor} roughness={0.7} metalness={0.05} />
+              </RoundedBox>
+            </group>
+          )}
+
+          {/* DRAWSTRINGS */}
+          {isMainTorso && (
+            <group position={[0, args[1]/2 - 0.1, args[2]/2 + 0.02]}>
+              <mesh position={[-0.15, -0.15, 0]} castShadow rotation={[0, 0, 0.05]}>
+                <cylinderGeometry args={[0.012, 0.012, 0.3, 8]} />
+                <meshStandardMaterial color="#ffffff" roughness={0.9} />
+              </mesh>
+              <mesh position={[-0.16, -0.3, 0]} castShadow>
+                <cylinderGeometry args={[0.014, 0.014, 0.04, 8]} />
+                <meshStandardMaterial color="#94a3b8" roughness={0.5} />
+              </mesh>
+              
+              <mesh position={[0.15, -0.15, 0]} castShadow rotation={[0, 0, -0.05]}>
+                <cylinderGeometry args={[0.012, 0.012, 0.3, 8]} />
+                <meshStandardMaterial color="#ffffff" roughness={0.9} />
+              </mesh>
+              <mesh position={[0.16, -0.3, 0]} castShadow>
+                <cylinderGeometry args={[0.014, 0.014, 0.04, 8]} />
+                <meshStandardMaterial color="#94a3b8" roughness={0.5} />
+              </mesh>
+            </group>
+          )}
+
+          {/* KANGAROO POCKET */}
+          {isBottomTorso && (
+            <group position={[0, -args[1]/2 + 0.25, args[2]/2 + 0.02]}>
+              <RoundedBox args={[args[0] * 0.7, 0.35, 0.08]} radius={0.04} smoothness={4} castShadow receiveShadow>
+                <meshStandardMaterial map={shirtMapFront} color={shirtColor} roughness={0.7} metalness={0.05} />
+              </RoundedBox>
+              {/* Pocket seams/openings */}
+              <mesh position={[-args[0] * 0.35 + 0.04, 0, 0.03]} rotation={[0, 0, 0.4]}>
+                <cylinderGeometry args={[0.02, 0.02, 0.25, 8]} />
+                <meshStandardMaterial color="#0f172a" opacity={0.3} transparent roughness={0.9} />
+              </mesh>
+              <mesh position={[args[0] * 0.35 - 0.04, 0, 0.03]} rotation={[0, 0, -0.4]}>
+                <cylinderGeometry args={[0.02, 0.02, 0.25, 8]} />
+                <meshStandardMaterial color="#0f172a" opacity={0.3} transparent roughness={0.9} />
+              </mesh>
+            </group>
+          )}
+
+          {/* RIBBED HEM (TORSO) */}
+          {isBottomTorso && (
+            <group position={[0, -args[1]/2 + 0.06, 0]}>
+              <RoundedBox args={[args[0] * 1.05, 0.12, args[2] * 1.05]} radius={0.02} smoothness={4} castShadow receiveShadow>
+                <meshStandardMaterial map={shirtMapFront} color={shirtColor} roughness={0.8} metalness={0.05} />
+              </RoundedBox>
+              {/* Little detail indent for the hem */}
+              <mesh position={[0, 0.06, args[2]*0.52]} rotation={[0, 0, 0]}>
+                <boxGeometry args={[args[0]*1.03, 0.01, 0.02]} />
+                <meshStandardMaterial color="#0f172a" opacity={0.15} transparent roughness={0.9} />
+              </mesh>
+            </group>
+          )}
+
+          {/* ARM CUFFS */}
+          {isBottomArm && (
+            <group position={[0, -args[1]/2 + 0.05, 0]}>
+              <RoundedBox args={[args[0] * 1.1, 0.12, args[2] * 1.1]} radius={0.02} smoothness={4} castShadow receiveShadow>
+                <meshStandardMaterial map={shirtMapSide} color={shirtColor} roughness={0.8} metalness={0.05} />
+              </RoundedBox>
+            </group>
+          )}
+
+          {/* ARM PADDING */}
+          {(isTopArm || isBottomArm) && (
+            <BodyPart
+              material="shirt"
+              args={[args[0] * 1.05, args[1] * 0.98, args[2] * 1.05]}
+              position={[0, 0, 0]}
+              radius={0.06}
+              smoothness={4}
+              maps={maps}
+              skinTone={skinTone}
+            />
+          )}
+          
+          {/* TORSO PADDING (makes the hoodie look thick) */}
+          {(isMainTorso || isBottomTorso) && (
+            <BodyPart
+              material="shirt"
+              args={[args[0] * 1.04, args[1] * 0.98, args[2] * 1.04]}
+              position={[0, 0, 0]}
+              radius={0.06}
+              smoothness={4}
+              maps={maps}
+              skinTone={skinTone}
+            />
+          )}
+        </>
+      )}
+
+      {/* PANTS */}
+      {bottom === "pants" && (
+        <>
+          {(isBottomLeg || isTopLeg) && (
+            <BodyPart
+              material="pants"
+              args={[args[0] * 1.08, args[1] * 0.98, args[2] * 1.08]}
+              position={[0, 0, 0]}
+              radius={0.06}
+              smoothness={4}
+              maps={maps}
+              skinTone={skinTone}
+            />
+          )}
+          {isBottomLeg && (
+            <group position={[0, -args[1]/2 + 0.05, 0]}>
+              <RoundedBox args={[args[0] * 1.12, 0.1, args[2] * 1.12]} radius={0.02} smoothness={4} castShadow receiveShadow>
+                <meshStandardMaterial map={maps.pants.front} color={pantsColor} roughness={0.8} metalness={0.05} />
+              </RoundedBox>
+            </group>
+          )}
+          {isTopLeg && (
+            <group position={[0, args[1]/2 - 0.04, 0]}>
+              <RoundedBox args={[args[0] * 1.1, 0.08, args[2] * 1.1]} radius={0.02} smoothness={4} castShadow receiveShadow>
+                <meshStandardMaterial map={maps.pants.front} color={pantsColor} roughness={0.8} metalness={0.05} />
+              </RoundedBox>
+            </group>
+          )}
+        </>
+      )}
+
+      {/* SHORTS */}
+      {bottom === "shorts" && (
+        <>
+          {isTopLeg && (
+            <group position={[0, baseModelId === 'proportioned_r15' ? 0 : args[1]*0.25, 0]}>
+              <BodyPart
+                material="pants"
+                args={[args[0] * 1.08, baseModelId === 'proportioned_r15' ? args[1] * 0.98 : args[1] * 0.5, args[2] * 1.08]}
+                position={[0, 0, 0]}
+                radius={0.06}
+                smoothness={4}
+                maps={maps}
+                skinTone={skinTone}
+              />
+              <group position={[0, baseModelId === 'proportioned_r15' ? -args[1]/2 + 0.05 : -args[1]*0.25 + 0.05, 0]}>
+                <RoundedBox args={[args[0] * 1.1, 0.08, args[2] * 1.1]} radius={0.02} smoothness={4} castShadow receiveShadow>
+                  <meshStandardMaterial map={maps.pants.front} color={pantsColor} roughness={0.8} metalness={0.05} />
+                </RoundedBox>
+              </group>
+              <group position={[0, args[1]/2 - 0.04, 0]}>
+                <RoundedBox args={[args[0] * 1.1, 0.08, args[2] * 1.1]} radius={0.02} smoothness={4} castShadow receiveShadow>
+                  <meshStandardMaterial map={maps.pants.front} color={pantsColor} roughness={0.8} metalness={0.05} />
+                </RoundedBox>
+              </group>
+            </group>
+          )}
+        </>
+      )}
+    </>
+  );
+}
+
+function RobloxAvatar({ maps, view, itemType, avatar, mode, garment }: { maps: ClothingMaps | null; view: "front" | "back"; itemType: "shirt" | "pants"; avatar: AvatarState; mode: PreviewMode; garment?: GarmentConfig }) {
   if (!maps) return null;
   // Show the full outfit: shirt zones on the torso/arms and pants zones on the legs.
   void itemType;
@@ -247,6 +460,7 @@ function RobloxAvatar({ maps, view, itemType, avatar, mode }: { maps: ClothingMa
         {baseModel.bodyParts.map((part) => (
           <group key={part.id} position={part.position} scale={partScaleForId(part.id)}>
             <BodyPart material={part.material} args={part.args} position={[0, 0, 0]} radius={part.radius} smoothness={part.smoothness} maps={{ shirt: shirtMaps, pants: pantsMaps }} skinTone={avatar.skinTone} />
+            <GarmentOverlay partId={part.id} args={part.args} maps={{ shirt: shirtMaps, pants: pantsMaps }} garment={garment} baseModelId={baseModel.id} skinTone={avatar.skinTone} />
           </group>
         ))}
       </group>
@@ -312,7 +526,7 @@ function IdleGroup({ children, enabled }: { children: ReactNode; enabled: boolea
   return <group ref={groupRef}>{children}</group>;
 }
 
-function SceneContent({ maps, view, itemType, rotation, avatar, mode, animated = false }: { maps: ClothingMaps | null; view: "front" | "back"; itemType: "shirt" | "pants"; rotation: number; avatar: AvatarState; mode: PreviewMode; animated?: boolean }) {
+function SceneContent({ maps, view, itemType, rotation, avatar, mode, animated = false, garment }: { maps: ClothingMaps | null; view: "front" | "back"; itemType: "shirt" | "pants"; rotation: number; avatar: AvatarState; mode: PreviewMode; animated?: boolean; garment?: GarmentConfig }) {
   const cameraTarget: [number, number, number] = mode === "clothing" ? [0, 1.2, 0] : [0, 1.15, 0];
   return (
     <>
@@ -341,7 +555,7 @@ function SceneContent({ maps, view, itemType, rotation, avatar, mode, animated =
 
       <group rotation-y={rotation}>
         <IdleGroup enabled={animated}>
-          <RobloxAvatar maps={maps} view={view} itemType={itemType} avatar={avatar} mode={mode} />
+          <RobloxAvatar maps={maps} view={view} itemType={itemType} avatar={avatar} mode={mode} garment={garment} />
         </IdleGroup>
       </group>
 
@@ -394,7 +608,7 @@ function PreviewFallback({ textureUrl }: { textureUrl?: string }) {
   );
 }
 
-export function AvatarPreview({ textureUrl, className, avatarType = "neutral", view: controlledView, onViewChange, itemType = "shirt", dimension, previewMode, studioMode = false, animated = false, avatarState }: AvatarPreviewProps) {
+export function AvatarPreview({ textureUrl, className, avatarType = "neutral", view: controlledView, onViewChange, itemType = "shirt", dimension, previewMode, studioMode = false, animated = false, avatarState, garment }: AvatarPreviewProps) {
   const resolvedMode: PreviewMode = previewMode ?? (dimension === "3d" ? "avatar" : "clothing");
   const [internalView, setInternalView] = useState<"front" | "back">("front");
   const [zoom, setZoom] = useState(resolvedMode === "clothing" ? 3.6 : 4.9);
@@ -417,7 +631,7 @@ export function AvatarPreview({ textureUrl, className, avatarType = "neutral", v
         camera={{ position: [0, 1.3, zoom], fov: resolvedMode === "clothing" ? 34 : 38 }}
         className="w-full h-full"
       >
-        <SceneContent maps={maps} view={view} itemType={itemType} rotation={rotation} avatar={effectiveAvatar} mode={resolvedMode} animated={animated} />
+        <SceneContent maps={maps} view={view} itemType={itemType} rotation={rotation} avatar={effectiveAvatar} mode={resolvedMode} animated={animated} garment={garment} />
       </Canvas>
     </WebGLBoundary>
   );

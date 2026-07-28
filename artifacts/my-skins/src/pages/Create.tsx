@@ -3,7 +3,7 @@ import { aiGenerateDesign } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Sparkles, Upload, Loader2 } from "lucide-react";
-import { AvatarPreview } from "@/components/editor/AvatarPreview";
+import { AvatarPreview, type GarmentConfig } from "@/components/editor/AvatarPreview";
 import { useDesignStore } from "@/lib/editor/design-state";
 import { classicTextureAiSchema, parseClassicTextureAiPlan } from "@/lib/editor/ai-schema";
 import { preloadOverlayImages, renderDesignToCanvas } from "@/lib/editor/renderer";
@@ -150,6 +150,7 @@ export default function Create() {
   // popup/download or a failed direct upload can always be retried for free.
   const [readyFiles, setReadyFiles] = useState<OutfitFiles | null>(null);
   const outfitRef = useRef<{ pantsBase: string; pantsAccent: string; heroUrl?: string; fabricUrl?: string } | null>(null);
+  const [garmentConfig, setGarmentConfig] = useState<GarmentConfig>({ top: "tshirt", bottom: "pants" });
   const generateLockRef = useRef(false);
 
   const { state, setAiPlanPreview, setAiAvatarPreview, deleteLayer, addLayer, applyAiPlan, setPaintSwatch } = useDesignStore();
@@ -277,12 +278,37 @@ export default function Create() {
     setUploadStatus("");
     setAiPhase("Lager designet…");
     try {
+      const pLow = usedPrompt.toLowerCase();
+      let topType: "hoodie" | "tshirt" = "tshirt";
+      if (/hettegenser|hette|hoodie/i.test(pLow)) topType = "hoodie";
+
+      let bottomType: "pants" | "shorts" = "pants";
+      if (/shorts/i.test(pLow)) bottomType = "shorts";
+      else if (/bukse|olabukse|jeans|jogge|pants/i.test(pLow)) bottomType = "pants";
+
+      setGarmentConfig({ top: topType, bottom: bottomType });
+
       const response = normalizeAiResponse(await aiGenerateDesign({ prompt: usedPrompt, itemType: "classic_shirt", style: "AI velger", theme: usedPrompt }));
       const previewAvatar = buildAiAvatarLook(
         [response.result.style, ...response.result.intent.styleVibes].join(" "),
         response.result.colorPalette,
       );
+      // Plain clothing prompts should show a clean avatar (like the Roblox editor) —
+      // only themed prompts (drage, ninja, superhelt …) get hats/chains/auras/effects.
+      const wantsCosmetics = /drage|dragon|ninja|superhelt|superhero|zombie|astronaut|romfar|hai|shark|lava|gamer|prinsesse|princess|enhjørning|unicorn|engel|angel|ving|wing|hjelm|helmet|caps|lue|hatt|hat\b|kjede|chain|krone|crown|horn/i.test(usedPrompt);
+      if (!wantsCosmetics) {
+        previewAvatar.slots = {
+          ...previewAvatar.slots,
+          hat: null,
+          neck: null,
+          leftShoulder: null,
+          rightShoulder: null,
+          back: null,
+          aura: null,
+        };
+      }
       const resolvedSlots = resolveAvatarSlotAssets(response.result);
+      if (!wantsCosmetics) resolvedSlots.length = 0;
       for (const slotPlan of resolvedSlots) {
         previewAvatar.slots = {
           ...previewAvatar.slots,
@@ -493,6 +519,7 @@ export default function Create() {
               avatarState={state.avatar}
               studioMode
               animated
+              garment={garmentConfig}
             />
           </div>
         </section>
