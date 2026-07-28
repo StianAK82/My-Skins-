@@ -84,7 +84,7 @@ export function understandFashionIntent(prompt: string): FashionIntent {
 /** Stage 2 freezes all cross-garment visual decisions into one immutable record. */
 export function planOutfitDNA(
   intent: FashionIntent,
-  outfitId = randomUUID(),
+  outfitId: string = randomUUID(),
 ): OutfitDNA {
   const primary = COLOURS[intent.colours[0]] ?? "#FFFFFF",
     heavy = /fleece|denim|canvas/.test(intent.material);
