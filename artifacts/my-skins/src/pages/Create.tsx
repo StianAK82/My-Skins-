@@ -158,31 +158,44 @@ const HAIR_ASSET_MAP: Record<string, string> = {
   spiky: "hair_spiky_ember",
   curly: "hair_curly",
   braids: "hair_braids",
+  wavy: "hair_wavy_midnight",
 };
 
-// Accessory kind → preview slot + asset (shared by first-generation and revision flows).
-const ACCESSORY_ASSET_MAP: Record<string, { slot: "hat" | "back" | "neck"; assetId: string }> = {
-  cap: { slot: "hat", assetId: "hat_street_cap" },
-  beanie: { slot: "hat", assetId: "hat_beanie_soft" },
-  hat: { slot: "hat", assetId: "hat_beanie_soft" },
-  helmet: { slot: "hat", assetId: "hat_helmet" },
-  crown: { slot: "hat", assetId: "hat_crown" },
-  glasses: { slot: "hat", assetId: "hat_glasses" },
-  mask: { slot: "hat", assetId: "hat_mask" },
-  unicorn_horn: { slot: "hat", assetId: "hat_unicorn" },
-  dragon_hood: { slot: "hat", assetId: "hat_dragon" },
-  wings: { slot: "back", assetId: "back_wings" },
-  backpack: { slot: "back", assetId: "back_backpack" },
-  bag: { slot: "back", assetId: "back_bag" },
-  tail: { slot: "back", assetId: "back_tail" },
-  necklace: { slot: "neck", assetId: "neck_chain_gold" },
-  scarf: { slot: "neck", assetId: "neck_scarf_neo" },
-  horns: { slot: "hat", assetId: "hat_cyber_horns" },
-  belt: { slot: "neck", assetId: "neck_belt" },
-  gloves: { slot: "neck", assetId: "neck_gloves" },
+// Accessory kind → preview slot(s) + asset(s) (shared by first-generation and revision flows).
+// A kind may occupy several slots (e.g. shoulder pairs); all of them must be free for it to apply.
+type AccessorySlot = "hat" | "back" | "neck" | "leftShoulder" | "rightShoulder" | "aura";
+const ACCESSORY_ASSET_MAP: Record<string, Array<{ slot: AccessorySlot; assetId: string }>> = {
+  cap: [{ slot: "hat", assetId: "hat_street_cap" }],
+  beanie: [{ slot: "hat", assetId: "hat_beanie_soft" }],
+  hat: [{ slot: "hat", assetId: "hat_beanie_soft" }],
+  helmet: [{ slot: "hat", assetId: "hat_helmet" }],
+  crown: [{ slot: "hat", assetId: "hat_crown" }],
+  glasses: [{ slot: "hat", assetId: "hat_glasses" }],
+  mask: [{ slot: "hat", assetId: "hat_mask" }],
+  unicorn_horn: [{ slot: "hat", assetId: "hat_unicorn" }],
+  dragon_hood: [{ slot: "hat", assetId: "hat_dragon" }],
+  wings: [{ slot: "back", assetId: "back_wings" }],
+  backpack: [{ slot: "back", assetId: "back_backpack" }],
+  bag: [{ slot: "back", assetId: "back_bag" }],
+  tail: [{ slot: "back", assetId: "back_tail" }],
+  jetpack: [{ slot: "back", assetId: "back_jetpack_mini" }],
+  sword: [{ slot: "back", assetId: "back_blade_rig" }],
+  necklace: [{ slot: "neck", assetId: "neck_chain_gold" }],
+  scarf: [{ slot: "neck", assetId: "neck_scarf_neo" }],
+  horns: [{ slot: "hat", assetId: "hat_cyber_horns" }],
+  belt: [{ slot: "neck", assetId: "neck_belt" }],
+  gloves: [{ slot: "neck", assetId: "neck_gloves" }],
+  shoulder_guards: [
+    { slot: "leftShoulder", assetId: "shoulder_guard_left" },
+    { slot: "rightShoulder", assetId: "shoulder_guard_right" },
+  ],
+  shoulder_pet: [{ slot: "rightShoulder", assetId: "shoulder_orb_right" }],
+  aura: [{ slot: "aura", assetId: "aura_neon_ring" }],
+  flame_aura: [{ slot: "aura", assetId: "aura_flame_orbit" }],
+  pixel_aura: [{ slot: "aura", assetId: "aura_pixel_spark" }],
 };
 
-const SLOT_NB: Record<string, string> = { hat: "hode", back: "rygg", neck: "hals" };
+const SLOT_NB: Record<string, string> = { hat: "hode", back: "rygg", neck: "hals", leftShoulder: "venstre skulder", rightShoulder: "høyre skulder", aura: "aura" };
 
 // Kid-friendly Norwegian names for outfit values shown in the item/changed lists.
 const NB_NAME: Record<string, string> = {
@@ -192,6 +205,8 @@ const NB_NAME: Record<string, string> = {
   mask: "maske", unicorn_horn: "enhjørning-hette", dragon_hood: "drage-hette",
   wings: "vinger", backpack: "ryggsekk", bag: "veske", necklace: "kjede",
   scarf: "skjerf", horns: "horn", tail: "hale", belt: "belte", gloves: "hansker",
+  jetpack: "jetpack", sword: "sverd", shoulder_guards: "skulderplater", shoulder_pet: "skuldervenn",
+  aura: "lysring", flame_aura: "ildring", pixel_aura: "pikselgnister", wavy: "bølgete",
   short: "kort", long: "langt", ponytail: "hestehale", twintails: "to haler", spiky: "piggete",
   curly: "krøllete", braids: "fletter", none: "ingen",
 };
@@ -222,11 +237,14 @@ function mapOutfitToSlots(outfit: OutfitPlan): { slots: Record<string, { assetId
   for (const acc of outfit.accessories) {
     const mapped = ACCESSORY_ASSET_MAP[acc.kind];
     if (!mapped) continue;
-    if (slots[mapped.slot]) {
-      conflicts.push(`${acc.kind} (kun plass til én ting i ${SLOT_NB[mapped.slot] ?? mapped.slot}-sporet)`);
+    const taken = mapped.find((entry) => slots[entry.slot]);
+    if (taken) {
+      conflicts.push(`${acc.kind} (kun plass til én ting i ${SLOT_NB[taken.slot] ?? taken.slot}-sporet)`);
       continue;
     }
-    slots[mapped.slot] = { assetId: mapped.assetId, color: acc.color };
+    for (const entry of mapped) {
+      slots[entry.slot] = { assetId: entry.assetId, color: acc.color };
+    }
   }
   return { slots, conflicts };
 }

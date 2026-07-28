@@ -115,11 +115,11 @@ export const aiOutfitSchema = z.object({
   bottom: z.enum(["pants", "shorts", "skirt", "none"]),
   shoes: z.enum(["none", "sneakers", "boots"]),
   hair: z.object({
-    style: z.enum(["none", "short", "long", "ponytail", "twintails", "spiky", "curly", "braids"]),
+    style: z.enum(["none", "short", "long", "ponytail", "twintails", "spiky", "curly", "braids", "wavy"]),
     color: hexColorSchema,
   }).strict(),
   accessories: z.array(z.object({
-    kind: z.enum(["cap", "beanie", "hat", "helmet", "crown", "glasses", "mask", "wings", "backpack", "bag", "necklace", "scarf", "horns", "tail", "belt", "gloves", "unicorn_horn", "dragon_hood"]),
+    kind: z.enum(["cap", "beanie", "hat", "helmet", "crown", "glasses", "mask", "wings", "backpack", "bag", "necklace", "scarf", "horns", "tail", "belt", "gloves", "unicorn_horn", "dragon_hood", "jetpack", "sword", "shoulder_guards", "shoulder_pet", "aura", "flame_aura", "pixel_aura"]),
     color: hexColorSchema,
   }).strict()).max(6),
   unsupported: z.array(z.string()).max(6),

@@ -146,8 +146,8 @@ export function normalizeDesignPayload(input: NormalizeInput, payload: unknown):
   const topOptions = ["hoodie", "sweater", "tshirt", "jacket", "dress", "none"] as const;
   const bottomOptions = ["pants", "shorts", "skirt", "none"] as const;
   const shoeOptions = ["none", "sneakers", "boots"] as const;
-  const hairStyles = ["none", "short", "long", "ponytail", "twintails", "spiky", "curly", "braids"] as const;
-  const accessoryKinds = ["cap", "beanie", "hat", "helmet", "crown", "glasses", "mask", "wings", "backpack", "bag", "necklace", "scarf", "horns", "tail", "belt", "gloves", "unicorn_horn", "dragon_hood"] as const;
+  const hairStyles = ["none", "short", "long", "ponytail", "twintails", "spiky", "curly", "braids", "wavy"] as const;
+  const accessoryKinds = ["cap", "beanie", "hat", "helmet", "crown", "glasses", "mask", "wings", "backpack", "bag", "necklace", "scarf", "horns", "tail", "belt", "gloves", "unicorn_horn", "dragon_hood", "jetpack", "sword", "shoulder_guards", "shoulder_pet", "aura", "flame_aura", "pixel_aura"] as const;
 
   const hairSource = (outfitSource.hair && typeof outfitSource.hair === "object") ? outfitSource.hair as Record<string, unknown> : {};
   const accessoriesSource = Array.isArray(outfitSource.accessories) ? outfitSource.accessories : null;
