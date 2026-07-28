@@ -1,21 +1,57 @@
 import { z } from "zod";
 
 const hex = z.string().regex(/^#[0-9a-f]{6}$/i);
-export const generationSafetyReportSchema = z.object({ decision:z.enum(["allow","transform","block"]), childFriendly:z.boolean(), userMessage:z.string(), protectedIp:z.boolean() }).strict();
-export const generatedMaterialSpecSchema = z.object({ id:z.string().min(1), family:z.enum(["cotton-fleece","cotton-jersey","denim","canvas","performance-mesh","wool","leather-like","satin-like","knit","padded","metal-like"]), baseColor:hex, secondaryColor:hex, roughness:z.number().min(0).max(1), regions:z.array(z.string()).min(1) }).strict();
-export const generatedGraphicSpecSchema = z.object({ id:z.string(), kind:z.enum(["original-symbol","text","number","pattern"]), content:z.string(), placement:z.enum(["front","back","sleeve","leg"]), protectedContentReplaced:z.boolean() }).strict();
-const construction = z.object({ enabled:z.boolean(), style:z.string(), clearance:z.number().nonnegative() }).strict();
-const baseGarment = z.object({ id:z.string(), slot:z.enum(["top","bottom","one-piece"]), bodyCoverage:z.array(z.string()).min(1), silhouette:z.string(), fit:z.enum(["slim","regular","relaxed","oversized","cropped","athletic","structured","loose","longline","fitted"]), torsoProfile:z.string(), frontProfile:z.string(), backProfile:z.string(), sideProfile:z.string(), garmentLength:z.number().positive(), thickness:z.number().positive(), clearance:z.number().positive(), shoulders:construction, cuffs:construction, waistband:construction, neckline:z.string(), collar:construction, pocket:construction, closure:construction, seams:z.array(z.string()), materialRegions:z.array(z.string()), graphicZones:z.array(z.string()), avatarAnchors:z.array(z.string()).min(1), layers:z.array(z.string()), classicMapping:z.array(z.string()).min(1), technicalLimits:z.array(z.string()), safetyApproved:z.literal(true) }).strict();
-const hoodie = baseGarment.extend({ category:z.literal("hoodie"), sleeves:z.object({ kind:z.literal("full"), fullness:z.number().min(.6).max(1.6) }).strict(), hood:z.object({ enabled:z.literal(true), headClearance:z.number().positive(), opening:z.enum(["oval","relaxed-oval"]), thickness:z.number().positive() }).strict(), drawstrings:z.object({ enabled:z.literal(true), count:z.literal(2) }).strict(), lowerBody:z.null() }).strict();
-const tshirt = baseGarment.extend({ category:z.literal("t-shirt"), sleeves:z.object({ kind:z.literal("short"), fullness:z.number() }).strict(), hood:z.object({enabled:z.literal(false)}).strict(), drawstrings:z.object({enabled:z.literal(false),count:z.literal(0)}).strict(), lowerBody:z.null() }).strict();
-const trousers = baseGarment.extend({ category:z.enum(["trousers","shorts"]), sleeves:z.null(), hood:z.null(), drawstrings:z.null(), lowerBody:z.object({ kind:z.enum(["trousers","shorts"]), hemAboveKnee:z.boolean() }).strict() }).strict();
-export const generatedGarmentSpecSchema = z.discriminatedUnion("category", [hoodie,tshirt,trousers]);
-export const generatedFootwearSpecSchema = z.object({ id:z.string(), category:z.enum(["sneakers","boots","none"]), anchors:z.array(z.enum(["left-foot","right-foot"])), previewOnly:z.boolean() }).strict();
-export const robloxClassicExportPlanSchema = z.object({ shirt:z.boolean(), pants:z.boolean(), width:z.literal(585), height:z.literal(559), exportType:z.literal("roblox-classic"), previewRepresentation:z.literal("ai-generated-enhanced-geometry"), hasReal3DExport:z.literal(false) }).strict();
-export const fashionIntentSchema = z.object({ originalPrompt:z.string(), normalisedPrompt:z.string(), requestLanguage:z.enum(["en","no"]), categories:z.array(z.string()).min(1), style:z.string(), colours:z.array(hex), safety:generationSafetyReportSchema }).strict();
-export const outfitBlueprintSchema = z.object({ intent:fashionIntentSchema, slots:z.array(z.enum(["top","bottom","one-piece","footwear"])).min(1), layerOrder:z.array(z.string()), frontDesign:z.string(), backDesign:z.string() }).strict();
-export const generatedOutfitSpecSchema = z.object({ requestLanguage:z.enum(["en","no"]), originalPrompt:z.string(), normalisedPrompt:z.string(), interpretedPrompt:z.string(), outfitName:z.string(), overallStyle:z.string(), palette:z.array(hex).min(1), garmentSlots:z.array(z.string()).min(1), top:generatedGarmentSpecSchema.nullable(), bottom:generatedGarmentSpecSchema.nullable(), onePiece:generatedGarmentSpecSchema.nullable(), footwear:generatedFootwearSpecSchema, accessories:z.array(z.string()), layerOrder:z.array(z.string()), graphics:z.array(generatedGraphicSpecSchema), frontDesign:z.string(), backDesign:z.string(), classicExportPlan:robloxClassicExportPlanSchema, enhancedPreviewSupported:z.boolean(), unsupportedFeatures:z.array(z.string()), userFacingLimitations:z.array(z.string()), safetyDecision:z.enum(["allow","transform"]), modelConfidence:z.number().min(0).max(1), generationSeed:z.string().min(1) }).strict();
-export const outfitRevisionRequestSchema = z.object({ generationId:z.string().uuid(), instruction:z.string().min(2).max(300), preserve:z.array(z.string()).min(1), revisionId:z.string().uuid() }).strict();
-export const generationValidationReportSchema = z.object({ schemaValid:z.boolean(), safetyApproved:z.boolean(), mandatoryParts:z.array(z.string()), missingParts:z.array(z.string()), severeIntersections:z.array(z.string()), classicValid:z.boolean() }).strict();
+export const generationSafetyReportSchema = z.object({
+  decision: z.enum(["allow", "transform", "block"]), childFriendly: z.boolean(),
+  userMessage: z.string(), protectedIp: z.boolean(),
+}).strict();
 
+export const hoodieConstructionSchema = z.object({
+  fit: z.enum(["regular", "oversized", "cropped"]),
+  torsoWidth: z.number().min(.85).max(1.6), torsoLength: z.number().min(.65).max(1.35),
+  torsoDepth: z.number().min(.45).max(.9), shoulderDrop: z.number().min(0).max(.35),
+  sleeveLength: z.number().min(.65).max(1.35), sleeveFullness: z.number().min(.7).max(1.5),
+  cuffHeight: z.number().min(.08).max(.3), waistbandHeight: z.number().min(.08).max(.3),
+  hoodHeight: z.number().min(.65).max(1.35), hoodDepth: z.number().min(.25).max(.75),
+  hoodOpeningWidth: z.number().min(.25).max(.75), hoodOpeningHeight: z.number().min(.35).max(1),
+  pocketType: z.enum(["kangaroo", "two-front", "none"]), pocketWidth: z.number().min(.25).max(.95),
+  pocketHeight: z.number().min(.15).max(.5), drawstringEnabled: z.boolean(),
+  drawstringLength: z.number().min(.1).max(.8),
+}).strict();
+
+export const generatedGarmentSpecSchema = z.object({
+  id: z.string().min(1), category: z.literal("hoodie"), slot: z.literal("top"),
+  color: hex, material: z.literal("cotton-fleece"), construction: hoodieConstructionSchema,
+}).strict();
+export const generatedGraphicSpecSchema = z.object({
+  id:z.string(), kind:z.enum(["original-symbol","text","number","pattern"]), content:z.string(),
+  placement:z.enum(["front","back","sleeve"]), protectedContentReplaced:z.boolean(),
+}).strict();
+export const generatedFootwearSpecSchema = z.object({ category:z.literal("none"), previewOnly:z.literal(true) }).strict();
+export const robloxClassicExportPlanSchema = z.object({
+  shirt:z.literal(true), pants:z.literal(false), width:z.literal(585), height:z.literal(559),
+  exportType:z.literal("roblox-classic"), previewRepresentation:z.literal("procedural-hoodie"), hasReal3DExport:z.literal(false),
+}).strict();
+export const generatedOutfitSpecSchema = z.object({
+  requestLanguage:z.enum(["en","no"]), originalPrompt:z.string(), normalisedPrompt:z.string(),
+  outfitName:z.string(), overallStyle:z.string(), palette:z.array(hex).min(1), top:generatedGarmentSpecSchema,
+  bottom:z.null(), footwear:generatedFootwearSpecSchema, graphics:z.array(generatedGraphicSpecSchema),
+  classicExportPlan:robloxClassicExportPlanSchema, safetyDecision:z.enum(["allow","transform"]),
+  modelConfidence:z.number().min(0).max(1), generationSeed:z.string().min(1),
+}).strict();
+export const generationValidationReportSchema = z.object({
+  schemaValid:z.boolean(), safetyApproved:z.boolean(), mandatoryParts:z.array(z.string()),
+  missingParts:z.array(z.string()), severeIntersections:z.array(z.string()), classicValid:z.boolean(),
+}).strict();
+export const outfitRevisionRequestSchema = z.object({
+  generationId:z.string().uuid(), currentOutfitSpec:generatedOutfitSpecSchema,
+  revisionText:z.string().trim().min(2).max(300),
+}).strict();
+export const outfitRevisionPatchSchema = z.object({
+  changes:z.array(z.object({ path:z.string().regex(/^top\.construction\.(hoodHeight|hoodDepth|hoodOpeningWidth|hoodOpeningHeight|torsoWidth|torsoLength|torsoDepth|shoulderDrop|sleeveLength|sleeveFullness|cuffHeight|waistbandHeight|pocketType|pocketWidth|pocketHeight|drawstringEnabled|drawstringLength)$/), value:z.union([z.string(),z.number(),z.boolean()]) }).strict()).min(1).max(4),
+}).strict();
+
+export type HoodieConstruction = z.infer<typeof hoodieConstructionSchema>;
+export type GeneratedGarmentSpec = z.infer<typeof generatedGarmentSpecSchema>;
 export type GeneratedOutfitSpec = z.infer<typeof generatedOutfitSpecSchema>;
+export type GenerationValidationReport = z.infer<typeof generationValidationReportSchema>;

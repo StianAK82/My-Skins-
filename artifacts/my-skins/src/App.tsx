@@ -4,6 +4,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/not-found";
 import Create from "@/pages/Create";
+import VisualTest from "@/pages/VisualTest";
 
 const queryClient = new QueryClient();
 
@@ -11,6 +12,7 @@ function Router() {
   return (
     <Switch>
       <Route path="/" component={Create} />
+      {import.meta.env.MODE !== "production" || import.meta.env.VITE_ENABLE_VISUAL_TESTS === "true" ? <Route path="/visual-test" component={VisualTest} /> : null}
       <Route component={NotFound} />
     </Switch>
   );

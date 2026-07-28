@@ -12,6 +12,8 @@ import { DESIGN_ISSUES } from "../services/ai/design-memory";
 import { recordDesignFeedback } from "../services/ai/design-memory-feedback.service";
 import { generateCompleteOutfit } from "../services/ai/complete-outfit.service";
 import { AiGenerationError } from "../services/ai/ai-errors";
+import { generateStructuredOutfit, reviseStructuredOutfit } from "../services/ai/generated-outfit.service";
+import { outfitRevisionRequestSchema } from "../lib/generated-outfit-contracts";
 
 const router: IRouter = Router();
 
@@ -90,6 +92,16 @@ router.post("/ai/complete-outfit", async (req, res): Promise<void> => {
     const status = failure.code === "AI_RATE_LIMIT" ? 429 : failure.code === "AI_TIMEOUT" ? 504 : 502;
     res.status(status).json({ error: "AI generation could not finish", code: failure.code, stage: failure.stage, retryable: failure.retryable });
   }
+});
+
+router.post("/ai/outfit-spec", async (req,res):Promise<void>=>{
+  const parsed=completeOutfitRequestSchema.safeParse(req.body);if(!parsed.success){res.status(400).json({error:"Invalid request",details:parsed.error.flatten()});return}
+  try{res.json(await generateStructuredOutfit(parsed.data.prompt))}catch(error){const failure=error instanceof AiGenerationError?error:new AiGenerationError("Generation failed","AI_GENERATION_FAILED","outfit_model",true,502);res.status(failure.status).json({error:failure.message,code:failure.code,stage:failure.stage})}
+});
+
+router.post("/ai/outfit-spec/revise",async(req,res):Promise<void>=>{
+  const parsed=outfitRevisionRequestSchema.safeParse(req.body);if(!parsed.success){res.status(400).json({error:"Invalid request",details:parsed.error.flatten()});return}
+  try{res.json(await reviseStructuredOutfit(parsed.data.generationId,parsed.data.currentOutfitSpec,parsed.data.revisionText))}catch(error){const failure=error instanceof AiGenerationError?error:new AiGenerationError("Revision failed","AI_GENERATION_FAILED","revision_model",true,502);res.status(failure.status).json({error:failure.message,code:failure.code,stage:failure.stage})}
 });
 
 router.post("/ai/classic-texture", async (req, res): Promise<void> => {

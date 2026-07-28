@@ -1,0 +1,38 @@
+name: My Skins visual evidence
+on:
+  workflow_dispatch:
+  pull_request:
+    paths: ["artifacts/my-skins/**", "artifacts/api-server/**", "visual-tests/**", "playwright.config.ts", ".github/workflows/my-skins-visual.yml"]
+jobs:
+  visual:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env: { NPM_CONFIG_REGISTRY: "https://registry.npmjs.org", VITE_ENABLE_VISUAL_TESTS: "true" }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, registry-url: "https://registry.npmjs.org" }
+      - uses: pnpm/action-setup@v4
+        with: { version: 10.15.1, run_install: false }
+      - run: pnpm install --frozen-lockfile
+      - name: Install Playwright runner and Chromium
+        run: pnpm add -Dw @playwright/test@1.55.0 && pnpm exec playwright install --with-deps chromium
+      - run: pnpm build
+      - name: Start API server
+        run: pnpm --filter @workspace/api-server start > /tmp/my-skins-api.log 2>&1 &
+      - name: Start client
+        run: pnpm --filter @workspace/my-skins serve > /tmp/my-skins-client.log 2>&1 &
+      - name: Run rendering and screenshot tests
+        run: pnpm exec playwright test
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with: { name: my-skins-screenshots, path: "test-results/screenshots/**", if-no-files-found: error }
+      - name: Upload screenshot diffs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with: { name: my-skins-diffs, path: "test-results/**/*diff.png", if-no-files-found: ignore }
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with: { name: my-skins-playwright-report, path: test-results/playwright-report, if-no-files-found: error }
