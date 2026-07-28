@@ -288,8 +288,14 @@ export default function Create() {
       const wantsTop = mentionsTop || fullOutfit;
       const wantsBottom = mentionsBottom || fullOutfit;
 
-      let topType: "hoodie" | "tshirt" = "tshirt";
-      if (/hettegenser|hette|hoodie/i.test(pLow)) topType = "hoodie";
+      let topType: "hoodie" | "sweater" | "tshirt" = "sweater";
+      if (/hettegenser|hette|hoodie/i.test(pLow)) {
+        topType = "hoodie";
+      } else if (/genser|sweater|collegegenser/i.test(pLow)) {
+        topType = "sweater";
+      } else if (/tskjorte|t-skjorte|t-shirt|tshirt|skjorte|topp/i.test(pLow)) {
+        topType = "tshirt";
+      }
 
       let bottomType: "pants" | "shorts" = "pants";
       if (/shorts/i.test(pLow)) bottomType = "shorts";
