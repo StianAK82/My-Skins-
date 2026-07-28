@@ -296,6 +296,11 @@ export default function Create() {
       // Plain clothing prompts should show a clean avatar (like the Roblox editor) —
       // only themed prompts (drage, ninja, superhelt …) get hats/chains/auras/effects.
       const wantsCosmetics = /drage|dragon|ninja|superhelt|superhero|zombie|astronaut|romfar|hai|shark|lava|gamer|prinsesse|princess|enhjørning|unicorn|engel|angel|ving|wing|hjelm|helmet|caps|lue|hatt|hat\b|kjede|chain|krone|crown|horn/i.test(usedPrompt);
+      // Hairstyle should only change when the prompt actually asks for hair.
+      const wantsHair = /hår|frisyre|hair|hestehale|ponytail|fletter|braid|krøll|curl|bob\b|panneluggen|lugg/i.test(usedPrompt);
+      if (!wantsHair) {
+        previewAvatar.slots = { ...previewAvatar.slots, hair: null };
+      }
       if (!wantsCosmetics) {
         previewAvatar.slots = {
           ...previewAvatar.slots,
