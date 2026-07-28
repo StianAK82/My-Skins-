@@ -96,12 +96,12 @@ router.post("/ai/complete-outfit", async (req, res): Promise<void> => {
 
 router.post("/ai/outfit-spec", async (req,res):Promise<void>=>{
   const parsed=completeOutfitRequestSchema.safeParse(req.body);if(!parsed.success){res.status(400).json({error:"Invalid request",details:parsed.error.flatten()});return}
-  try{res.json(await generateStructuredOutfit(parsed.data.prompt))}catch(error){const failure=error instanceof AiGenerationError?error:new AiGenerationError("Generation failed","AI_GENERATION_FAILED","outfit_model",true,502);res.status(failure.status).json({error:failure.message,code:failure.code,stage:failure.stage})}
+  try{res.json(await generateStructuredOutfit(parsed.data.prompt))}catch(error){const failure=error instanceof AiGenerationError?error:new AiGenerationError("Generation failed","AI_GENERATION_FAILED","outfit_model",true,502);res.status(failure.status ?? 502).json({error:failure.message,code:failure.code,stage:failure.stage})}
 });
 
 router.post("/ai/outfit-spec/revise",async(req,res):Promise<void>=>{
   const parsed=outfitRevisionRequestSchema.safeParse(req.body);if(!parsed.success){res.status(400).json({error:"Invalid request",details:parsed.error.flatten()});return}
-  try{res.json(await reviseStructuredOutfit(parsed.data.generationId,parsed.data.currentOutfitSpec,parsed.data.revisionText))}catch(error){const failure=error instanceof AiGenerationError?error:new AiGenerationError("Revision failed","AI_GENERATION_FAILED","revision_model",true,502);res.status(failure.status).json({error:failure.message,code:failure.code,stage:failure.stage})}
+  try{res.json(await reviseStructuredOutfit(parsed.data.generationId,parsed.data.currentOutfitSpec,parsed.data.revisionText))}catch(error){const failure=error instanceof AiGenerationError?error:new AiGenerationError("Revision failed","AI_GENERATION_FAILED","revision_model",true,502);res.status(failure.status ?? 502).json({error:failure.message,code:failure.code,stage:failure.stage})}
 });
 
 router.post("/ai/classic-texture", async (req, res): Promise<void> => {

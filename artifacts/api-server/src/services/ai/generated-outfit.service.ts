@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { openai, zodResponseFormat } from "@workspace/integrations-openai-ai-server/structured";
+import { openai, strictJsonResponseFormat } from "@workspace/integrations-openai-ai-server/structured";
 import { assessGenerationSafety } from "./generation-safety.ts";
 import { AiGenerationError } from "./ai-errors.ts";
 import {
@@ -7,7 +7,7 @@ import {
   type GeneratedOutfitSpec, type GenerationValidationReport,
 } from "../../lib/generated-outfit-contracts.ts";
 
-type StoredGeneration = {
+export type StoredGeneration = {
   generationId:string; originalPrompt:string; normalisedPrompt:string;
   generatedOutfitSpec:GeneratedOutfitSpec|null; validation:GenerationValidationReport;
   modelLatencyMs:number; repairAttemptCount:number; modelProviderError:string|null;
@@ -20,14 +20,14 @@ const invalidReport = (safetyApproved:boolean):GenerationValidationReport => ({ 
 const defaultModelCall:ModelCall = async (messages, repair) => {
   const completion = await openai.chat.completions.create({
     model:process.env.OPENAI_TEXT_MODEL ?? "gpt-4.1-mini", messages,
-    response_format:zodResponseFormat(generatedOutfitSpecSchema, repair ? "repaired_generated_outfit_spec" : "generated_outfit_spec"),
+    response_format:strictJsonResponseFormat(generatedOutfitSpecSchema, repair ? "repaired_generated_outfit_spec" : "generated_outfit_spec"),
   });
   const content = completion.choices[0]?.message.content;
   if (!content) throw new Error("Model returned no structured outfit");
   return JSON.parse(content);
 };
 
-export async function generateStructuredOutfit(prompt:string, modelCall:ModelCall=defaultModelCall) {
+export async function generateStructuredOutfit(prompt:string, modelCall:ModelCall=defaultModelCall): Promise<StoredGeneration> {
   const generationId=randomUUID(); const originalPrompt=prompt; const normalisedPrompt=prompt.trim().replace(/\s+/g," ");
   const safety=assessGenerationSafety(normalisedPrompt); const started=Date.now(); let repairAttemptCount=0; let modelProviderError:string|null=null;
   const record:StoredGeneration={generationId,originalPrompt,normalisedPrompt,generatedOutfitSpec:null,validation:invalidReport(false),modelLatencyMs:0,repairAttemptCount,modelProviderError};
@@ -49,13 +49,14 @@ export async function generateStructuredOutfit(prompt:string, modelCall:ModelCal
 }
 
 const leafPaths=(value:unknown,prefix=""):string[] => value&&typeof value==="object" ? [prefix,...Object.entries(value).flatMap(([k,v])=>leafPaths(v,prefix?`${prefix}.${k}`:k))].filter(Boolean) : [prefix];
-const getPath=(object:any,path:string)=>path.split(".").reduce((v,k)=>v?.[k],object);
-const setPath=(object:any,path:string,value:unknown)=>{const keys=path.split(".");const last=keys.pop()!;const target=keys.reduce((v,k)=>v[k],object);target[last]=value};
+const getPath=(object: unknown, path: string): unknown => path.split(".").reduce<unknown>((value, key) => value && typeof value === "object" ? (value as Record<string, unknown>)[key] : undefined, object);
+const setPath=(object: GeneratedOutfitSpec, path:string, value:unknown): void => { const key=path.split(".").at(-1); if (!key) return; (object.top.construction as unknown as Record<string, unknown>)[key]=value; };
 
+export interface OutfitRevisionResult { revisedOutfitSpec: GeneratedOutfitSpec; changedPaths: string[]; preservedPaths: string[]; validation: { schemaValid: true; issues: string[] } }
 export async function reviseStructuredOutfit(generationId:string,current:GeneratedOutfitSpec,revisionText:string, modelCall:ModelCall=async(messages)=>{
-  const completion=await openai.chat.completions.create({model:process.env.OPENAI_TEXT_MODEL??"gpt-4.1-mini",messages,response_format:zodResponseFormat(outfitRevisionPatchSchema,"outfit_revision_patch")});
+  const completion=await openai.chat.completions.create({model:process.env.OPENAI_TEXT_MODEL??"gpt-4.1-mini",messages,response_format:strictJsonResponseFormat(outfitRevisionPatchSchema,"outfit_revision_patch")});
   return JSON.parse(completion.choices[0]?.message.content??"null");
-}) {
+}): Promise<OutfitRevisionResult> {
   const raw=await modelCall([{role:"system",content:"Return the smallest structured patch needed. Change no unrelated values."},{role:"user",content:JSON.stringify({generationId,currentOutfitSpec:current,revisionText})}],false);
   const patch=outfitRevisionPatchSchema.parse(raw); const revised=structuredClone(current);
   for(const change of patch.changes)setPath(revised,change.path,change.value);
