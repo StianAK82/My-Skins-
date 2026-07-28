@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { aiGenerateDesign } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Sparkles, Upload, Loader2 } from "lucide-react";
+import { Sparkles, Upload, Loader2, Undo2 } from "lucide-react";
 import { AvatarPreview, type GarmentConfig } from "@/components/editor/AvatarPreview";
 import { useDesignStore } from "@/lib/editor/design-state";
 import { classicTextureAiSchema, parseClassicTextureAiPlan } from "@/lib/editor/ai-schema";
@@ -134,6 +134,21 @@ const DIRECT_ITEMS: Array<{ key: keyof OutfitFiles; type: string; name: string; 
 // The AI's structured outfit plan (subset of the server response we act on).
 type OutfitPlan = NonNullable<ReturnType<typeof normalizeAiResponse>["result"]["outfit"]>;
 
+// Everything needed to roll one revision back with the «Angre»-button:
+// the full design store state (layers + avatar slots), the 3D garment meshes,
+// the outfit plan/prompt the next revision would patch against, the item list
+// and the export-texture refs.
+type UndoSnapshot = {
+  designState: ReturnType<typeof useDesignStore.getState>["state"];
+  garmentConfig: GarmentConfig;
+  outfit: OutfitPlan;
+  prompt: string;
+  outfitItems: { uploadable: string[]; previewOnly: string[]; unsupported: string[]; changed?: string[] } | null;
+  outfitRefValue: { pantsBase: string; pantsAccent: string; heroUrl?: string; fabricUrl?: string } | null;
+};
+
+const UNDO_STACK_LIMIT = 10;
+
 // Hair style → preview asset (shared by first-generation and revision flows).
 const HAIR_ASSET_MAP: Record<string, string> = {
   short: "hair_short",
@@ -259,8 +274,10 @@ export default function Create() {
   const [lastOutfit, setLastOutfit] = useState<OutfitPlan | null>(null);
   const lastPromptRef = useRef("");
   const [reviseText, setReviseText] = useState("");
+  // History stack: one snapshot per successful revision, so «Angre» rolls back one step.
+  const [undoStack, setUndoStack] = useState<UndoSnapshot[]>([]);
 
-  const { state, setAiPlanPreview, setAiAvatarPreview, deleteLayer, addLayer, applyAiPlan, setPaintSwatch, setAvatarSlot } = useDesignStore();
+  const { state, setAiPlanPreview, setAiAvatarPreview, deleteLayer, addLayer, applyAiPlan, setPaintSwatch, setAvatarSlot, loadSnapshot } = useDesignStore();
   const hasDesign = state.layers.length > 0 || Boolean(state.baseColor);
 
   const refreshStatus = useCallback(async () => {
@@ -385,6 +402,7 @@ export default function Create() {
     setUploadStatus("");
     setAiPhase("Lager designet…");
     setOutfitItems(null);
+    setUndoStack([]); // a brand-new skin starts a fresh history
     try {
       const response = normalizeAiResponse(await aiGenerateDesign({ prompt: usedPrompt, itemType: "classic_shirt", style: "AI velger", theme: usedPrompt }));
 
@@ -666,6 +684,15 @@ export default function Create() {
     setAiError("");
     setUploadStatus("");
     setAiPhase("Endrer skinnet…");
+    // Snapshot the current look BEFORE any mutation, so «Angre» can restore it.
+    const snapshot: UndoSnapshot = {
+      designState: structuredClone(useDesignStore.getState().state),
+      garmentConfig: { ...garmentConfig },
+      outfit: lastOutfit,
+      prompt: lastPromptRef.current,
+      outfitItems: outfitItems ? { ...outfitItems } : null,
+      outfitRefValue: outfitRef.current ? { ...outfitRef.current } : null,
+    };
     try {
       const res = await apiPost<unknown>("/ai/generate", {
         prompt: text,
@@ -772,6 +799,8 @@ export default function Create() {
       setLastOutfit(outfit);
       lastPromptRef.current = `${lastPromptRef.current}. ${text}`.slice(0, 900);
       setReviseText("");
+      // The revision succeeded – remember what it replaced so «Angre» can undo it.
+      setUndoStack((stack) => [...stack.slice(-(UNDO_STACK_LIMIT - 1)), snapshot]);
     } catch (error) {
       const status = (error as { status?: number })?.status;
       if (status === 401 || status === 429) {
@@ -784,6 +813,22 @@ export default function Create() {
       setAiLoading(false);
       setAiPhase("");
     }
+  };
+
+  // «Angre»: restore the previous outfit plan, garment meshes, avatar slots and
+  // texture layers in one tap – no AI call, instant.
+  const undoLast = () => {
+    if (aiLoading || undoStack.length === 0) return;
+    const snapshot = undoStack[undoStack.length - 1];
+    setUndoStack((stack) => stack.slice(0, -1));
+    loadSnapshot(structuredClone(snapshot.designState));
+    setGarmentConfig(snapshot.garmentConfig);
+    setLastOutfit(snapshot.outfit);
+    lastPromptRef.current = snapshot.prompt;
+    setOutfitItems(snapshot.outfitItems);
+    outfitRef.current = snapshot.outfitRefValue;
+    setAiError("");
+    setUploadStatus("");
   };
 
   const renderExportFiles = async (): Promise<OutfitFiles | null> => {
@@ -1048,6 +1093,18 @@ export default function Create() {
                   Endre
                 </Button>
               </form>
+              {undoStack.length > 0 ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="mt-2 h-12 w-full border-2 border-amber-500/50 bg-amber-500/10 text-base font-semibold text-amber-300 hover:bg-amber-500/20 hover:text-amber-200"
+                  onClick={undoLast}
+                  disabled={aiLoading}
+                >
+                  <Undo2 className="mr-2 h-5 w-5" />
+                  ↩️ Angre siste endring
+                </Button>
+              ) : null}
             </div>
           ) : null}
 
