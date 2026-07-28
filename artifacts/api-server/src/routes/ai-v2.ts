@@ -12,7 +12,7 @@ import { DESIGN_ISSUES } from "../services/ai/design-memory";
 import { recordDesignFeedback } from "../services/ai/design-memory-feedback.service";
 import { generateCompleteOutfit } from "../services/ai/complete-outfit.service";
 import { AiGenerationError } from "../services/ai/ai-errors";
-import { generateStructuredOutfit, reviseStructuredOutfit } from "../services/ai/generated-outfit.service";
+import { generateOutfitSpecResponse, reviseStructuredOutfit } from "../services/ai/generated-outfit.service";
 import { outfitRevisionRequestSchema } from "../lib/generated-outfit-contracts";
 
 const router: IRouter = Router();
@@ -102,6 +102,7 @@ router.post("/ai/outfit-spec", async (req,res):Promise<void>=>{
     const generated=await generateStructuredOutfit(parsed.data.prompt);
     res.json({...generated,outfitSpec:generated.generatedOutfitSpec,exports:generated.generatedOutfitSpec?.classicExportPlan.shirt?[{garment:"Shirt Classic",width:585,height:559}]:[]});
   }catch(error){const failure=error instanceof AiGenerationError?error:new AiGenerationError("Generation failed","AI_GENERATION_FAILED","outfit_model",true,502);res.status(failure.status ?? 502).json({error:failure.message,code:failure.code,stage:failure.stage})}
+  try{res.json(await generateOutfitSpecResponse(parsed.data.prompt))}catch(error){const failure=error instanceof AiGenerationError?error:new AiGenerationError("Generation failed","MODEL_REQUEST_FAILED","outfit_model",true,502);req.log.error({code:failure.code,stage:failure.stage,requestId:req.id,stack:process.env.NODE_ENV==="development"?failure.stack:undefined},"ai.v2.outfit_spec.failed");res.status(failure.status ?? 502).json({error:failure.message,code:failure.code,stage:failure.stage,retryable:failure.retryable,requestId:req.id})}
 });
 
 router.post("/ai/outfit-spec/revise",async(req,res):Promise<void>=>{

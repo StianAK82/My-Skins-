@@ -51,6 +51,7 @@ export default defineConfig({
   },
   server: {
     port,
+    proxy: { "/api": { target: process.env.API_SERVER_URL ?? "http://127.0.0.1:3001", changeOrigin: true } },
     host: "0.0.0.0",
     allowedHosts: true,
     fs: {
