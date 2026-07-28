@@ -6,6 +6,8 @@ import { Input } from "@/components/ui/input";
 import { requestCompleteOutfit, type OutfitApiError } from "@/lib/complete-outfit-api";
 import { resolveGarmentManifest } from "@/lib/editor/garment-resolver";
 import type { GarmentManifest } from "@/lib/editor/garment-manifest";
+import { buildAiAvatarLook } from "@/lib/editor/avatar-look";
+import { defaultAvatarState } from "@/lib/editor/design-state";
 
 type Blueprint = { theme: string; completeLook: string; top: { type: string }; bottom: { type: string }; footwear: { type: string } };
 type OutfitResult = {
@@ -13,6 +15,7 @@ type OutfitResult = {
   outfitBlueprint: Blueprint;
   components: { shirtTexture: string; pantsTexture: string; footwearPreview: { support: string }; accessories: unknown[] };
   export: { robloxItemCount: number };
+  outfitDNA?: { primary: string; secondary: string; accent: string };
 };
 
 function downloadPart(dataUrl: string, name: string) {
@@ -26,6 +29,7 @@ export default function Create() {
   const [prompt, setPrompt] = useState("");
   const [result, setResult] = useState<OutfitResult | null>(null);
   const [manifest, setManifest] = useState<GarmentManifest | null>(null);
+  const [avatarLook, setAvatarLook] = useState(defaultAvatarState);
   const [view, setView] = useState<"front" | "back">("front");
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
@@ -63,6 +67,9 @@ export default function Create() {
       setProgress("Building the preview…");
       setResult(data); setView("front");
       setManifest(resolveGarmentManifest(prompt.trim()));
+      const palette = data.outfitDNA ? [data.outfitDNA.primary, data.outfitDNA.secondary, data.outfitDNA.accent] : ["#e8e8ee", "#202938"];
+      const look = buildAiAvatarLook(prompt.trim(), palette);
+      setAvatarLook({ ...defaultAvatarState(), ...look, slots: { ...defaultAvatarState().slots, ...(look.slots ?? {}) } });
     } catch (caught) {
       if (controller.signal.aborted || requestRef.current?.id !== id) return;
       const error = caught as OutfitApiError;
@@ -101,7 +108,7 @@ export default function Create() {
         </form>
       </section>
       <section className="relative h-[540px] overflow-hidden rounded-3xl border border-slate-800 bg-slate-900" aria-label="Complete outfit preview">
-        <AvatarPreview shirtTextureUrl={result?.components.shirtTexture} pantsTextureUrl={result?.components.pantsTexture} garmentManifest={manifest ?? undefined} view={view} onViewChange={setView} previewMode="avatar" studioMode animated />
+        <AvatarPreview shirtTextureUrl={result?.components.shirtTexture} pantsTextureUrl={result?.components.pantsTexture} garmentManifest={manifest ?? undefined} outfitDNA={result?.outfitDNA} avatarState={avatarLook} view={view} onViewChange={setView} previewMode="avatar" studioMode animated />
         {loading && <div className="absolute inset-0 grid place-content-center bg-slate-950/75 text-center" role="status"><Loader2 className="mx-auto mb-3 h-10 w-10 animate-spin text-violet-400" /><strong>{progress}</strong><span className="mt-1 text-sm text-slate-300">Elapsed time: {elapsedSeconds}s</span></div>}
         {result && <div className="absolute left-4 top-4 rounded-full bg-black/60 px-4 py-2 text-sm backdrop-blur">✨ {result.outfitBlueprint.completeLook}</div>}
       </section>

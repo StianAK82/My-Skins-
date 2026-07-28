@@ -39,6 +39,7 @@ type AvatarPreviewProps = {
   accessories?: { hair?: string; hat?: string; glasses?: string; beard?: string; backpack?: string };
   avatarState?: AvatarState;
   garmentManifest?: GarmentManifest;
+  outfitDNA?: { primary: string; secondary: string; accent: string };
 };
 
 type Zone = { left: number; top: number; width: number; height: number };
@@ -332,7 +333,7 @@ function IdleGroup({ children, enabled }: { children: ReactNode; enabled: boolea
   return <group ref={groupRef}>{children}</group>;
 }
 
-function SceneContent({ maps, view, itemType, rotation, avatar, mode, animated = false, garmentManifest }: { maps: ClothingMaps | null; view: "front" | "back"; itemType: "shirt" | "pants"; rotation: number; avatar: AvatarState; mode: PreviewMode; animated?: boolean; garmentManifest?: GarmentManifest }) {
+function SceneContent({ maps, view, itemType, rotation, avatar, mode, animated = false, garmentManifest, outfitDNA }: { maps: ClothingMaps | null; view: "front" | "back"; itemType: "shirt" | "pants"; rotation: number; avatar: AvatarState; mode: PreviewMode; animated?: boolean; garmentManifest?: GarmentManifest; outfitDNA?: { primary: string; secondary: string; accent: string } }) {
   const cameraTarget: [number, number, number] = mode === "clothing" ? [0, 1.2, 0] : [0, 1.15, 0];
   return (
     <>
@@ -361,7 +362,7 @@ function SceneContent({ maps, view, itemType, rotation, avatar, mode, animated =
 
       <group rotation-y={rotation}>
         <IdleGroup enabled={animated}>
-          {garmentManifest ? <FullOutfitPreview manifest={garmentManifest} outfitDNA={{primary:"#e8e8ee",secondary:"#202938",accent:"#ef4444"}} underlyingAvatar={<RobloxAvatar maps={maps} view={view} itemType={itemType} avatar={avatar} mode={mode} />} previewMode={mode === "clothing" ? "roblox-classic" : "enhanced"} /> : <RobloxAvatar maps={maps} view={view} itemType={itemType} avatar={avatar} mode={mode} />}
+          {garmentManifest ? <FullOutfitPreview manifest={garmentManifest} outfitDNA={outfitDNA ?? {primary:"#e8e8ee",secondary:"#202938",accent:"#ef4444"}} underlyingAvatar={<RobloxAvatar maps={maps} view={view} itemType={itemType} avatar={avatar} mode={mode} />} previewMode={mode === "clothing" ? "roblox-classic" : "enhanced"} /> : <RobloxAvatar maps={maps} view={view} itemType={itemType} avatar={avatar} mode={mode} />}
         </IdleGroup>
       </group>
 
@@ -414,7 +415,7 @@ function PreviewFallback({ textureUrl }: { textureUrl?: string }) {
   );
 }
 
-export function AvatarPreview({ textureUrl, shirtTextureUrl, pantsTextureUrl, className, avatarType = "neutral", view: controlledView, onViewChange, itemType = "shirt", dimension, previewMode, studioMode = false, animated = false, avatarState, garmentManifest }: AvatarPreviewProps) {
+export function AvatarPreview({ textureUrl, shirtTextureUrl, pantsTextureUrl, className, avatarType = "neutral", view: controlledView, onViewChange, itemType = "shirt", dimension, previewMode, studioMode = false, animated = false, avatarState, garmentManifest, outfitDNA }: AvatarPreviewProps) {
   const resolvedMode: PreviewMode = previewMode ?? (dimension === "3d" ? "avatar" : "clothing");
   const [internalView, setInternalView] = useState<"front" | "back">("front");
   const [zoom, setZoom] = useState(resolvedMode === "clothing" ? 3.6 : 4.9);
@@ -437,7 +438,7 @@ export function AvatarPreview({ textureUrl, shirtTextureUrl, pantsTextureUrl, cl
         camera={{ position: [0, 1.3, zoom], fov: resolvedMode === "clothing" ? 34 : 38 }}
         className="w-full h-full"
       >
-        <SceneContent maps={maps} view={view} itemType={itemType} rotation={rotation} avatar={effectiveAvatar} mode={resolvedMode} animated={animated} garmentManifest={garmentManifest} />
+        <SceneContent maps={maps} view={view} itemType={itemType} rotation={rotation} avatar={effectiveAvatar} mode={resolvedMode} animated={animated} garmentManifest={garmentManifest} outfitDNA={outfitDNA} />
       </Canvas>
     </WebGLBoundary>
   );
