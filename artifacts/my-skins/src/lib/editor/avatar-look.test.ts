@@ -21,3 +21,9 @@ test("AI avatar look mapping creates distinct anime/cyber/flame combinations", (
   assert.equal(dragon.slots?.back?.assetId, "back_blade_rig");
   assert.equal(dragon.slots?.hat?.assetId, "hat_cyber_horns");
 });
+
+test("explicit hats, bags and fantasy wings are represented in the avatar preview", () => {
+  assert.equal(buildAiAvatarLook("pink beanie", ["#ec4899"]).slots?.hat?.assetId, "hat_beanie_soft");
+  assert.equal(buildAiAvatarLook("blue backpack", ["#3b82f6"]).slots?.back?.assetId, "back_jetpack_mini");
+  assert.equal(buildAiAvatarLook("fantasi vinger", ["#a855f7"]).slots?.back?.assetId, "back_blade_rig");
+});

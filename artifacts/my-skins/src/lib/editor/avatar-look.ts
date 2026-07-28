@@ -123,6 +123,10 @@ export function buildAiAvatarLook(style: string, palette: string[]): AvatarState
   const cyber = lower.includes("cyber") || lower.includes("tech") || lower.includes("tactical");
   const street = lower.includes("street") || lower.includes("sport");
   const bundle = chooseBundle(style);
+  // Explicit accessories must survive even when the rest of the prompt has no known style word.
+  if (/\b(hat|cap|beanie|hatt|lue)\b/.test(lower)) bundle.hat = lower.includes("beanie") || lower.includes("lue") ? "hat_beanie_soft" : "hat_street_cap";
+  if (/\b(backpack|bag|ryggsekk|veske)\b/.test(lower)) bundle.back = "back_jetpack_mini";
+  if (/\b(wings?|vinger?|fantasy|fantasi)\b/.test(lower)) bundle.back = "back_blade_rig";
 
   return {
     modelVariant: cyber ? "heroic" : "proportioned_r15",
