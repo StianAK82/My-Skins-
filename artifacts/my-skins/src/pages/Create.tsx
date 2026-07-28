@@ -3,20 +3,20 @@ import { CheckCircle2, Download, Loader2, RotateCw, Save, Sparkles } from "lucid
 import { AvatarPreview } from "@/components/editor/AvatarPreview";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { requestCompleteOutfit, type OutfitApiError } from "@/lib/complete-outfit-api";
+import { requestOutfitSpec } from "@/lib/outfit-spec-api";
+import { WHITE_HOODIE_SHIRT_BASE64 } from "@/lib/hoodie/classic-shirt";
 import { resolveGarmentManifest } from "@/lib/editor/garment-resolver";
 import type { GarmentManifest } from "@/lib/editor/garment-manifest";
 import { buildAiAvatarLook } from "@/lib/editor/avatar-look";
 import { defaultAvatarState } from "@/lib/editor/design-state";
 
-type Blueprint = { theme: string; completeLook: string; top: { type: string }; bottom: { type: string }; footwear: { type: string } };
 type OutfitResult = {
-  preview: { shirtTexture: string; pantsTexture: string };
-  outfitBlueprint: Blueprint;
-  components: { shirtTexture: string; pantsTexture: string; footwearPreview: { support: string }; accessories: unknown[] };
-  export: { robloxItemCount: number };
-  outfitDNA?: { primary: string; secondary: string; accent: string };
+  generationId: string;
+  generationSource: "openai";
+  outfitSpec: { outfitName:string; palette:string[]; top:{category:"hoodie";construction:{drawstringEnabled:boolean;pocketType:string}};bottom:null };
+  exports: Array<{garment:"Shirt Classic";width:585;height:559}>;
 };
+const shirtTexture = `data:image/png;base64,${WHITE_HOODIE_SHIRT_BASE64}`;
 
 function downloadPart(dataUrl: string, name: string) {
   const link = document.createElement("a");
@@ -62,19 +62,19 @@ export default function Create() {
     busyRef.current = true;
     setLoading(true); setMessage(""); setElapsedSeconds(0); setProgress("Planning your skin…");
     try {
-      const data = await requestCompleteOutfit<OutfitResult>(prompt.trim(), controller.signal);
-      if (!data.components?.shirtTexture || !data.components?.pantsTexture) throw new Error("Missing outfit textures");
+      const data = await requestOutfitSpec<OutfitResult["outfitSpec"]>(prompt.trim(), controller.signal) as OutfitResult;
+      if (data.outfitSpec.bottom !== null || data.exports.length !== 1 || data.exports[0]?.garment !== "Shirt Classic") throw new Error("Invalid Classic export plan");
       if (requestRef.current?.id !== id) return;
       setProgress("Building the preview…");
       setResult(data); setView("front");
       setManifest(resolveGarmentManifest(prompt.trim()));
-      const palette = data.outfitDNA ? [data.outfitDNA.primary, data.outfitDNA.secondary, data.outfitDNA.accent] : ["#e8e8ee", "#202938"];
+      const palette = data.outfitSpec.palette;
       const look = buildAiAvatarLook(prompt.trim(), palette);
       setAvatarLook({ ...defaultAvatarState(), ...look, slots: { ...defaultAvatarState().slots, ...(look.slots ?? {}) } });
     } catch (caught) {
       if (controller.signal.aborted || requestRef.current?.id !== id) return;
-      const error = caught as OutfitApiError;
-      setMessage(error.code === "AI_TIMEOUT" || error.code === "AI_RATE_LIMIT" || error.status === 429
+      const error = caught as Error & { status?: number };
+      setMessage(error.status === 429
         ? "The AI is busy right now. Please try again in a moment."
         : "We couldn't finish this skin. Please try again.");
     } finally {
@@ -87,9 +87,8 @@ export default function Create() {
 
   const download = () => {
     if (!result) return;
-    downloadPart(result.components.shirtTexture, "top");
-    setTimeout(() => downloadPart(result.components.pantsTexture, "bottom"), 150);
-    setMessage("Your complete skin includes two ready-to-upload clothing files. Shoes and extras are included in the preview.");
+    downloadPart(shirtTexture, "top");
+    setMessage("Your Classic Shirt file is ready to upload. No bottom was requested.");
   };
   const save = () => {
     if (!result) return;
@@ -114,14 +113,14 @@ export default function Create() {
         </form>
       </section>
       <section className="relative h-[540px] overflow-hidden rounded-3xl border border-slate-800 bg-slate-900" aria-label="Complete outfit preview">
-        <AvatarPreview shirtTextureUrl={result?.components.shirtTexture} pantsTextureUrl={result?.components.pantsTexture} garmentManifest={manifest ?? undefined} outfitDNA={result?.outfitDNA} avatarState={avatarLook} view={view} onViewChange={setView} previewMode="avatar" studioMode animated />
+        <AvatarPreview shirtTextureUrl={result ? shirtTexture : undefined} garmentManifest={manifest ?? undefined} avatarState={avatarLook} view={view} onViewChange={setView} previewMode="avatar" studioMode animated />
         {loading && <div className="absolute inset-0 grid place-content-center bg-slate-950/75 text-center" role="status"><Loader2 className="mx-auto mb-3 h-10 w-10 animate-spin text-violet-400" /><strong>{progress}</strong><span className="mt-1 text-sm text-slate-300">Elapsed time: {elapsedSeconds}s</span></div>}
-        {result && <><div className="absolute left-4 top-4 rounded-full bg-black/60 px-4 py-2 text-sm backdrop-blur">✨ AI Generated · {result.outfitBlueprint.completeLook}</div><div className="absolute bottom-4 left-4 rounded-full bg-emerald-950/90 px-4 py-2 text-sm text-emerald-200"><CheckCircle2 className="mr-1 inline h-4 w-4"/>PNG checks passed · Enhanced preview available</div></>}
+        {result && <><div className="absolute left-4 top-4 rounded-full bg-black/60 px-4 py-2 text-sm backdrop-blur">✨ AI Generated · {result.outfitSpec.outfitName}</div><div className="absolute bottom-4 left-4 rounded-full bg-emerald-950/90 px-4 py-2 text-sm text-emerald-200"><CheckCircle2 className="mr-1 inline h-4 w-4"/>Ready · OpenAI · {result.generationId.slice(0,8)}</div></>}
       </section>
       <div className="flex flex-wrap justify-center gap-3"><Button variant="outline" onClick={() => setView(view === "front" ? "back" : "front")}><RotateCw className="mr-2" />{view === "front" ? "Show Back" : "Show Front"}</Button><Button variant="outline" onClick={() => void generate()} disabled={!result || loading}><Sparkles className="mr-2" />Try Again</Button><Button onClick={download} disabled={!result}><Download className="mr-2" />Download PNG files</Button><Button variant="outline" onClick={save} disabled={!result}><Save className="mr-2" />Save</Button></div>
       {result && <section className="grid gap-5 rounded-3xl border border-slate-800 bg-slate-900 p-5 md:grid-cols-2">
         <div><h2 className="text-xl font-bold">Change something</h2><p className="mt-1 text-sm text-slate-400">Ask AI for one change. Everything else stays.</p><div className="mt-3 flex gap-2"><Input aria-label="Ask for an outfit change" value={revision} onChange={e=>setRevision(e.target.value)} placeholder="Make the hood bigger"/><Button onClick={()=>revise(revision)} disabled={!revision.trim()}>Change</Button></div><div className="mt-3 flex flex-wrap gap-2">{["Make it blue","Add stars","Bigger hood","More colourful"].map(action=><button key={action} onClick={()=>revise(action)} className="min-h-11 rounded-full bg-violet-950 px-3 text-sm text-violet-100 hover:bg-violet-900">{action}</button>)}</div></div>
-        <div><h2 className="text-xl font-bold">Roblox Classic files</h2><div className="mt-3 flex gap-3"><figure className="min-w-0 flex-1"><img className="aspect-square w-full rounded-xl bg-slate-800 object-contain" src={result.components.shirtTexture} alt="Classic Shirt texture"/><figcaption className="mt-1 text-center text-sm">Classic Shirt</figcaption></figure><figure className="min-w-0 flex-1"><img className="aspect-square w-full rounded-xl bg-slate-800 object-contain" src={result.components.pantsTexture} alt="Classic Pants texture"/><figcaption className="mt-1 text-center text-sm">Classic Pants</figcaption></figure></div></div>
+        <div><h2 className="text-xl font-bold">Roblox Classic files</h2><div className="mt-3 flex gap-3"><figure className="min-w-0 flex-1"><img className="aspect-square w-full rounded-xl bg-slate-800 object-contain" src={shirtTexture} alt="Classic Shirt texture"/><figcaption className="mt-1 text-center text-sm">Classic Shirt</figcaption></figure><div className="grid flex-1 place-content-center rounded-xl bg-slate-800 text-sm text-slate-400">Bottom: none</div></div></div>
         <p className="text-sm text-slate-300 md:col-span-2">Enhanced Preview shows the AI-designed 3D outfit shape. Roblox Classic downloads contain the compatible shirt and pants textures.</p>
         <aside className="rounded-xl bg-slate-950 p-4 text-sm md:col-span-2"><strong>Upload with a parent</strong><p className="mt-1 text-slate-400">Download the PNG files, then use Roblox Creator Hub to upload each one as Classic Clothing. Direct upload is not connected, so My Skins will never ask for or store your Roblox password.</p></aside>
       </section>}

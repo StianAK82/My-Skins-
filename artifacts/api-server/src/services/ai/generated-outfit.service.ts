@@ -11,6 +11,7 @@ export type StoredGeneration = {
   generationId:string; originalPrompt:string; normalisedPrompt:string;
   generatedOutfitSpec:GeneratedOutfitSpec|null; validation:GenerationValidationReport;
   modelLatencyMs:number; repairAttemptCount:number; modelProviderError:string|null;
+  generationSource:"openai"|"deterministic-test-fixture";
 };
 type ModelCall = (messages:{role:"system"|"user";content:string}[], repair:boolean) => Promise<unknown>;
 export const generationStore = new Map<string, StoredGeneration>();
@@ -27,10 +28,10 @@ const defaultModelCall:ModelCall = async (messages, repair) => {
   return JSON.parse(content);
 };
 
-export async function generateStructuredOutfit(prompt:string, modelCall:ModelCall=defaultModelCall): Promise<StoredGeneration> {
+export async function generateStructuredOutfit(prompt:string, modelCall:ModelCall=defaultModelCall, generationSource:"openai"|"deterministic-test-fixture"="openai"): Promise<StoredGeneration> {
   const generationId=randomUUID(); const originalPrompt=prompt; const normalisedPrompt=prompt.trim().replace(/\s+/g," ");
   const safety=assessGenerationSafety(normalisedPrompt); const started=Date.now(); let repairAttemptCount=0; let modelProviderError:string|null=null;
-  const record:StoredGeneration={generationId,originalPrompt,normalisedPrompt,generatedOutfitSpec:null,validation:invalidReport(false),modelLatencyMs:0,repairAttemptCount,modelProviderError};
+  const record:StoredGeneration={generationId,originalPrompt,normalisedPrompt,generatedOutfitSpec:null,validation:invalidReport(false),modelLatencyMs:0,repairAttemptCount,modelProviderError,generationSource};
   if(safety.decision==="block"){generationStore.set(generationId,record);throw new AiGenerationError(safety.userMessage,"AI_GENERATION_FAILED","safety",false,400)}
   const messages=[{role:"system" as const,content:"Return only a GeneratedOutfitSpec for the supported white hoodie vertical slice. Do not invent other garments or accessories."},{role:"user" as const,content:normalisedPrompt}];
   try {
@@ -39,6 +40,7 @@ export async function generateStructuredOutfit(prompt:string, modelCall:ModelCal
     if(!parsed.success) throw new AiGenerationError("Model response failed GeneratedOutfitSpec validation","AI_IMAGE_RESPONSE","outfit_schema",false,422);
     const validation=generationValidationReportSchema.parse({schemaValid:true,safetyApproved:true,mandatoryParts,missingParts:[],severeIntersections:[],classicValid:true});
     Object.assign(record,{generatedOutfitSpec:parsed.data,validation,modelLatencyMs:Date.now()-started,repairAttemptCount});generationStore.set(generationId,record);
+    console.info("ai.outfit_spec.generated", { generationId, generationSource });
     return record;
   } catch(error) {
     modelProviderError=error instanceof Error?error.message:"Unknown model/provider error";
