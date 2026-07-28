@@ -87,6 +87,13 @@ const aiResponseSchema = z.object({
       recommendedPreset: z.string(),
       notes: z.array(z.string()),
     }),
+    // The AI's own reading of which clothing pieces the user asked for (handles typos/Norwegian).
+    garments: z.object({
+      top: z.enum(["hoodie", "sweater", "tshirt", "jacket", "none"]),
+      bottom: z.enum(["pants", "shorts", "none"]),
+      shoes: z.boolean(),
+      reason: z.string(),
+    }).optional(),
   }),
 });
 

@@ -297,30 +297,42 @@ export default function Create() {
         (r.placement?.rightLeg && r.placement.rightLeg !== "not_used"),
       );
 
-      const mentionsTop = /hettegenser|hette|hoodie|genser|sweater|skjort|sjort|shirt|jakke|jacket|topp|overdel|hood/i.test(combined);
-      const mentionsBottom = /shorts|bukse|olabukse|jeans|jogge|pants|underdel/i.test(combined);
-      const mentionsShoes = /\bsko\b|joggesko|sneakers|boots|støvle|shoe/i.test(combined);
-      // If no specific garment is named ("lag et drage-skin"), make the whole outfit.
-      const fullOutfit = !mentionsTop && !mentionsBottom && !mentionsShoes;
-      const wantsTop = mentionsTop || fullOutfit;
-      const wantsBottom = mentionsBottom || (fullOutfit && aiUsesLegs) || (fullOutfit && !aiText);
+      // Primary source: the AI's own structured reading of the prompt (handles typos,
+      // Norwegian words and outfit concepts like "treningsdress" = jacket + pants + shoes).
+      const aiGarments = response.result.garments;
 
+      let wantsTop: boolean;
+      let wantsBottom: boolean;
+      let wantsShoes: boolean;
       let topType: "hoodie" | "sweater" | "tshirt" = "sweater";
-      if (/hettegenser|hette|hoodie|hood/i.test(combined)) {
-        topType = "hoodie";
-      } else if (/tskjorte|t-skjorte|t-shirt|tshirt|skjort|sjort|shirt|topp/i.test(combined)) {
-        topType = "tshirt";
-      } else if (/genser|sweater|collegegenser/i.test(combined)) {
-        topType = "sweater";
-      }
-
       let bottomType: "pants" | "shorts" = "pants";
-      if (/shorts/i.test(combined)) bottomType = "shorts";
+
+      if (aiGarments) {
+        wantsTop = aiGarments.top !== "none";
+        wantsBottom = aiGarments.bottom !== "none";
+        wantsShoes = aiGarments.shoes;
+        if (aiGarments.top === "hoodie") topType = "hoodie";
+        else if (aiGarments.top === "tshirt") topType = "tshirt";
+        else topType = "sweater"; // sweater + jacket both get the plump sweater look
+        bottomType = aiGarments.bottom === "shorts" ? "shorts" : "pants";
+      } else {
+        // Fallback: word matching on prompt + AI text.
+        const mentionsTop = /hettegenser|hette|hoodie|genser|sweater|skjort|sjort|shirt|jakke|jacket|topp|overdel|hood/i.test(combined);
+        const mentionsBottom = /shorts|bukse|olabukse|jeans|jogge|pants|underdel|dress|tracksuit/i.test(combined);
+        const mentionsShoes = /\bsko\b|joggesko|sneakers|boots|støvle|shoe/i.test(combined);
+        const fullOutfit = !mentionsTop && !mentionsBottom && !mentionsShoes;
+        wantsTop = mentionsTop || fullOutfit;
+        wantsBottom = mentionsBottom || (fullOutfit && aiUsesLegs) || (fullOutfit && !aiText);
+        wantsShoes = mentionsShoes;
+        if (/hettegenser|hette|hoodie|hood/i.test(combined)) topType = "hoodie";
+        else if (/tskjorte|t-skjorte|t-shirt|tshirt|skjort|sjort|shirt|topp/i.test(combined)) topType = "tshirt";
+        if (/shorts/i.test(combined)) bottomType = "shorts";
+      }
 
       setGarmentConfig({
         top: wantsTop ? topType : null,
         bottom: wantsBottom ? bottomType : null,
-        shoes: mentionsShoes ? "sneakers" : null,
+        shoes: wantsShoes ? "sneakers" : null,
       });
       const previewAvatar = buildAiAvatarLook(
         [response.result.style, ...response.result.intent.styleVibes].join(" "),
@@ -395,7 +407,7 @@ export default function Create() {
 
       // Draw only the pieces that were asked for. A standalone motif is only added
       // when the prompt asks for one (logo, trykk, motiv, figur …) or is a themed skin.
-      const wantsMotif = fullOutfit || /logo|motiv|trykk|bilde|figur|mønster|print/i.test(pLow) || wantsCosmetics;
+      const wantsMotif = /logo|motiv|trykk|bilde|figur|mønster|print/i.test(pLow) || wantsCosmetics;
       setAiPhase("Tegner klærne du beskrev… (kan ta opptil ett minutt)");
       const skipped = { status: 0, data: {} as { imageUrl?: string } };
       const [top, bottom, hero] = await Promise.all([

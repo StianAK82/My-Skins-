@@ -103,7 +103,15 @@ export const editorInstructionsSchema = z.object({
   notes: z.array(z.string().min(1)).min(1),
 }).strict();
 
+export const aiGarmentsSchema = z.object({
+  top: z.enum(["hoodie", "sweater", "tshirt", "jacket", "none"]),
+  bottom: z.enum(["pants", "shorts", "none"]),
+  shoes: z.boolean(),
+  reason: z.string(),
+}).strict();
+
 export const aiDesignSchema = z.object({
+  garments: aiGarmentsSchema.optional(),
   title: z.string().min(1),
   itemType: itemTypeSchema,
   style: z.string().min(1),

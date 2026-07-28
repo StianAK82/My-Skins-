@@ -172,8 +172,20 @@ export class AiGenerationService {
       '    "baseTemplate": "string",',
       '    "recommendedPreset": "string",',
       '    "notes": ["string"]',
+      "  },",
+      '  "garments": {',
+      '    "top": "hoodie|sweater|tshirt|jacket|none",',
+      '    "bottom": "pants|shorts|none",',
+      '    "shoes": true,',
+      '    "reason": "string"',
       "  }",
       "}",
+      "",
+      "Garments rule (strict): `garments` states EXACTLY which clothing pieces the user asked for, nothing more.",
+      "The prompt is often written by a child in Norwegian with typos — interpret the intent (e.g. 't-sjhortet' means t-skjorte).",
+      "Norwegian glossary: hettegenser=hoodie, genser/collegegenser=sweater, t-skjorte/skjorte=tshirt, jakke=jacket, bukse/olabukse/jeans/joggebukse=pants, shorts=shorts, sko/joggesko=shoes.",
+      "Full-outfit words mean top AND bottom: treningsdress/trening dress/tracksuit=jacket+pants+shoes true, dress/suit=jacket+pants, kostyme/antrekk/outfit/skin=top+bottom.",
+      "If the user only asks for one piece (e.g. only a t-shirt), set the other pieces to \"none\" and shoes to false.",
       "",
       "Placement rule (strict):",
       placementRule,
@@ -298,7 +310,18 @@ export class AiGenerationService {
       avatarSlotPlan.push({ slot: "hair", assetHint: intent.styleVibes.includes("anime") ? "hair_anime_layered" : "hair_wavy_midnight", role: "support", rationale: "Hair establishes style silhouette", color: colorPalette[1] });
     }
 
+    const garmentsSource = (source.garments && typeof source.garments === "object") ? source.garments as Record<string, unknown> : {};
+    const topOptions = ["hoodie", "sweater", "tshirt", "jacket", "none"] as const;
+    const bottomOptions = ["pants", "shorts", "none"] as const;
+    const garments = {
+      top: topOptions.includes(garmentsSource.top as typeof topOptions[number]) ? garmentsSource.top as typeof topOptions[number] : "sweater",
+      bottom: bottomOptions.includes(garmentsSource.bottom as typeof bottomOptions[number]) ? garmentsSource.bottom as typeof bottomOptions[number] : "pants",
+      shoes: typeof garmentsSource.shoes === "boolean" ? garmentsSource.shoes : false,
+      reason: typeof garmentsSource.reason === "string" ? garmentsSource.reason.slice(0, 200) : "",
+    };
+
     return {
+      garments,
       title: typeof source.title === "string" && source.title.trim() ? source.title.trim() : "Generated Roblox Design",
       itemType,
       style: typeof source.style === "string" && source.style.trim() ? source.style.trim() : (input.style ?? "Generated"),
