@@ -3,4 +3,5 @@
 - [Guest AI free-use gate](my-skins-guest-ai-gate.md) — REMOVED July 2026: gate deleted from /ai/generate because login UI is gone (gate 401 broke the product); AI is now free/unlimited for guests.
 - [my-skins Stripe per-upload payment](my-skins-stripe.md) — NO free uploads; 10 kr = 3 opplastinger; connector settings use `settings.secret` not `secret_key`; verify-on-return, no webhooks.
 - [Roblox OAuth direct upload](my-skins-roblox-oauth.md) — login works via official OAuth; upload rides a LEGACY endpoint (Open Cloud lacks classic clothing); customer needs ID-verified konto + 10 Robux/plagg; always falls back to downloads.
+- [External Codex PRs can clobber the app](my-skins-external-codex-prs.md) — user merges GitHub Codex PRs that broke Create.tsx/pnpm; restore via gitsafe-backup/main, check git log on "white page".
 - [AI design generation (gpt-5.2)](my-skins-ai-generation.md) — gpt-image-1 hero image makes prompts literal; token budget must be generous or JSON truncates (422).

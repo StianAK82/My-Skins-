@@ -1,148 +1,592 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { CheckCircle2, Download, Loader2, RotateCw, Save, Sparkles } from "lucide-react";
-import { AvatarPreview } from "@/components/editor/AvatarPreview";
+import { aiGenerateDesign } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { requestOutfitSpec } from "@/lib/outfit-spec-api";
-import { WHITE_HOODIE_SHIRT_BASE64 } from "@/lib/hoodie/classic-shirt";
-import { requestOutfitSpec, type GenerateOutfitSpecResponse, type GenerationState, type OutfitSpecApiError } from "@/lib/outfit-spec-api";
-import { resolveGarmentManifest } from "@/lib/editor/garment-resolver";
-import type { GarmentManifest } from "@/lib/editor/garment-manifest";
+import { Sparkles, Upload, Loader2 } from "lucide-react";
+import { AvatarPreview } from "@/components/editor/AvatarPreview";
+import { useDesignStore } from "@/lib/editor/design-state";
+import { classicTextureAiSchema, parseClassicTextureAiPlan } from "@/lib/editor/ai-schema";
+import { preloadOverlayImages, renderDesignToCanvas } from "@/lib/editor/renderer";
 import { buildAiAvatarLook } from "@/lib/editor/avatar-look";
-import { defaultAvatarState } from "@/lib/editor/design-state";
+import { normalizeAiResponse } from "@/lib/ai/normalize-ai-response";
+import {
+  parsePendingOutfit,
+  pickPantsColors,
+  renderPantsTexture,
+  renderTShirtTexture,
+  type OutfitFiles,
+} from "@/lib/editor/outfit";
+import { resolveAvatarSlotAssets } from "@/lib/ai/asset-resolver";
 
-type OutfitResult = {
-  generationId: string;
-  generationSource: "openai";
-  outfitSpec: { outfitName:string; palette:string[]; top:{category:"hoodie";construction:{drawstringEnabled:boolean;pocketType:string}};bottom:null };
-  exports: Array<{garment:"Shirt Classic";width:585;height:559}>;
-};
-const shirtTexture = `data:image/png;base64,${WHITE_HOODIE_SHIRT_BASE64}`;
-
-function downloadPart(dataUrl: string, name: string) {
-  const link = document.createElement("a");
-  link.href = dataUrl;
-  link.download = `my-skins-${name}-585x559.png`;
-  link.click();
+function clamp(value: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, value));
 }
 
+function mapAiModuleToLayer(module: {
+  id: string;
+  type: string;
+  label: string;
+  color: string;
+  position: { x: number; y: number };
+  scale: number;
+  rotation: number;
+  opacity: number;
+}) {
+  const boundedX = clamp(module.position.x, 0, 1);
+  const boundedY = clamp(module.position.y, 0, 1);
+  const isPattern = module.type.toLowerCase().includes("pattern");
+  const isAccessory = module.type.toLowerCase().includes("accessory") || module.type.toLowerCase().includes("hair");
+  const isTrim = module.type.toLowerCase().includes("trim");
+  const zone = boundedX < 0.18 ? "left_sleeve" : boundedX > 0.82 ? "right_sleeve" : boundedY > 0.72 ? "back" : "front";
+  const halfWidth = 64;
+  const halfHeight = 64;
+  const layerType: "accessoryLayer" | "moduleLayer" = isAccessory ? "accessoryLayer" : "moduleLayer";
+  return {
+    name: module.label,
+    type: layerType,
+    zone,
+    placementIntent: isPattern ? "allover" : boundedY < 0.3 ? "hero" : "supporting",
+    anchor: boundedY < 0.25 ? "top" : boundedY > 0.75 ? "bottom" : "center",
+    relativeScale: clamp(module.scale, 0.2, isPattern ? 0.95 : 1.25),
+    color: module.color,
+    assetId: module.id,
+    assetCategory: isPattern ? "pattern" : isAccessory ? "accessory" : isTrim ? "trim" : "module",
+    transform: {
+      x: clamp((boundedX - 0.5) * halfWidth * 2, -halfWidth, halfWidth),
+      y: clamp((boundedY - 0.5) * halfHeight * 2, -halfHeight, halfHeight),
+      scale: clamp(module.scale, 0.2, 1.6),
+      rotation: clamp(module.rotation, -180, 180),
+      opacity: clamp(module.opacity, 0.2, 1),
+    },
+  };
+}
+
+function downloadPng(dataUrl: string, filename: string) {
+  const a = document.createElement("a");
+  a.href = dataUrl;
+  a.download = filename;
+  a.click();
+}
+
+// Big tap-to-create ideas so even small kids (who can't read yet) can use the app.
+const IDEAS: Array<{ emoji: string; label: string; prompt: string }> = [
+  { emoji: "🐉", label: "Drage", prompt: "en kul grønn drage som puster oransje ild" },
+  { emoji: "🥷", label: "Ninja", prompt: "en tøff svart ninja med rødt pannebånd og sverd" },
+  { emoji: "👸", label: "Prinsesse", prompt: "en vakker prinsessekjole i rosa og gull med glitter og krone" },
+  { emoji: "🦄", label: "Enhjørning", prompt: "en søt regnbue-enhjørning med stjerner og glitter" },
+  { emoji: "⚽", label: "Fotball", prompt: "en kul fotballdrakt med fotball på brystet og striper" },
+  { emoji: "🧟", label: "Zombie", prompt: "en skummel grønn zombie med revet t-skjorte" },
+  { emoji: "🦸", label: "Superhelt", prompt: "en superheltdrakt i rødt og blått med lyn på brystet" },
+  { emoji: "🐱", label: "Kattepus", prompt: "en søt katt med rosa sløyfe og poter" },
+  { emoji: "🚀", label: "Astronaut", prompt: "en kul astronautdrakt med rakett og stjerner" },
+  { emoji: "🦈", label: "Hai", prompt: "en tøff blå hai med skarpe tenner" },
+  { emoji: "🌋", label: "Lava", prompt: "svart drakt med glødende oransje lava og flammer" },
+  { emoji: "🎮", label: "Gamer", prompt: "en kul gamer-hettegenser med spillkontroll og neonlys" },
+];
+
+const API_BASE = `${import.meta.env.BASE_URL.replace(/\/$/, "")}/api`;
+const PENDING_SKIN_KEY = "mySkins.pendingSkin";
+
+type SkinStatus = { remainingFree: number; freeLimit: number; paidCredits: number };
+
+async function apiGet<T>(path: string): Promise<T> {
+  const res = await fetch(`${API_BASE}${path}`, { credentials: "include" });
+  if (!res.ok) throw new Error(`GET ${path} ${res.status}`);
+  return (await res.json()) as T;
+}
+
+async function apiPost<T>(path: string, body?: unknown): Promise<{ status: number; data: T }> {
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: body ? JSON.stringify(body) : "{}",
+  });
+  const data = (await res.json().catch(() => ({}))) as T;
+  return { status: res.status, data };
+}
+
+function openRobloxWithFiles(files: OutfitFiles) {
+  const downloads: Array<[string, string | undefined]> = [
+    ["roblox-overdel-shirt.png", files.shirt],
+    ["roblox-bukse-pants.png", files.pants],
+    ["roblox-tskjorte-motiv.png", files.tshirt],
+  ];
+  // Open Roblox synchronously (before timers) so popup blockers don't eat it,
+  // then stagger the downloads slightly so the browser accepts all of them.
+  window.open("https://create.roblox.com/dashboard/creations", "_blank", "noopener");
+  let delay = 0;
+  for (const [name, url] of downloads) {
+    if (!url) continue;
+    window.setTimeout(() => downloadPng(url, name), delay);
+    delay += 400;
+  }
+}
+
+type RobloxMe = { loggedIn: boolean; configured?: boolean; name?: string; picture?: string };
+
+const DIRECT_ITEMS: Array<{ key: keyof OutfitFiles; type: string; name: string; label: string }> = [
+  { key: "shirt", type: "shirt", name: "My Skins overdel", label: "overdelen" },
+  { key: "pants", type: "pants", name: "My Skins bukse", label: "buksa" },
+  { key: "tshirt", type: "tshirt", name: "My Skins t-skjorte", label: "t-skjorta" },
+];
+
+const UPLOAD_DONE_MSG =
+  "Antrekket er lastet ned som tre filer: overdel (Shirt), bukse (Pants) og t-skjorte-motiv. Roblox sin side er åpnet – last opp overdelen som «Shirt», buksa som «Pants» og motivet som «T-Shirt».";
+
 export default function Create() {
+  const offscreenCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const [previewTexture, setPreviewTexture] = useState<string>("");
   const [prompt, setPrompt] = useState("");
-  const [result, setResult] = useState<GenerateOutfitSpecResponse | null>(null);
-  const [generationState,setGenerationState]=useState<GenerationState>("idle");
-  const [errorCode,setErrorCode]=useState<string | null>(null);
-  const [manifest, setManifest] = useState<GarmentManifest | null>(null);
-  const [avatarLook, setAvatarLook] = useState(defaultAvatarState);
-  const [view, setView] = useState<"front" | "back">("front");
-  const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState("");
-  const [elapsedSeconds, setElapsedSeconds] = useState(0);
-  const [progress, setProgress] = useState("Planning your skin…");
-  const [revision, setRevision] = useState("");
-  const requestRef = useRef<{ id: number; controller: AbortController } | null>(null);
-  const requestSequence = useRef(0);
-  const busyRef = useRef(false);
+  const [aiError, setAiError] = useState<string>("");
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiPhase, setAiPhase] = useState<string>("");
+  const [uploadStatus, setUploadStatus] = useState<string>("");
+  const [uploadBusy, setUploadBusy] = useState(false);
+  const [skinStatus, setSkinStatus] = useState<SkinStatus | null>(null);
+  const [imageRenderNonce, setImageRenderNonce] = useState(0);
+  const [robloxMe, setRobloxMe] = useState<RobloxMe | null>(null);
+  // Files the user has already paid a credit for – kept around so a blocked
+  // popup/download or a failed direct upload can always be retried for free.
+  const [readyFiles, setReadyFiles] = useState<OutfitFiles | null>(null);
+  const outfitRef = useRef<{ pantsBase: string; pantsAccent: string; heroUrl?: string; fabricUrl?: string } | null>(null);
+  const generateLockRef = useRef(false);
 
-  useEffect(() => {
-    if (!loading) return;
-    const started = Date.now();
-    const timer = window.setInterval(() => {
-      const seconds = Math.floor((Date.now() - started) / 1000);
-      setElapsedSeconds(seconds);
-      setProgress(seconds < 5 ? "Planning your skin…" : seconds < 75 ? "Creating the top…" : seconds < 150 ? "Creating the bottoms…" : "Building the preview…");
-    }, 1000);
-    return () => window.clearInterval(timer);
-  }, [loading]);
+  const { state, setAiPlanPreview, setAiAvatarPreview, deleteLayer, addLayer, applyAiPlan, setPaintSwatch } = useDesignStore();
+  const hasDesign = state.layers.length > 0 || Boolean(state.baseColor);
 
-  useEffect(() => () => requestRef.current?.controller.abort(), []);
-
-  const generate = useCallback(async () => {
-    if (busyRef.current || prompt.trim().length < 3) return;
-    requestRef.current?.controller.abort();
-    const id = ++requestSequence.current;
-    const controller = new AbortController();
-    requestRef.current = { id, controller };
-    busyRef.current = true;
-    setLoading(true); setGenerationState("understanding"); setErrorCode(null); setMessage(""); setElapsedSeconds(0); setProgress("Planning your skin…");
+  const refreshStatus = useCallback(async () => {
     try {
-      const data = await requestOutfitSpec<OutfitResult["outfitSpec"]>(prompt.trim(), controller.signal) as OutfitResult;
-      if (data.outfitSpec.bottom !== null || data.exports.length !== 1 || data.exports[0]?.garment !== "Shirt Classic") throw new Error("Invalid Classic export plan");
-      setGenerationState("generating");
-      const data = await requestOutfitSpec(prompt.trim(), controller.signal);
-      setGenerationState("validating");
-      if (requestRef.current?.id !== id) return;
-      setGenerationState("compiling"); setProgress("Building the preview…");
-      setResult(data); setView("front");
-      setManifest(resolveGarmentManifest(prompt.trim()));
-      setManifest(null);
-      const palette = data.outfitSpec.palette;
-      const look = buildAiAvatarLook(prompt.trim(), palette);
-      setAvatarLook({ ...defaultAvatarState(), ...look, slots: { ...defaultAvatarState().slots, ...(look.slots ?? {}) } });
-      setGenerationState("ready");
-    } catch (caught) {
-      if (controller.signal.aborted || requestRef.current?.id !== id) return;
-      const error = caught as Error & { status?: number };
-      setMessage(error.status === 429
-        ? "The AI is busy right now. Please try again in a moment."
-        : "We couldn't finish this skin. Please try again.");
-      const error = caught as OutfitSpecApiError; setErrorCode(error.code); setGenerationState("failed");
-      console.error("Outfit generation failed",{code:error.code,stage:error.stage,requestId:error.requestId,generationId:error.generationId,error});
-      const messages:Record<string,string>={SAFETY_BLOCKED:"That request cannot be generated safely.",MODEL_CONFIGURATION_ERROR:"Outfit generation is not configured. Please contact support.",MODEL_TIMEOUT:"Generation timed out. You can retry.",SCHEMA_REPAIR_FAILED:"The AI response could not be validated. Please retry.",CLIENT_RESPONSE_INVALID:"The server response was incompatible. Please retry."};
-      setMessage(messages[error.code]??"The outfit service could not complete your request. Please retry.");
-    } finally {
-      if (requestRef.current?.id === id) {
-        busyRef.current = false;
-        setLoading(false);
+      setSkinStatus(await apiGet<SkinStatus>("/payments/skin-status"));
+    } catch {
+      /* ignore – status is informational */
+    }
+  }, []);
+
+  const refreshRobloxMe = useCallback(async () => {
+    try {
+      setRobloxMe(await apiGet<RobloxMe>("/auth/roblox/me"));
+    } catch {
+      /* ignore – login is optional */
+    }
+  }, []);
+
+  // Upload the whole outfit straight to the logged-in Roblox account.
+  // Returns a status message; falls back to manual downloads if anything fails.
+  const directUpload = useCallback(async (files: OutfitFiles): Promise<{ msg: string; allOk: boolean }> => {
+    const uploaded: string[] = [];
+    const failed: string[] = [];
+    for (const item of DIRECT_ITEMS) {
+      const dataUrl = files[item.key];
+      if (!dataUrl) continue;
+      try {
+        const res = await apiPost<{ ok?: boolean; error?: string }>("/auth/roblox/upload", {
+          type: item.type,
+          name: item.name,
+          pngDataUrl: dataUrl,
+        });
+        if (res.status === 200 && res.data.ok) uploaded.push(item.label);
+        else failed.push(item.label);
+      } catch {
+        failed.push(item.label);
       }
     }
-  }, [prompt]);
+    if (failed.length === 0) {
+      return { msg: `🎉 Ferdig! Antrekket (${uploaded.join(", ")}) er sendt rett til Roblox-kontoen din. Husk: Roblox tar 10 Robux per plagg.`, allOk: true };
+    }
+    // Something failed – give the user the manual route so nothing is lost.
+    openRobloxWithFiles(files);
+    const uploadedPart = uploaded.length > 0 ? `Sendt direkte: ${uploaded.join(", ")}. ` : "";
+    return {
+      msg: `${uploadedPart}Roblox godtok ikke direkte opplasting av ${failed.join(", ")} (dette kan kreve ID-verifisert konto og minst 10 Robux). ${UPLOAD_DONE_MSG}`,
+      allOk: false,
+    };
+  }, []);
 
-  const download = () => {
-    if (!result) return;
-    downloadPart(shirtTexture, "top");
-    setMessage("Your Classic Shirt file is ready to upload. No bottom was requested.");
-    result.classicExports.forEach((part,index)=>setTimeout(()=>downloadPart(part.url,part.type),index*150));
-    setMessage("Your Classic Shirt is ready to upload.");
-  };
-  const save = () => {
-    if (!result) return;
-    localStorage.setItem("my-skins-saved-outfit", JSON.stringify({ prompt, result }));
-    setMessage("Skin saved on this device!");
-  };
-  const revise = (instruction: string) => {
-    if (!result || !instruction.trim()) return;
-    setPrompt(`${prompt}. Keep the approved outfit details and ${instruction.trim()}`);
-    setRevision("");
-    window.setTimeout(() => document.querySelector<HTMLButtonElement>('[data-generate]')?.click(), 0);
+  // On mount: load free-count status and finish any payment we returned from.
+  useEffect(() => {
+    void refreshStatus();
+    void refreshRobloxMe();
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("robloxLogin") === "failed") {
+      setUploadStatus("Roblox-innloggingen ble avbrutt. Prøv igjen, eller last ned filene manuelt.");
+      window.history.replaceState({}, "", window.location.pathname);
+    } else if (params.get("robloxLogin") === "ok") {
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+    const paidSession = params.get("paid");
+    if (!paidSession) return;
+    const cleanUrl = window.location.pathname;
+    (async () => {
+      try {
+        const { paid } = await apiGet<{ paid: boolean }>(`/payments/verify?session_id=${encodeURIComponent(paidSession)}`);
+        const pendingRaw = window.localStorage.getItem(PENDING_SKIN_KEY);
+        const pending = pendingRaw ? parsePendingOutfit(pendingRaw) : null;
+        if (paid && pending) {
+          const consume = await apiPost<{ ok?: boolean }>("/payments/consume-free");
+          if (consume.status === 200 && consume.data.ok) {
+            // Keep the files recoverable until delivery is confirmed.
+            setReadyFiles(pending);
+            const me = await apiGet<RobloxMe>("/auth/roblox/me").catch(() => null);
+            if (me?.loggedIn) {
+              setUploadStatus("Betaling godkjent! Sender antrekket til Roblox…");
+              const result = await directUpload(pending);
+              if (result.allOk) window.localStorage.removeItem(PENDING_SKIN_KEY);
+              setUploadStatus(`Betaling godkjent – du har fått 3 opplastinger! ${result.msg}`);
+            } else {
+              openRobloxWithFiles(pending);
+              setUploadStatus(`Betaling godkjent – du har fått 3 opplastinger! ${UPLOAD_DONE_MSG} Startet ikke nedlastingen? Bruk knappen «Last ned filene på nytt» under.`);
+            }
+          } else {
+            setUploadStatus("Betaling godkjent, men opplastingen kunne ikke brukes. Trykk «Last opp til Roblox» igjen.");
+          }
+        } else if (paid) {
+          setUploadStatus("Betaling godkjent – du har fått 3 opplastinger! Lag skinnet på nytt og trykk «Last opp til Roblox».");
+        } else {
+          setUploadStatus("Betalingen ble ikke fullført. Prøv igjen.");
+        }
+      } catch {
+        setUploadStatus("Kunne ikke bekrefte betalingen. Prøv igjen.");
+      } finally {
+        window.history.replaceState({}, "", cleanUrl);
+        void refreshStatus();
+      }
+    })();
+  }, [refreshStatus, refreshRobloxMe, directUpload]);
+
+  const handleOverlayImageReady = useCallback(() => {
+    setImageRenderNonce((current) => current + 1);
+  }, []);
+
+  useEffect(() => {
+    if (!offscreenCanvasRef.current) offscreenCanvasRef.current = document.createElement("canvas");
+    const offscreen = offscreenCanvasRef.current;
+    const idHandle = window.setTimeout(() => {
+      setPreviewTexture(renderDesignToCanvas(state, offscreen, { onOverlayImageReady: handleOverlayImageReady, scale: 3 }));
+    }, 20);
+    return () => window.clearTimeout(idHandle);
+  }, [handleOverlayImageReady, imageRenderNonce, state]);
+
+  const generate = async (promptOverride?: string) => {
+    const usedPrompt = (promptOverride ?? prompt).trim();
+    // Synchronous lock: state updates are async, so a fast double-tap could start two runs.
+    if (generateLockRef.current || aiLoading || !usedPrompt) return;
+    generateLockRef.current = true;
+    setAiLoading(true);
+    setAiError("");
+    setUploadStatus("");
+    setAiPhase("Lager designet…");
+    try {
+      const response = normalizeAiResponse(await aiGenerateDesign({ prompt: usedPrompt, itemType: "classic_shirt", style: "AI velger", theme: usedPrompt }));
+      const previewAvatar = buildAiAvatarLook(
+        [response.result.style, ...response.result.intent.styleVibes].join(" "),
+        response.result.colorPalette,
+      );
+      const resolvedSlots = resolveAvatarSlotAssets(response.result);
+      for (const slotPlan of resolvedSlots) {
+        previewAvatar.slots = {
+          ...previewAvatar.slots,
+          [slotPlan.slot]: {
+            assetId: slotPlan.assetId,
+            scale: 1,
+            visible: true,
+            color: slotPlan.color,
+            offset: { x: 0, y: 0, z: 0 },
+            rotation: { x: 0, y: 0, z: 0 },
+          },
+        };
+      }
+      const payload = {
+        model: "ClassicTextureAI.v3",
+        garmentType: "shirt",
+        style: response.result.style,
+        palette: response.result.colorPalette,
+        zones: response.result.placement,
+        avatarLook: previewAvatar,
+        layers: response.result.modules.map((module) => mapAiModuleToLayer(module)),
+      };
+      const parsed = classicTextureAiSchema.parse(payload);
+      const plan = parseClassicTextureAiPlan(parsed);
+      const currentLayers = useDesignStore.getState().state.layers;
+      for (const layer of currentLayers) deleteLayer(layer.id);
+      setAiPlanPreview(plan.layers);
+      setAiAvatarPreview(plan.avatarLook ?? null);
+      applyAiPlan();
+      if (parsed.palette[0]) setPaintSwatch(parsed.palette[0]);
+
+      // Give the outfit matching pants: color the leg zones so the 3D figure wears them too.
+      const pantsColors = pickPantsColors(parsed.palette);
+      outfitRef.current = { pantsBase: pantsColors.base, pantsAccent: pantsColors.accent };
+      for (const legZone of ["left_leg_front", "right_leg_front", "left_leg_back", "right_leg_back"]) {
+        addLayer({
+          name: "Bukse",
+          type: "paintLayerSet",
+          zone: legZone,
+          color: pantsColors.base,
+          transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 },
+        });
+      }
+
+      // Then draw the real clothing: one texture for the top garment, one for the bottom, plus the motif.
+      setAiPhase("Tegner klærne du beskrev… (kan ta opptil ett minutt)");
+      const [top, bottom, hero] = await Promise.all([
+        apiPost<{ imageUrl?: string }>("/ai/hero-image", { prompt: usedPrompt.slice(0, 600), kind: "garment-top" }),
+        apiPost<{ imageUrl?: string }>("/ai/hero-image", { prompt: usedPrompt.slice(0, 600), kind: "garment-bottom" }),
+        apiPost<{ imageUrl?: string }>("/ai/hero-image", { prompt: usedPrompt }),
+      ]);
+
+      const topUrl = top.status === 200 ? top.data.imageUrl : undefined;
+      const bottomUrl = bottom.status === 200 ? bottom.data.imageUrl : undefined;
+      if (topUrl) {
+        // The top garment covers chest, back and both sleeves edge-to-edge.
+        for (const zone of ["front", "back", "left_sleeve", "right_sleeve"]) {
+          addLayer({
+            name: "AI-overdel",
+            type: "imageLayer",
+            zone,
+            image: topUrl,
+            transform: { x: 0, y: 0, scale: 1.6, rotation: 0, opacity: 1 },
+          });
+        }
+      }
+      if (bottomUrl) {
+        // The bottom garment covers all four leg zones edge-to-edge.
+        for (const zone of ["left_leg_front", "right_leg_front", "left_leg_back", "right_leg_back"]) {
+          addLayer({
+            name: "AI-bukse",
+            type: "imageLayer",
+            zone,
+            image: bottomUrl,
+            transform: { x: 0, y: 0, scale: 2.4, rotation: 0, opacity: 1 },
+          });
+        }
+      }
+
+      if (hero.status === 200 && hero.data.imageUrl) {
+        outfitRef.current = { pantsBase: pantsColors.base, pantsAccent: pantsColors.accent, heroUrl: hero.data.imageUrl, fabricUrl: bottomUrl };
+        addLayer({
+          name: "AI-motiv",
+          type: "imageLayer",
+          zone: "front",
+          image: hero.data.imageUrl,
+          transform: { x: 0, y: -6, scale: 0.6, rotation: 0, opacity: 1 },
+        });
+      } else {
+        outfitRef.current = { pantsBase: pantsColors.base, pantsAccent: pantsColors.accent, fabricUrl: bottomUrl };
+        if (!topUrl && !bottomUrl) setAiError("Designet er klart, men selve motivet kunne ikke tegnes. Prøv «Lag skin» igjen.");
+      }
+    } catch (error) {
+      const status = (error as { status?: number })?.status;
+      if (status === 401 || status === 429) {
+        setAiError("AI-en er opptatt eller grensen er nådd. Prøv igjen om litt.");
+      } else {
+        setAiError("Noe gikk galt med AI-en. Prøv igjen, gjerne med en litt annen beskrivelse.");
+      }
+    } finally {
+      generateLockRef.current = false;
+      setAiLoading(false);
+      setAiPhase("");
+    }
   };
 
-  return <main className="min-h-screen bg-slate-950 px-4 py-10 text-slate-100">
-    <div className="mx-auto flex max-w-4xl flex-col gap-7">
-      <header className="text-center"><h1 className="text-4xl font-bold tracking-tight">My Skins AI</h1><p className="mt-2 text-slate-300">Describe your skin. AI creates the complete outfit.</p></header>
-      <section className="rounded-3xl border border-violet-500/30 bg-slate-900/80 p-5 shadow-2xl shadow-violet-950/30">
-        <form className="space-y-3" onSubmit={(event) => { event.preventDefault(); void generate(); }}>
-          <label className="block text-lg font-semibold" htmlFor="skin-prompt">Describe your skin</label>
-          <div className="flex flex-col gap-3 sm:flex-row"><Input id="skin-prompt" value={prompt} onChange={(event) => setPrompt(event.target.value)} disabled={loading} maxLength={600} className="h-14 bg-slate-950 text-base" placeholder="Lag en hvit hettegenser" /><Button data-generate className="h-14 px-8 text-base" type="submit" disabled={loading || prompt.trim().length < 3}>{loading ? <Loader2 className="mr-2 animate-spin" /> : <Sparkles className="mr-2" />}Create</Button></div>
-          <div className="flex flex-wrap gap-2 text-sm text-slate-400" aria-label="Prompt examples">{["White hoodie skin", "Black T-shirt and blue jeans", "Red football uniform number 10", "Pink princess outfit", "Green cargo outfit", "Knight armour outfit"].map((example) => <button type="button" key={example} className="rounded-full bg-slate-800 px-3 py-1 hover:bg-slate-700" onClick={() => setPrompt(example)}>{example}</button>)}</div>
-        </form>
-      </section>
-      <section className="relative h-[540px] overflow-hidden rounded-3xl border border-slate-800 bg-slate-900" aria-label="Complete outfit preview">
-        <AvatarPreview shirtTextureUrl={result ? shirtTexture : undefined} garmentManifest={manifest ?? undefined} avatarState={avatarLook} view={view} onViewChange={setView} previewMode="avatar" studioMode animated />
-        {loading && <div className="absolute inset-0 grid place-content-center bg-slate-950/75 text-center" role="status"><Loader2 className="mx-auto mb-3 h-10 w-10 animate-spin text-violet-400" /><strong>{progress}</strong><span className="mt-1 text-sm text-slate-300">Elapsed time: {elapsedSeconds}s</span></div>}
-        {result && <><div className="absolute left-4 top-4 rounded-full bg-black/60 px-4 py-2 text-sm backdrop-blur">✨ AI Generated · {result.outfitSpec.outfitName}</div><div className="absolute bottom-4 left-4 rounded-full bg-emerald-950/90 px-4 py-2 text-sm text-emerald-200"><CheckCircle2 className="mr-1 inline h-4 w-4"/>Ready · OpenAI · {result.generationId.slice(0,8)}</div></>}
-        <AvatarPreview shirtTextureUrl={result?.classicExports.find(part=>part.type==="shirt")?.url} garmentManifest={manifest ?? undefined} hoodieSpec={result?.outfitSpec.top} avatarState={avatarLook} view={view} onViewChange={setView} previewMode="avatar" studioMode animated />
-        {loading && <div className="absolute inset-0 grid place-content-center bg-slate-950/75 text-center" role="status"><Loader2 className="mx-auto mb-3 h-10 w-10 animate-spin text-violet-400" /><strong>{progress}</strong><span className="mt-1 text-sm text-slate-300">Elapsed time: {elapsedSeconds}s</span></div>}
-        {result && <><div className="absolute left-4 top-4 rounded-full bg-black/60 px-4 py-2 text-sm backdrop-blur">✨ AI Generated · {result.outfitSpec.outfitName}</div><div className="absolute bottom-4 left-4 rounded-full bg-emerald-950/90 px-4 py-2 text-sm text-emerald-200"><CheckCircle2 className="mr-1 inline h-4 w-4"/>PNG checks passed · Enhanced preview available</div></>}
-      </section>
-      <div className="flex flex-wrap justify-center gap-3"><Button variant="outline" onClick={() => setView(view === "front" ? "back" : "front")}><RotateCw className="mr-2" />{view === "front" ? "Show Back" : "Show Front"}</Button><Button variant="outline" onClick={() => void generate()} disabled={loading || prompt.trim().length < 3}><Sparkles className="mr-2" />Try Again</Button><Button onClick={download} disabled={!result}><Download className="mr-2" />Download PNG files</Button><Button variant="outline" onClick={save} disabled={!result}><Save className="mr-2" />Save</Button></div>
-      {result && <section className="grid gap-5 rounded-3xl border border-slate-800 bg-slate-900 p-5 md:grid-cols-2">
-        <div><h2 className="text-xl font-bold">Change something</h2><p className="mt-1 text-sm text-slate-400">Ask AI for one change. Everything else stays.</p><div className="mt-3 flex gap-2"><Input aria-label="Ask for an outfit change" value={revision} onChange={e=>setRevision(e.target.value)} placeholder="Make the hood bigger"/><Button onClick={()=>revise(revision)} disabled={!revision.trim()}>Change</Button></div><div className="mt-3 flex flex-wrap gap-2">{["Make it blue","Add stars","Bigger hood","More colourful"].map(action=><button key={action} onClick={()=>revise(action)} className="min-h-11 rounded-full bg-violet-950 px-3 text-sm text-violet-100 hover:bg-violet-900">{action}</button>)}</div></div>
-        <div><h2 className="text-xl font-bold">Roblox Classic files</h2><div className="mt-3 flex gap-3"><figure className="min-w-0 flex-1"><img className="aspect-square w-full rounded-xl bg-slate-800 object-contain" src={shirtTexture} alt="Classic Shirt texture"/><figcaption className="mt-1 text-center text-sm">Classic Shirt</figcaption></figure><div className="grid flex-1 place-content-center rounded-xl bg-slate-800 text-sm text-slate-400">Bottom: none</div></div></div>
-        <div><h2 className="text-xl font-bold">Roblox Classic files</h2><div className="mt-3 flex gap-3"><figure className="min-w-0 flex-1"><img className="aspect-square w-full rounded-xl bg-slate-800 object-contain" src={result.classicExports.find(part=>part.type==="shirt")?.url} alt="Classic Shirt texture"/><figcaption className="mt-1 text-center text-sm">Classic Shirt</figcaption></figure></div></div>
-        <p className="text-sm text-slate-300 md:col-span-2">Enhanced Preview shows the AI-designed 3D outfit shape. Roblox Classic downloads contain the compatible shirt and pants textures.</p>
-        <aside className="rounded-xl bg-slate-950 p-4 text-sm md:col-span-2"><strong>Upload with a parent</strong><p className="mt-1 text-slate-400">Download the PNG files, then use Roblox Creator Hub to upload each one as Classic Clothing. Direct upload is not connected, so My Skins will never ask for or store your Roblox password.</p></aside>
-      </section>}
-      {message && <p role="alert" data-error-code={errorCode??undefined} className="text-center text-sm text-slate-300">{message}</p>}<output className="sr-only" data-generation-state={generationState}>{generationState}</output>
+  const renderExportFiles = async (): Promise<OutfitFiles | null> => {
+    if (!offscreenCanvasRef.current) offscreenCanvasRef.current = document.createElement("canvas");
+    const canvas = offscreenCanvasRef.current;
+    if (!canvas || !hasDesign) return null;
+    await preloadOverlayImages(state);
+    const shirt = renderDesignToCanvas(state, canvas, { onOverlayImageReady: handleOverlayImageReady, target: "export" });
+    const outfit = outfitRef.current;
+    const pantsBase = outfit?.pantsBase ?? state.baseColor ?? "#1e293b";
+    const pantsAccent = outfit?.pantsAccent ?? state.paintSwatch;
+    const pants = await renderPantsTexture({ base: pantsBase, accent: pantsAccent, motifUrl: outfit?.heroUrl, fabricUrl: outfit?.fabricUrl });
+    const tshirt = outfit?.heroUrl ? await renderTShirtTexture(outfit.heroUrl) : undefined;
+    return { shirt, pants: pants || undefined, tshirt };
+  };
+
+  const uploadToRoblox = async () => {
+    if (uploadBusy || !hasDesign) return;
+    setUploadBusy(true);
+    setUploadStatus("");
+    try {
+      const files = await renderExportFiles();
+      if (!files) return;
+
+      const consume = await apiPost<{ ok?: boolean; needsPayment?: boolean }>("/payments/consume-free");
+      if (consume.status === 200 && consume.data.ok) {
+        setReadyFiles(files);
+        if (robloxMe?.loggedIn) {
+          setUploadStatus("Sender antrekket rett til Roblox-kontoen din…");
+          setUploadStatus((await directUpload(files)).msg);
+        } else {
+          openRobloxWithFiles(files);
+          setUploadStatus(UPLOAD_DONE_MSG);
+        }
+        await refreshStatus();
+        return;
+      }
+
+      if (consume.status === 402 || consume.data.needsPayment) {
+        // Free skins used up – save the outfit and send the user to Stripe checkout.
+        // Never let a storage failure block the payment itself.
+        try {
+          window.localStorage.setItem(PENDING_SKIN_KEY, JSON.stringify(files));
+        } catch {
+          try {
+            // Storage full (data URLs are big) – keep at least the shirt.
+            window.localStorage.setItem(PENDING_SKIN_KEY, files.shirt);
+          } catch {
+            /* storage unavailable – user can regenerate after payment */
+          }
+        }
+        setUploadStatus("Sender deg til betaling (10 kr for 3 opplastinger)…");
+        const checkout = await apiPost<{ checkoutUrl?: string; error?: string }>("/payments/create-checkout-session");
+        if (checkout.data.checkoutUrl) {
+          window.location.href = checkout.data.checkoutUrl;
+          return;
+        }
+        setUploadStatus(checkout.data.error ?? "Kunne ikke starte betaling. Prøv igjen.");
+        return;
+      }
+
+      setUploadStatus("Noe gikk galt. Prøv igjen.");
+    } catch {
+      setUploadStatus("Noe gikk galt. Prøv igjen.");
+    } finally {
+      setUploadBusy(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-slate-950 text-slate-100">
+      <div className="mx-auto max-w-3xl px-4 py-8 flex flex-col items-center gap-8">
+        <header className="text-center space-y-2">
+          <h1 className="text-4xl font-bold tracking-tight">My Skins</h1>
+          <p className="text-lg text-slate-300">👇 Trykk på et bilde – så lager vi skinnet! ✨</p>
+        </header>
+
+        <section className="w-full">
+          <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
+            {IDEAS.map((idea) => (
+              <button
+                key={idea.label}
+                type="button"
+                disabled={aiLoading}
+                onClick={() => {
+                  setPrompt(idea.prompt);
+                  void generate(idea.prompt);
+                }}
+                className="flex flex-col items-center gap-1 rounded-2xl border-2 border-slate-700 bg-slate-900/70 py-4 transition hover:border-emerald-400 hover:bg-slate-800 active:scale-95 disabled:opacity-40"
+              >
+                <span className="text-4xl sm:text-5xl leading-none">{idea.emoji}</span>
+                <span className="text-sm font-semibold text-slate-200">{idea.label}</span>
+              </button>
+            ))}
+          </div>
+        </section>
+
+        <section className="w-full">
+          <div className="h-[520px] rounded-2xl border border-slate-800 overflow-hidden">
+            <AvatarPreview
+              textureUrl={previewTexture}
+              previewMode="avatar"
+              itemType="shirt"
+              avatarState={state.avatar}
+              studioMode
+              animated
+            />
+          </div>
+        </section>
+
+        <section className="w-full space-y-4">
+          {aiLoading ? (
+            <div className="flex flex-col items-center gap-2 rounded-2xl border-2 border-emerald-500/50 bg-emerald-500/10 p-5 text-center">
+              <Loader2 className="h-8 w-8 animate-spin text-emerald-400" />
+              <p className="text-lg font-semibold">🎨 {aiPhase || "Lager skinnet ditt…"}</p>
+              <p className="text-sm text-slate-300">Vent litt – se på figuren! 👀</p>
+            </div>
+          ) : null}
+          {aiError ? <p className="text-center text-sm text-red-400">{aiError}</p> : null}
+
+          <div className="flex flex-col items-center gap-2">
+            <Button
+              size="lg"
+              className="h-16 w-full max-w-md rounded-2xl bg-emerald-500 px-10 text-xl font-bold text-emerald-950 hover:bg-emerald-400"
+              onClick={() => void uploadToRoblox()}
+              disabled={!hasDesign || uploadBusy || aiLoading}
+            >
+              {uploadBusy ? <Loader2 className="mr-2 h-6 w-6 animate-spin" /> : <Upload className="mr-2 h-6 w-6" />}
+              {uploadBusy ? "Jobber…" : "🎁 Send til Roblox!"}
+            </Button>
+            {robloxMe?.configured ? (
+              robloxMe.loggedIn ? (
+                <p className="text-sm text-slate-300">
+                  🎮 Logget inn som <span className="font-semibold">{robloxMe.name}</span> – antrekket sendes rett til kontoen din!{" "}
+                  <button
+                    type="button"
+                    className="underline text-slate-400 hover:text-slate-200"
+                    onClick={() => {
+                      void apiPost("/auth/roblox/logout").then(() => setRobloxMe({ loggedIn: false, configured: true }));
+                    }}
+                  >
+                    Logg ut
+                  </button>
+                </p>
+              ) : (
+                <button
+                  type="button"
+                  className="rounded-xl border-2 border-slate-600 bg-slate-900 px-5 py-2 text-sm font-semibold text-slate-200 hover:border-emerald-400"
+                  onClick={() => {
+                    window.location.href = `${API_BASE}/auth/roblox/login?returnTo=${encodeURIComponent(window.location.pathname)}`;
+                  }}
+                >
+                  🎮 Logg inn med Roblox (send skins rett til kontoen din)
+                </button>
+              )
+            ) : null}
+            {skinStatus ? (
+              <p className="text-sm text-slate-400">
+                {skinStatus.paidCredits > 0
+                  ? `⭐ ${skinStatus.paidCredits} opplastinger igjen`
+                  : "10 kr gir 3 opplastinger (en voksen hjelper med betalingen)"}
+              </p>
+            ) : null}
+            {uploadStatus ? <p className="text-sm text-emerald-400 text-center max-w-lg">{uploadStatus}</p> : null}
+            {readyFiles ? (
+              <button
+                type="button"
+                className="rounded-xl border border-slate-700 bg-slate-900 px-4 py-2 text-sm text-slate-300 hover:border-emerald-400"
+                onClick={() => openRobloxWithFiles(readyFiles)}
+              >
+                📥 Last ned filene på nytt (gratis – du har allerede betalt)
+              </button>
+            ) : null}
+            {!hasDesign && !aiLoading ? <p className="text-sm text-slate-500">Trykk på et bilde øverst for å lage skinnet ditt! 👆</p> : null}
+          </div>
+
+          <details className="w-full rounded-xl border border-slate-800 bg-slate-900/50 p-4">
+            <summary className="cursor-pointer text-sm font-semibold text-slate-300">✏️ Skriv ditt eget skin (for store barn og voksne)</summary>
+            <form
+              className="mt-3 flex flex-col sm:flex-row gap-2"
+              onSubmit={(event) => {
+                event.preventDefault();
+                void generate();
+              }}
+            >
+              <Input
+                value={prompt}
+                onChange={(event) => setPrompt(event.target.value)}
+                placeholder="F.eks. «svart drage-hettegenser med røde flammer»"
+                className="h-12 bg-slate-900 border-slate-700 text-base"
+                disabled={aiLoading}
+              />
+              <Button type="submit" size="lg" className="h-12 px-6" disabled={aiLoading || !prompt.trim()}>
+                <Sparkles className="mr-2 h-5 w-5" />
+                Lag skin
+              </Button>
+            </form>
+          </details>
+        </section>
+      </div>
     </div>
-  </main>;
+  );
 }

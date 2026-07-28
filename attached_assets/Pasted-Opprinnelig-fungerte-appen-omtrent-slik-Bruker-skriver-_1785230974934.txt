@@ -1,0 +1,360 @@
+Opprinnelig fungerte appen omtrent slik:
+
+Bruker skriver:
+
+"Hvit hoodie"
+
+        │
+        ▼
+Frontend
+        │
+        ▼
+/api/ai/complete-outfit
+        │
+        ▼
+AI lager et resultat
+        │
+        ▼
+Frontend viser klær
+        │
+        ▼
+PNG kan lastes ned
+
+Denne løsningen var enkel, men begrenset.
+
+Hva dere ønsket å bygge
+
+Målet var mye større:
+
+Bruker
+
+"Hvit hoodie med blå stjerner"
+
+        │
+        ▼
+
+AI forstår hele antrekket
+
+        │
+        ▼
+
+GeneratedOutfitSpec
+
+        │
+        ▼
+
+Validering
+
+        │
+        ▼
+
+Geometry Compiler
+
+        │
+        ▼
+
+3D Preview
+
+        │
+        ▼
+
+Classic Shirt/Pants
+
+        │
+        ▼
+
+Download
+
+Dette er riktig arkitektur.
+
+Problemet
+
+Dere byttet nesten hele motoren.
+
+Dere laget:
+
+nye API-endepunkter
+nye Zod-kontrakter
+ny AI-struktur
+ny hoodie-kompilator
+ny frontend-kontrakt
+nye tester
+
+Men dere lot deler av den gamle løsningen leve videre.
+
+Da fikk dere dette:
+
+             GAMMEL
+
+Create
+     │
+     ▼
+complete-outfit
+     │
+     ▼
+shirtTexture
+pantsTexture
+
+
+
+             NY
+
+Create
+     │
+     ▼
+outfit-spec
+     │
+     ▼
+GeneratedOutfitSpec
+
+Da begynte frontend å forvente én ting mens serveren sendte noe annet.
+
+Det var derfor du fikk:
+
+We couldn't finish this skin.
+
+Nå ser det ut til at dette er rettet
+
+Codex fant faktisk feilen.
+
+Den var:
+
+Create.tsx
+
+↓
+
+kalte fortsatt
+
+/api/ai/complete-outfit
+
+mens serveren forventet
+
+/ai/outfit-spec
+
+Det er en ekte rotårsak.
+
+Men appen fungerer fortsatt ikke
+
+Det er én grunn:
+
+Dere har ikke testet med ekte AI.
+
+Codex sier selv:
+
+OPENAI_API_KEY mangler
+
+Da skjer dette:
+
+Create
+
+↓
+
+Server
+
+↓
+
+skal ringe OpenAI
+
+↓
+
+ingen API-nøkkel
+
+↓
+
+MODEL_CONFIGURATION_ERROR
+
+Da kan ikke AI generere klær.
+
+Derfor ser du bare avataren
+
+Det er egentlig helt logisk.
+
+Prompt
+
+↓
+
+Ingen AI
+
+↓
+
+Ingen OutfitSpec
+
+↓
+
+Ingen hoodie
+
+↓
+
+Fallback-avatar
+
+Så lenge OpenAI ikke svarer, finnes det ingenting å vise.
+
+Hva må gjøres nå?
+
+Jeg ville delt det inn i fire steg.
+
+STEG 1
+Få AI til å svare
+
+Dette er absolutt viktigst.
+
+Dere må teste at
+
+POST /api/ai/outfit-spec
+
+faktisk returnerer
+
+{
+  "generationId": "...",
+  "outfitSpec": { ... }
+}
+
+fra OpenAI.
+
+Hvis ikke dette virker, spiller resten ingen rolle.
+
+STEG 2
+
+Når dere får
+
+GeneratedOutfitSpec
+
+må Create gjøre:
+
+response
+
+↓
+
+store outfitSpec
+
+↓
+
+AvatarPreview
+
+↓
+
+SpecHoodie
+
+↓
+
+Geometry Compiler
+
+↓
+
+Render
+
+Ikke stoppe halvveis.
+
+STEG 3
+
+Når hoodien vises
+
+må dere generere
+
+Classic Shirt
+
+fra samme spesifikasjon.
+
+Da har dere én sannhetskilde.
+
+STEG 4
+
+Til slutt
+
+må dere faktisk se den.
+
+Altså:
+
+White hoodie
+
+↓
+
+Render
+
+↓
+
+Screenshot
+
+↓
+
+Godkjenn
+
+Det er først da dere vet at den ser riktig ut.
+
+Det største problemet akkurat nå
+
+Etter å ha lest alle rapportene er dette ikke lenger et kodeproblem.
+
+Det er et miljøproblem.
+
+Codex skriver flere ganger:
+
+ingen OPENAI_API_KEY
+Playwright kan ikke lastes ned
+npm returnerer HTTP 403
+ingen Chromium
+ingen GitHub Actions-run
+
+Det betyr at den ikke kan bevise at appen fungerer fullt ut, selv om mye av koden ser riktig ut.
+
+Hva jeg ville gjort nå
+
+Jeg ville stoppet all videre utvikling av nye klær.
+
+Ikke bygg:
+
+kjoler
+rustning
+fotballdrakter
+ninja
+vesker
+
+før denne ene flyten virker.
+
+Målet er å få denne kjeden til å fungere 100 %:
+
+Bruker skriver:
+
+White hoodie skin
+
+        │
+        ▼
+
+OpenAI
+
+        │
+        ▼
+
+GeneratedOutfitSpec
+
+        │
+        ▼
+
+Validering
+
+        │
+        ▼
+
+Geometry Compiler
+
+        │
+        ▼
+
+3D Hoodie
+
+        │
+        ▼
+
+Classic Shirt PNG
+
+        │
+        ▼
+
+Download
+
+        │
+        ▼
+
+Save
+
+Når denne vertikale flyten fungerer med ekte OpenAI, ekte 3D-visning, Classic PNG og nedlasting, har dere et solid fundament. Da blir det langt enklere å utvide motoren til T-skjorter, bukser, kjoler, fotballdrakter og andre antrekk ved å gjenbruke den samme arkitekturen i stedet for å bygge nye spesialløsninger hver gang.

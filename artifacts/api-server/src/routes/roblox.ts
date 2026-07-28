@@ -313,9 +313,7 @@ async function processUploadJobNow(input: {
   });
   input.req.log.info({ uploadJobId: input.uploadJobId, projectId: input.projectId, attempt: attemptNumber }, "roblox.upload.processing_started");
 
-  const connectionState = input.connection
-    ? resolveRobloxConnectionState(input.connection, now)
-    : "disconnected";
+  const connectionState = resolveRobloxConnectionState(input.connection, now);
   if (!input.connection || connectionState === "disconnected") {
     await db.transaction(async (tx: DbTransaction) => {
       await transitionUploadJob(tx, { uploadJobId: input.uploadJobId, from: "processing", to: "failed", data: { lastErrorCode: "MISSING_CONNECTION", lastErrorMessage: "No active Roblox OAuth connection." } });

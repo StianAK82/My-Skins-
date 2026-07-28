@@ -11,19 +11,12 @@ import type { AvatarCosmeticSlot, AvatarState } from "@/lib/editor/design-state"
 import { defaultAvatarState } from "@/lib/editor/design-state";
 import { getAvatarAssetById, getAvatarBaseModel, type AvatarRenderPart } from "@/lib/editor/assets";
 import { resolveSlotPosition } from "@/lib/editor/avatar-slots";
-import { CLASSIC_SHIRT_UV } from "@/lib/editor/classic-shirt-uv";
-import { FullOutfitPreview } from "@/components/editor/garments/FullOutfitPreview";
-import { SpecHoodie } from "@/components/editor/garments/SpecHoodie";
-import type { HoodieGarmentSpec } from "@/lib/hoodie/spec";
-import type { GarmentManifest } from "@/lib/editor/garment-manifest";
 
 type ThreeTexture = ReturnType<typeof makeTextureFromZone>;
 type PreviewMode = "clothing" | "avatar";
 
 type AvatarPreviewProps = {
   textureUrl?: string;
-  shirtTextureUrl?: string;
-  pantsTextureUrl?: string;
   className?: string;
   avatarType?: string;
   bodyType?: string;
@@ -40,18 +33,15 @@ type AvatarPreviewProps = {
   garmentVariant?: string;
   accessories?: { hair?: string; hat?: string; glasses?: string; beard?: string; backpack?: string };
   avatarState?: AvatarState;
-  garmentManifest?: GarmentManifest;
-  outfitDNA?: { primary: string; secondary: string; accent: string };
-  hoodieSpec?: HoodieGarmentSpec;
 };
 
 type Zone = { left: number; top: number; width: number; height: number };
-type ClothingMaps = { shirtFront: ThreeTexture; shirtBack: ThreeTexture; shirtSide: ThreeTexture; leftArmFront: ThreeTexture; leftArmBack: ThreeTexture; leftArmSide: ThreeTexture; rightArmFront: ThreeTexture; rightArmBack: ThreeTexture; rightArmSide: ThreeTexture; pantsFront: ThreeTexture; pantsBack: ThreeTexture; pantsSide: ThreeTexture };
+type ClothingMaps = { shirtFront: ThreeTexture; shirtBack: ThreeTexture; shirtSide: ThreeTexture; pantsFront: ThreeTexture; pantsBack: ThreeTexture; pantsSide: ThreeTexture };
 type FaceMaps = { front: ThreeTexture; back: ThreeTexture; side: ThreeTexture };
 
-const SHIRT_FRONT: Zone = CLASSIC_SHIRT_UV.torso_front;
-const SHIRT_BACK: Zone = CLASSIC_SHIRT_UV.torso_back;
-const SHIRT_SIDE: Zone = CLASSIC_SHIRT_UV.torso_right;
+const SHIRT_FRONT: Zone = { left: 196, top: 118, width: 128, height: 128 };
+const SHIRT_BACK: Zone = { left: 338, top: 118, width: 128, height: 128 };
+const SHIRT_SIDE: Zone = { left: 44, top: 118, width: 128, height: 128 };
 const PANTS_FRONT: Zone = { left: 196, top: 288, width: 128, height: 192 };
 const PANTS_BACK: Zone = { left: 338, top: 288, width: 128, height: 192 };
 const PANTS_SIDE: Zone = { left: 44, top: 288, width: 128, height: 192 };
@@ -103,7 +93,7 @@ function buildFallbackAtlas() {
   return canvas;
 }
 
-function useSingleClothingMaps(textureUrl?: string) {
+function useClothingMaps(textureUrl?: string) {
   const [maps, setMaps] = useState<ClothingMaps | null>(null);
   useEffect(() => {
     let alive = true;
@@ -111,17 +101,11 @@ function useSingleClothingMaps(textureUrl?: string) {
     const applyMaps = (base: CanvasImageSource) => {
       if (!alive) return;
       setMaps((prev) => {
-        Object.values(prev ?? {}).forEach((texture) => texture.dispose());
+        prev?.shirtFront.dispose(); prev?.shirtBack.dispose(); prev?.shirtSide.dispose(); prev?.pantsFront.dispose(); prev?.pantsBack.dispose(); prev?.pantsSide.dispose();
         return {
           shirtFront: makeTextureFromZone(base, SHIRT_FRONT, "#475569"),
           shirtBack: makeTextureFromZone(base, SHIRT_BACK, "#475569"),
           shirtSide: makeTextureFromZone(base, SHIRT_SIDE, "#475569"),
-          leftArmFront: makeTextureFromZone(base, CLASSIC_SHIRT_UV.left_arm_front, "#475569"),
-          leftArmBack: makeTextureFromZone(base, CLASSIC_SHIRT_UV.left_arm_back, "#475569"),
-          leftArmSide: makeTextureFromZone(base, CLASSIC_SHIRT_UV.left_arm_left, "#475569"),
-          rightArmFront: makeTextureFromZone(base, CLASSIC_SHIRT_UV.right_arm_front, "#475569"),
-          rightArmBack: makeTextureFromZone(base, CLASSIC_SHIRT_UV.right_arm_back, "#475569"),
-          rightArmSide: makeTextureFromZone(base, CLASSIC_SHIRT_UV.right_arm_right, "#475569"),
           pantsFront: makeTextureFromZone(base, PANTS_FRONT, "#334155"),
           pantsBack: makeTextureFromZone(base, PANTS_BACK, "#334155"),
           pantsSide: makeTextureFromZone(base, PANTS_SIDE, "#334155"),
@@ -137,12 +121,6 @@ function useSingleClothingMaps(textureUrl?: string) {
     return () => { alive = false; };
   }, [textureUrl]);
   return maps;
-}
-
-function useClothingMaps(textureUrl?: string, shirtTextureUrl?: string, pantsTextureUrl?: string) {
-  const shirt = useSingleClothingMaps(shirtTextureUrl ?? textureUrl);
-  const pants = useSingleClothingMaps(pantsTextureUrl ?? textureUrl);
-  return useMemo(() => shirt && pants ? { ...shirt, pantsFront: pants.pantsFront, pantsBack: pants.pantsBack, pantsSide: pants.pantsSide } : null, [shirt, pants]);
 }
 
 function makeStandardMaterial(part: AvatarRenderPart, color: string, texture: ThreeTexture | null) {
@@ -247,9 +225,7 @@ function RobloxAvatar({ maps, view, itemType, avatar, mode }: { maps: ClothingMa
   if (!maps) return null;
   // Show the full outfit: shirt zones on the torso/arms and pants zones on the legs.
   void itemType;
-  const torsoMaps: FaceMaps = { front: maps.shirtFront, back: maps.shirtBack, side: maps.shirtSide };
-  const leftArmMaps: FaceMaps = { front: maps.leftArmFront, back: maps.leftArmBack, side: maps.leftArmSide };
-  const rightArmMaps: FaceMaps = { front: maps.rightArmFront, back: maps.rightArmBack, side: maps.rightArmSide };
+  const shirtMaps: FaceMaps = { front: maps.shirtFront, back: maps.shirtBack, side: maps.shirtSide };
   // Leg sides sample the front zone: the side zone (x=44) is unpainted in the shirt-template atlas.
   const pantsMaps: FaceMaps = { front: maps.pantsFront, back: maps.pantsBack, side: maps.pantsFront };
   const baseModel = getAvatarBaseModel(avatar.modelVariant);
@@ -270,7 +246,7 @@ function RobloxAvatar({ maps, view, itemType, avatar, mode }: { maps: ClothingMa
       <group rotation-y={poseRotY}>
         {baseModel.bodyParts.map((part) => (
           <group key={part.id} position={part.position} scale={partScaleForId(part.id)}>
-            <BodyPart material={part.material} args={part.args} position={[0, 0, 0]} radius={part.radius} smoothness={part.smoothness} maps={{ shirt: part.id.toLowerCase().includes("leftarm") ? leftArmMaps : part.id.toLowerCase().includes("rightarm") ? rightArmMaps : torsoMaps, pants: pantsMaps }} skinTone={avatar.skinTone} />
+            <BodyPart material={part.material} args={part.args} position={[0, 0, 0]} radius={part.radius} smoothness={part.smoothness} maps={{ shirt: shirtMaps, pants: pantsMaps }} skinTone={avatar.skinTone} />
           </group>
         ))}
       </group>
@@ -336,7 +312,7 @@ function IdleGroup({ children, enabled }: { children: ReactNode; enabled: boolea
   return <group ref={groupRef}>{children}</group>;
 }
 
-function SceneContent({ maps, view, itemType, rotation, avatar, mode, animated = false, garmentManifest, outfitDNA, hoodieSpec }: { maps: ClothingMaps | null; view: "front" | "back"; itemType: "shirt" | "pants"; rotation: number; avatar: AvatarState; mode: PreviewMode; animated?: boolean; garmentManifest?: GarmentManifest; outfitDNA?: { primary: string; secondary: string; accent: string }; hoodieSpec?: HoodieGarmentSpec }) {
+function SceneContent({ maps, view, itemType, rotation, avatar, mode, animated = false }: { maps: ClothingMaps | null; view: "front" | "back"; itemType: "shirt" | "pants"; rotation: number; avatar: AvatarState; mode: PreviewMode; animated?: boolean }) {
   const cameraTarget: [number, number, number] = mode === "clothing" ? [0, 1.2, 0] : [0, 1.15, 0];
   return (
     <>
@@ -365,7 +341,7 @@ function SceneContent({ maps, view, itemType, rotation, avatar, mode, animated =
 
       <group rotation-y={rotation}>
         <IdleGroup enabled={animated}>
-          {hoodieSpec ? <><RobloxAvatar maps={maps} view={view} itemType={itemType} avatar={avatar} mode={mode} /><SpecHoodie spec={hoodieSpec}/></> : garmentManifest ? <FullOutfitPreview manifest={garmentManifest} outfitDNA={outfitDNA ?? {primary:"#e8e8ee",secondary:"#202938",accent:"#ef4444"}} underlyingAvatar={<RobloxAvatar maps={maps} view={view} itemType={itemType} avatar={avatar} mode={mode} />} previewMode={mode === "clothing" ? "roblox-classic" : "enhanced"} /> : <RobloxAvatar maps={maps} view={view} itemType={itemType} avatar={avatar} mode={mode} />}
+          <RobloxAvatar maps={maps} view={view} itemType={itemType} avatar={avatar} mode={mode} />
         </IdleGroup>
       </group>
 
@@ -418,12 +394,12 @@ function PreviewFallback({ textureUrl }: { textureUrl?: string }) {
   );
 }
 
-export function AvatarPreview({ textureUrl, shirtTextureUrl, pantsTextureUrl, className, avatarType = "neutral", view: controlledView, onViewChange, itemType = "shirt", dimension, previewMode, studioMode = false, animated = false, avatarState, garmentManifest, outfitDNA, hoodieSpec }: AvatarPreviewProps) {
+export function AvatarPreview({ textureUrl, className, avatarType = "neutral", view: controlledView, onViewChange, itemType = "shirt", dimension, previewMode, studioMode = false, animated = false, avatarState }: AvatarPreviewProps) {
   const resolvedMode: PreviewMode = previewMode ?? (dimension === "3d" ? "avatar" : "clothing");
   const [internalView, setInternalView] = useState<"front" | "back">("front");
   const [zoom, setZoom] = useState(resolvedMode === "clothing" ? 3.6 : 4.9);
   const [rotation, setRotation] = useState(0);
-  const maps = useClothingMaps(textureUrl, shirtTextureUrl, pantsTextureUrl);
+  const maps = useClothingMaps(textureUrl);
   const effectiveAvatar = useMemo(() => ({ ...defaultAvatarState(), ...avatarState, slots: { ...defaultAvatarState().slots, ...(avatarState?.slots ?? {}) } }), [avatarState]);
   const view = controlledView ?? internalView;
   const setView = (next: "front" | "back") => { if (!controlledView) setInternalView(next); onViewChange?.(next); };
@@ -441,7 +417,7 @@ export function AvatarPreview({ textureUrl, shirtTextureUrl, pantsTextureUrl, cl
         camera={{ position: [0, 1.3, zoom], fov: resolvedMode === "clothing" ? 34 : 38 }}
         className="w-full h-full"
       >
-        <SceneContent maps={maps} view={view} itemType={itemType} rotation={rotation} avatar={effectiveAvatar} mode={resolvedMode} animated={animated} garmentManifest={garmentManifest} outfitDNA={outfitDNA} hoodieSpec={hoodieSpec} />
+        <SceneContent maps={maps} view={view} itemType={itemType} rotation={rotation} avatar={effectiveAvatar} mode={resolvedMode} animated={animated} />
       </Canvas>
     </WebGLBoundary>
   );

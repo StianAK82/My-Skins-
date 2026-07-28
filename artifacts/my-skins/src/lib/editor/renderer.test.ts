@@ -38,7 +38,6 @@ class FakeContext {
   closePath() { this.ops.push({ name: "closePath" }); }
   roundRect(...args: number[]) { this.ops.push({ name: "roundRect", args }); }
   drawImage(...args: unknown[]) { this.ops.push({ name: "drawImage", args }); }
-  setTransform(...args: unknown[]) { this.ops.push({ name: "setTransform", args }); }
   createRadialGradient() { return new FakeGradient(); }
 }
 
