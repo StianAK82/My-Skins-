@@ -1,0 +1,1054 @@
+You are now responsible for completing My Skins AI as an autonomous production-grade AI Roblox avatar-item creation system.
+
+This is not a request for a plan, a prototype, a keyword resolver, or another hoodie-specific patch.
+
+You must inspect the complete repository, identify why the system cannot create arbitrary requested avatar items, redesign the architecture where necessary, implement the missing system, run the application, test it in a real browser, inspect the generated results, automatically correct defects, and continue until the acceptance requirements are met.
+
+Do not ask the user to write code, inspect logs, select garment templates, classify assets, correct meshes, or manually repair generated results.
+
+The customer interaction must remain:
+
+1. Describe the complete desired look.
+2. AI creates the complete look.
+3. Customer previews it.
+4. Customer may describe a revision.
+5. Customer downloads the appropriate Roblox-compatible files.
+
+==================================================
+NON-NEGOTIABLE PRODUCT REQUIREMENT
+==================================================
+
+A customer must be able to request combinations such as:
+
+- hoodie
+- T-shirt
+- sweater
+- jacket
+- winter coat
+- dress
+- skirt
+- trousers
+- jeans
+- shorts
+- football kit
+- pyjamas
+- armour
+- ninja outfit
+- cap
+- hat
+- helmet
+- hair
+- beard
+- glasses
+- mask
+- necklace
+- bag
+- backpack
+- wings
+- tail
+- horns
+- gloves
+- shoes
+- boots
+- fantasy accessories
+- original themed outfits
+
+Example:
+
+“Create long black hair, a red cap, a white oversized jacket,
+black cargo trousers, red trainers, a shoulder bag and white angel wings.”
+
+The system must identify, generate, position, validate and preview every requested component.
+
+Do not silently replace unsupported requests with a hoodie, T-shirt, coloured box, primitive shell or texture.
+
+==================================================
+1. BEGIN WITH A FORENSIC SYSTEM AUDIT
+==================================================
+
+Inspect the entire repository before modifying it.
+
+Trace:
+
+- normal Create-page request
+- all AI endpoints
+- prompt interpretation
+- GeneratedOutfitSpec
+- garment resolver
+- accessory resolver
+- geometry generators
+- material generators
+- Classic compiler
+- preview renderer
+- download generation
+- revision flow
+- safety checks
+- storage
+- tests
+- Playwright
+- CI
+- environment configuration
+
+Identify every place where the current system:
+
+- assumes all requests are clothing
+- assumes Shirt-only output
+- assumes bottom is null
+- assumes one export
+- maps words directly to fixed meshes
+- uses fixed React geometry as “AI generation”
+- converts unsupported items to a hoodie or T-shirt
+- cannot represent hair, caps, bags, wings or shoes
+- presents Enhanced Preview as Roblox-ready 3D output
+- fails when optional items are absent
+- uses two competing generation architectures
+- uses static fixture PNGs instead of compiled output
+- has server/client response-contract mismatches
+
+Return this audit in the final report, but do not stop after auditing.
+
+==================================================
+2. USE OFFICIAL ROBLOX ASSET CLASSES
+==================================================
+
+The system must stop treating all items as the same export type.
+
+Implement these canonical asset classes:
+
+A. CLASSIC_CLOTHING
+For:
+- Classic T-shirt
+- Classic Shirt
+- Classic Pants
+- optional 2D approximation of compatible designs
+
+Output:
+- canonical Roblox Classic PNG files
+
+B. LAYERED_CLOTHING
+For:
+- shirts
+- hoodies
+- sweaters
+- jackets
+- coats
+- dresses
+- skirts
+- trousers
+- shorts
+- gloves
+- compatible footwear
+
+Required production data:
+- garment mesh
+- UVs
+- textures/materials
+- armature/skin weights where required
+- inner cage
+- outer cage
+- attachment and asset metadata
+- export manifest
+
+C. RIGID_ACCESSORY
+For:
+- caps
+- hats
+- helmets
+- glasses
+- masks
+- some jewellery
+- bags
+- backpacks
+- wings
+- tails
+- horns
+- rigid footwear where appropriate
+
+Required production data:
+- mesh
+- UVs
+- textures/materials
+- correct attachment type
+- attachment transform
+- bounds
+- export metadata
+
+D. HAIR_ACCESSORY
+For:
+- short hair
+- long hair
+- curly hair
+- braids
+- ponytails
+- fantasy hair
+
+Hair must have its own shape, strands or clumps, scalp fit,
+head clearance and HairAttachment-compatible positioning.
+
+Do not implement hair as a hat, coloured sphere or fixed helmet.
+
+E. FOOTWEAR_PAIR
+For:
+- shoes
+- trainers
+- boots
+- sandals
+
+Generate and validate left and right items separately while preserving pair symmetry and design consistency.
+
+F. COMPOSITE_OUTFIT
+A complete request may contain multiple assets from all classes.
+
+==================================================
+3. CREATE A UNIVERSAL OUTFIT SPECIFICATION
+==================================================
+
+Replace hoodie-specific production contracts with a universal strict contract.
+
+Create explicit TypeScript interfaces and matching strict Zod schemas for:
+
+UniversalOutfitSpec
+AvatarItemSpec
+ClassicClothingSpec
+LayeredClothingSpec
+RigidAccessorySpec
+HairAccessorySpec
+FootwearPairSpec
+MaterialSpec
+TextureSpec
+GraphicSpec
+AttachmentSpec
+CageSpec
+RiggingSpec
+ExportPlan
+ValidationReport
+AutomaticRepairReport
+RevisionPatch
+
+UniversalOutfitSpec must contain:
+
+- generationId
+- originalPrompt
+- normalisedPrompt
+- language
+- age-appropriate safety result
+- overall style
+- colour palette
+- avatar target
+- ordered item list
+- layer order
+- outfit relationships
+- production export plan
+- unsupported-request report
+- validation state
+- generation seed
+- model diagnostics
+- revision lineage
+
+Every AvatarItemSpec must contain:
+
+- itemId
+- semantic name
+- asset class
+- Roblox accessory or clothing type
+- body slot
+- attachment target
+- left/right pairing when applicable
+- shape description
+- construction parameters
+- silhouette
+- dimensions
+- fit
+- materials
+- textures
+- graphics
+- front design
+- back design
+- placement
+- rotation
+- clearance
+- layer order
+- export requirements
+
+Use discriminated unions.
+
+Impossible combinations must fail schema validation.
+
+Examples:
+
+- a cap cannot use a wrist attachment
+- a backpack cannot use HairAttachment
+- a layered jacket must define cage and fit requirements
+- footwear must identify left and right output
+- Classic Pants cannot be used as a 3D wing export
+- hair cannot be represented as Classic Shirt
+
+==================================================
+4. MAKE THE MODEL DESIGN EVERY REQUESTED ITEM
+==================================================
+
+The production AI call must return UniversalOutfitSpec directly.
+
+Do not use:
+
+- keyword lookup as the design source
+- fixed garment selection
+- template selection as the primary generator
+- fixed hoodies with colour replacement
+- hard-coded accessories selected by Norwegian words
+- silent fallback to a known item
+
+The model must:
+
+1. Understand the complete request.
+2. List every visible requested item.
+3. Classify every item into the correct Roblox asset class.
+4. Define construction and visual parameters.
+5. Define relationships between items.
+6. Define layer order.
+7. Define attachments.
+8. Define export requirements.
+9. Preserve original requested details.
+10. Produce only age-appropriate Roblox-compatible original content.
+
+Support Norwegian and English, spelling errors and child-like wording.
+
+Examples that must be understood:
+
+“caps”
+“capps”
+“rød caps”
+“langt svart hår”
+“bag på skulderen”
+“vinger på ryggen”
+“hvite sko”
+“en jakke som er stor i armene”
+“lag hele outfiten min”
+“make me a cool skin with a cap and wings”
+
+The word “skin” must mean a complete Roblox avatar look unless the surrounding request clearly says otherwise.
+
+==================================================
+5. BUILD AN ASSET ROUTER
+==================================================
+
+Create one central production AssetRouter.
+
+Input:
+UniversalOutfitSpec
+
+For each item route to:
+
+- ClassicClothingCompiler
+- LayeredClothingPipeline
+- RigidAccessoryPipeline
+- HairAccessoryPipeline
+- FootwearPipeline
+
+Do not place category-routing logic throughout React components.
+
+React must render compiled asset results, not decide how requested words map to items.
+
+Every item must produce either:
+
+A. a validated asset result
+
+or:
+
+B. an explicit, user-visible unsupported result
+
+Never silently substitute another item.
+
+==================================================
+6. IMPLEMENT A REAL 3D ASSET PIPELINE
+==================================================
+
+A browser-only collection of fixed Three.js primitives is insufficient for arbitrary high-quality asset creation.
+
+Implement a server-side asset-building pipeline.
+
+It may use:
+
+- deterministic procedural geometry
+- headless Blender
+- approved external 3D-generation provider
+- approved image-generation provider for textures
+- mesh post-processing
+- UV generation
+- texture baking
+- PBR material generation
+- automatic topology reduction
+- cage transfer
+- skin-weight transfer
+- attachment fitting
+
+Provider/API keys must remain server-side.
+
+The system must support provider abstraction so one provider can be replaced later.
+
+Do not falsely claim that an Enhanced Preview mesh is a Roblox-uploadable asset unless the required export data is actually produced and validated.
+
+==================================================
+7. LAYERED-CLOTHING PIPELINE
+==================================================
+
+Create a reusable pipeline for deformable clothing.
+
+Required stages:
+
+1. Generate garment design from the item specification.
+2. Generate or receive a clean garment mesh.
+3. Fit it to the canonical Roblox mannequin.
+4. Generate UVs.
+5. Generate textures and PBR materials.
+6. Transfer or generate the required armature/weights.
+7. Generate or transfer inner cage.
+8. Generate outer cage around the clothing.
+9. Preserve required cage vertex/UV relationships.
+10. Validate layer ordering.
+11. Check body and garment intersections.
+12. Export an intermediate glTF/GLB preview.
+13. Export the appropriate Roblox handoff files and manifest.
+14. Mark the output honestly if final Studio conversion remains required.
+
+Implement a canonical calibrated mannequin based on Roblox reference proportions.
+
+Do not create a separate coordinate system per garment.
+
+==================================================
+8. RIGID-ACCESSORY PIPELINE
+==================================================
+
+Create reusable generation and fitting for:
+
+- cap
+- hat
+- helmet
+- glasses
+- mask
+- bag
+- backpack
+- wings
+- horns
+- tail
+- rigid jewellery
+
+Each result must have:
+
+- real item-specific geometry
+- correct attachment classification
+- attachment transform
+- scale
+- orientation
+- body clearance
+- UVs
+- texture/material
+- triangle budget
+- bounds
+- mirrored-pair rules when needed
+
+Examples:
+
+Cap:
+- curved brim
+- fitted crown
+- correct head placement
+- no head penetration
+- HairAttachment or HatAttachment-compatible positioning
+
+Backpack:
+- straps or honest preview representation
+- centred back placement
+- no torso penetration
+- correct back attachment
+
+Wings:
+- separate left/right geometry
+- symmetrical attachment
+- controlled span
+- no shoulder clipping
+- back attachment
+- correct orientation
+
+Do not render bags or wings as floating boxes.
+
+==================================================
+9. HAIR PIPELINE
+==================================================
+
+Create a dedicated HairAccessoryPipeline.
+
+Support:
+
+- short
+- long
+- straight
+- curly
+- wavy
+- braids
+- ponytail
+- buns
+- fantasy hair
+
+Generate hair as optimised clumps/cards or an appropriate low-poly Roblox-compatible representation.
+
+Validate:
+
+- scalp coverage
+- head clearance
+- face visibility
+- neck/shoulder intersections
+- cap/hat compatibility
+- attachment placement
+- back-view silhouette
+- triangle and material budget
+
+When hair and a cap are requested together:
+
+- generate both
+- calculate a compatible fit
+- compress or reshape the upper hair volume
+- preserve visible hair below and around the cap
+- validate that neither item visibly penetrates the other
+
+==================================================
+10. FOOTWEAR PIPELINE
+==================================================
+
+Generate left and right footwear separately from one pair specification.
+
+Validate:
+
+- mirrored proportions
+- identical material and design
+- left/right orientation
+- foot alignment
+- sole placement
+- leg clearance
+- ankle fit
+- no floor penetration
+
+A shoe request must not be painted only onto a trousers texture when a real 3D footwear output is promised.
+
+Classic footwear approximation may be offered separately and labelled clearly.
+
+==================================================
+11. TEXTURE AND MATERIAL GENERATION
+==================================================
+
+Generate item-specific textures rather than recolouring one base asset.
+
+Support:
+
+- fabric
+- leather
+- denim
+- metal
+- plastic
+- knit
+- wool
+- fur-like stylisation
+- emissive fantasy materials
+- transparent or cut-out hair cards when supported
+
+Generate:
+
+- base colour
+- roughness
+- metallic
+- normal detail
+- alpha where valid
+- decals and graphics
+- seam and edge detail
+
+All graphics must map to the correct UV region.
+
+Front graphics must not randomly appear on the back, arms or unrelated assets.
+
+==================================================
+12. CLASSIC CLOTHING MUST REMAIN A SEPARATE COMPILER
+==================================================
+
+Retain Roblox Classic output for compatible requests.
+
+Generate canonical:
+
+- T-shirt
+- Shirt
+- Pants
+
+textures using the official atlas layout.
+
+Classic output must be compiled from UniversalOutfitSpec.
+
+Different visible specifications must produce different PNG bytes.
+
+The preview and download must use the same byte source.
+
+Do not claim that Classic PNG files contain real 3D:
+
+- caps
+- hair
+- bags
+- wings
+- rigid shoes
+- three-dimensional hoods
+
+Show these as separate Enhanced Preview or 3D accessory outputs.
+
+==================================================
+13. AUTOMATIC VALIDATION AND REPAIR LOOP
+==================================================
+
+The user must not be required to repair generated assets manually.
+
+For each generated item run:
+
+A. Schema validation
+B. Asset-class validation
+C. Geometry validation
+D. Triangle-budget validation
+E. UV validation
+F. Texture validation
+G. Attachment validation
+H. Cage validation when required
+I. Rigging validation when required
+J. Intersection testing
+K. Pair symmetry testing
+L. Layer-order testing
+M. Preview render testing
+N. Export-manifest validation
+
+Use broad-phase and narrow-phase intersection tests.
+
+Measure:
+
+- minimum surface clearance
+- maximum penetration depth
+- penetrating sample count
+- penetrating percentage
+- body-region relationship
+- permitted contact zones
+
+If validation fails:
+
+1. classify the defect
+2. modify only relevant fields or regenerate only the failing item
+3. recompile
+4. validate again
+5. repeat up to a safe configured limit
+
+Do not regenerate the complete outfit when only one item fails.
+
+Do not show a result as ready until all required items pass.
+
+If an item cannot be made valid after all repair attempts, return a clear failure for that item rather than substituting a different object.
+
+==================================================
+14. MULTI-ITEM FITTING
+==================================================
+
+Validate the complete outfit together.
+
+Examples:
+
+- hair under cap
+- jacket over shirt
+- bag strap over jacket
+- backpack behind wings conflict
+- long hair against wings
+- trousers inside boots
+- gloves under sleeves
+- skirt above footwear
+- armour over base clothing
+
+Create an OutfitFitSolver that can adjust:
+
+- offsets
+- clearances
+- dimensions
+- layer order
+- hair volume
+- accessory angle
+- garment thickness
+
+The solver must preserve the customer’s requested look as closely as possible.
+
+==================================================
+15. STRUCTURED REVISION
+==================================================
+
+Revisions must patch the current UniversalOutfitSpec.
+
+Examples:
+
+“Make the wings bigger.”
+“Change only the cap to blue.”
+“Make the hair longer.”
+“Remove the bag.”
+“Keep everything but make the jacket oversized.”
+
+Return:
+
+- changedPaths
+- preservedPaths
+- addedItems
+- removedItems
+- regeneratedItems
+- validation results
+
+Do not convert a revision into a completely new unrelated prompt.
+
+==================================================
+16. SAFETY AND ROBLOX RULES
+==================================================
+
+Run safety classification before external generation.
+
+Block or safely transform:
+
+- sexual content
+- exploitative child content
+- hateful content
+- graphic violence
+- illegal content
+- prohibited Roblox content
+- attempts to reproduce protected brands, characters or logos without rights
+
+For protected-IP requests, create an original design inspired only by broad non-protectable attributes.
+
+Do not reproduce exact logos, trademarked characters or copyrighted artwork.
+
+Log safe reason codes without exposing secrets.
+
+==================================================
+17. HONEST PRODUCT LABELS
+==================================================
+
+The UI must distinguish:
+
+- AI Enhanced Preview
+- Roblox Classic downloadable texture
+- Generated 3D preview asset
+- Roblox-ready rigid accessory
+- Roblox-ready layered clothing
+- Requires Roblox Studio conversion
+- Validation failed
+
+Never label an Enhanced Preview “Roblox-ready” unless the technical export requirements have been validated.
+
+Do not imply that the app directly publishes assets unless a real authenticated Roblox publishing integration exists.
+
+==================================================
+18. CUSTOMER EXPERIENCE
+==================================================
+
+Keep the UI simple.
+
+The customer sees:
+
+- one prompt box
+- Create button
+- generation progress
+- complete avatar preview
+- front/back/side/rotation
+- item list
+- revision input
+- download area
+- honest status for each output
+
+Do not require users to select:
+
+- mesh type
+- attachment
+- cage
+- rig
+- Classic Shirt/Pants
+- garment template
+- export category
+
+The AI and AssetRouter must decide these.
+
+Advanced diagnostics may be hidden behind a development or admin mode.
+
+==================================================
+19. REAL APPLICATION TESTING
+==================================================
+
+Use Replit App Testing or Playwright with a real browser.
+
+Do not test only API routes or deterministic geometry fixtures.
+
+Run the normal customer Create page.
+
+Test at minimum:
+
+1.
+“White hoodie”
+
+2.
+“Long black hair and a red cap”
+
+3.
+“White jacket, blue jeans and black shoes”
+
+4.
+“A backpack and large white angel wings”
+
+5.
+“Pink princess dress, long blonde hair, crown and silver shoes”
+
+6.
+“Black ninja outfit with mask, belt and boots”
+
+7.
+“Red football kit number 10 with shorts, socks and shoes”
+
+8.
+“Oversized winter coat, wool hat, shoulder bag and boots”
+
+9.
+“Lag en blå hettegenser, svart caps, ryggsekk og hvite sko”
+
+10.
+“Langt svart hår, lilla vinger og en rosa kjole”
+
+For every case verify:
+
+- every requested item appears
+- no unrequested fallback hoodie appears
+- items have recognisably different geometry
+- items are attached correctly
+- front/back views are valid
+- no obvious floating objects
+- no severe clipping
+- materials and colours match
+- download outputs match the export plan
+- the UI reaches ready only after validation
+
+Capture screenshots for:
+
+- front
+- back
+- left
+- right
+- 45-degree
+- wireframe
+- intersection heatmap
+- item-isolation views
+
+==================================================
+20. VISUAL QUALITY GATE
+==================================================
+
+Do not automatically approve the first generated screenshot.
+
+Inspect it.
+
+Reject and repair outputs where:
+
+- torso is a box
+- hair is a helmet
+- cap floats
+- wings are rectangles
+- bag floats
+- shoes are leg textures while labelled 3D
+- sleeves disconnect
+- hands disappear
+- accessories penetrate the body
+- materials are flat when realism is requested
+- different prompts produce the same shape
+- an omitted item is silently ignored
+- the requested style is not recognisable
+
+Only approved visual results may become regression baselines.
+
+==================================================
+21. PERFORMANCE
+==================================================
+
+Use:
+
+- asynchronous generation jobs
+- per-item parallel generation when safe
+- caching by validated specification and seed
+- geometry optimisation
+- texture-size limits
+- progressive preview
+- cancellation
+- timeout handling
+- retry limits
+- provider cost tracking
+
+Do not freeze the browser during geometry generation.
+
+==================================================
+22. FAILURE HANDLING
+==================================================
+
+Use explicit safe error codes:
+
+- SAFETY_BLOCKED
+- MODEL_CONFIGURATION_ERROR
+- MODEL_REQUEST_FAILED
+- MODEL_TIMEOUT
+- INVALID_OUTFIT_SPEC
+- UNSUPPORTED_ASSET_CLASS
+- MESH_GENERATION_FAILED
+- TEXTURE_GENERATION_FAILED
+- ATTACHMENT_VALIDATION_FAILED
+- CAGE_VALIDATION_FAILED
+- RIG_VALIDATION_FAILED
+- INTERSECTION_REPAIR_FAILED
+- EXPORT_VALIDATION_FAILED
+- CLIENT_RESPONSE_INVALID
+
+Preserve:
+
+- request ID
+- generation ID
+- failing item ID
+- failing stage
+- retryability
+- safe customer message
+
+Do not hide every failure behind:
+“We couldn't finish this skin.”
+
+==================================================
+23. MIGRATION
+==================================================
+
+There must be one production architecture.
+
+Remove, redirect or isolate:
+
+- legacy complete-outfit flow
+- hoodie-only acceptance rules
+- global bottom-null assumptions
+- global Shirt-only assumptions
+- keyword-driven garment production
+- fixed accessory JSX selected by prompt words
+- duplicate public response contracts
+- static fixture files used as production output
+
+Existing hoodie work may be retained as one implementation inside the universal LayeredClothingPipeline, but it must not be the universal fallback.
+
+==================================================
+24. BUILD AND DEPENDENCY REQUIREMENTS
+==================================================
+
+Preserve strict type safety.
+
+Use explicit TypeScript contracts and z.ZodType<T> to avoid previous TypeScript generic-memory explosions.
+
+Do not weaken validation with any.
+
+Ensure each workspace directly declares every dependency it imports.
+
+Use the committed pnpm packageManager version.
+
+Run from a clean CI environment:
+
+pnpm install --frozen-lockfile
+pnpm typecheck
+pnpm build
+pnpm test
+pnpm exec playwright install --with-deps chromium
+pnpm test:visual
+
+Do not declare success from a partial local cache.
+
+==================================================
+25. AUTONOMOUS COMPLETION RULE
+==================================================
+
+Do not return after one implementation pass.
+
+Work in this loop:
+
+1. inspect
+2. implement
+3. run
+4. test
+5. render
+6. inspect screenshots
+7. identify defects
+8. repair
+9. rerun
+10. repeat
+
+Continue until the acceptance tests pass or an external dependency makes completion objectively impossible.
+
+Do not ask the user to fix code.
+
+If an external key or account permission is missing, finish all code and tests that do not require it, then report the exact secret or permission that must be configured.
+
+Never fabricate screenshots, successful provider calls, Roblox validation or CI results.
+
+==================================================
+26. DEFINITION OF DONE
+==================================================
+
+The task is complete only when:
+
+- ordinary Create page works
+- production model returns UniversalOutfitSpec
+- every requested item is represented
+- items route to correct Roblox asset classes
+- hair is generated through a hair pipeline
+- caps/bags/wings use accessory pipelines
+- clothing uses layered or Classic pipelines correctly
+- shoes are handled as paired assets
+- multiple items fit together
+- automatic repair works
+- Classic files are generated from the specification
+- 3D outputs are labelled honestly
+- browser tests pass
+- screenshots exist
+- screenshots have been inspected
+- full typecheck passes
+- full build passes
+- CI passes
+- no unsupported request silently becomes a hoodie
+
+==================================================
+27. REQUIRED FINAL REPORT
+==================================================
+
+Return:
+
+1. System audit and root causes
+2. Removed legacy paths
+3. UniversalOutfitSpec
+4. Asset-class taxonomy
+5. AssetRouter implementation
+6. AI structured-output implementation
+7. Layered clothing pipeline
+8. Rigid accessory pipeline
+9. Hair pipeline
+10. Footwear pipeline
+11. Texture/material pipeline
+12. Automatic validation pipeline
+13. Automatic repair results
+14. Multi-item fitting results
+15. Structured revision results
+16. Classic output evidence
+17. 3D export evidence
+18. All production API call sites
+19. Browser-test results
+20. Screenshot paths
+21. Visual defects found
+22. Visual defects corrected
+23. Unit tests
+24. Integration tests
+25. Visual tests
+26. Typecheck
+27. Production build
+28. CI run identifier
+29. Commit hash
+30. Honest remaining limitations
+
+Do not answer with only a plan or summary.
+
+Implement the complete system, run it, inspect it and repair it.
