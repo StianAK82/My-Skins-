@@ -14,8 +14,9 @@ test("creation UI has one child-friendly complete-skin action and no garment sel
 test("complete preview and all result actions stay in one flow", () => {
   for (const label of ["Show Back", "Try Again", "Download PNG files", "Save", "Change something", "Classic Shirt"]) assert.match(source, new RegExp(label));
   assert.doesNotMatch(source, />Upload to Roblox</);
-  assert.match(source, /shirtTextureUrl=.*pantsTextureUrl=/s);
-  assert.match(source, /robloxItemCount/);
+  assert.match(source, /shirtTextureUrl=.*hoodieSpec=/s);
+  assert.doesNotMatch(source, /pantsTextureUrl=/);
+  assert.match(source, /classicExports/);
 });
 
 test("loading resets, duplicate submissions are guarded, and progress is visible", () => {

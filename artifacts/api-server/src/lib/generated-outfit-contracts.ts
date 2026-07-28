@@ -21,6 +21,9 @@ export interface GeneratedOutfitSpec {
   safetyDecision: "allow" | "transform"; modelConfidence: number; generationSeed: string;
 }
 export interface GenerationValidationReport { schemaValid: boolean; safetyApproved: boolean; mandatoryParts: string[]; missingParts: string[]; severeIntersections: string[]; classicValid: boolean }
+
+export interface ClassicExportResult { type: "shirt" | "pants"; fileName: string; mimeType: "image/png"; width: 585; height: 559; url: string }
+export interface GenerateOutfitSpecResponse { generationId: string; outfitSpec: GeneratedOutfitSpec; validation: GenerationValidationReport; classicExports: ClassicExportResult[]; diagnostics?: { repairAttempts: number; modelLatencyMs?: number } }
 export interface OutfitRevisionRequest { generationId: string; currentOutfitSpec: GeneratedOutfitSpec; revisionText: string }
 export type RevisionValue = string | number | boolean;
 export interface OutfitRevisionChange { path: string; value: RevisionValue }
