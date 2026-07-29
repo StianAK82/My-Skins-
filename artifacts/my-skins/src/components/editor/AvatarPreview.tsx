@@ -719,7 +719,17 @@ function CustomPartsOverlay({ partId, args, customParts, baseModelId }: { partId
     }
   };
 
-  const matchingParts = customParts.filter(p => mapAttachToPartId(p.attach).includes(partId));
+  // Headcovers wrap the whole head — several stacked on the same body part just
+  // hide each other (and can swallow the figure), so keep only the first one.
+  let headcoverSeen = false;
+  const matchingParts = customParts
+    .filter(p => mapAttachToPartId(p.attach).includes(partId))
+    .filter(p => {
+      if (p.shape !== "headcover") return true;
+      if (headcoverSeen) return false;
+      headcoverSeen = true;
+      return true;
+    });
   if (matchingParts.length === 0) return null;
 
   return (
@@ -728,6 +738,9 @@ function CustomPartsOverlay({ partId, args, customParts, baseModelId }: { partId
         let pos: [number, number, number] = [0, 0, 0];
         let rot: [number, number, number] = [0, 0, 0];
         let scaleMulti = p.size === "small" ? 0.6 : p.size === "large" ? 1.4 : 1;
+        // Clamp headcovers: the shell is already sized relative to the head (1.18x),
+        // so extra size multipliers would hide the face/body. Never exceed 1.
+        if (p.shape === "headcover") scaleMulti = Math.min(scaleMulti, 1);
 
         switch (p.attach) {
           case "forehead": pos = [0, args[1]*0.2, args[2]*0.5]; rot = [0.2, 0, 0]; break;
