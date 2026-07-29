@@ -163,6 +163,7 @@ export class AiGenerationService {
       "- drage/dragon: GREEN #3E8E4E or RED #C0392B scale-textured top+bottom (scale pattern motif on chest and belly panel in lighter #D8C878), accessories MUST include {kind:'dragon_hood', color matching body} (a dragon head-hat: hood with snout, teeth and horns), {kind:'wings', color matching body} and {kind:'tail'}. shoes=boots. Fierce but kid-friendly.",
       "- engel/angel: WHITE and gold look — top=dress or hoodie in white #FFFFFF with gold trim, accessories MUST include {kind:'wings', color:'#FFFFFF'} and {kind:'aura', color:'#F5C542'} (glowing halo ring).",
       "- ninja: BLACK #1F2937 fitted top+bottom, accessories MUST include {kind:'mask', color:'#111827'} and {kind:'sword', color:'#64748B'} (blades on the back), may include {kind:'belt', color:'#C0392B'}.",
+      "- astronaut/romfarer: a real NASA-style space suit — top=jacket AND bottom=pants in WHITE #F5F7FA with dark navy #1E2A44 panel lines and small orange #E8862E accents, shoes=boots (chunky moon boots, white/grey). accessories MUST include {kind:'helmet', color:'#FFFFFF'} (round space helmet with visor) and {kind:'backpack', color:'#D8DEE8'} (life-support pack). Motif: round mission patch on the chest, small rocket and stars. NEVER leave the outfit empty for an astronaut.",
       "For ANY themed request (animal, fantasy figure, profession), pick the real-world iconic costume colors and include the matching head accessory, wings/tail when the creature has them, and a motif that makes the texture read as that theme at a glance.",
       ...(input.previousOutfit ? [
         "",
@@ -251,7 +252,23 @@ export class AiGenerationService {
     const modelResult = await this.askModel(this.buildPrompt(input, "generate"));
     this.logRawSchemaDiff(modelResult, input);
     const normalized = normalizeDesignPayload(input, modelResult);
-    const design = aiValidationService.ensureDesign(normalized);
+    let design = aiValidationService.ensureDesign(normalized);
+
+    // Safety net: a themed request (astronaut, ninja, dragon …) must never come
+    // back with an empty 3D outfit — retry once with a corrective instruction.
+    const THEMED = /drage|dragon|ninja|superhelt|superhero|zombie|astronaut|romfar|space|prinsesse|princess|enhjørning|unicorn|engel|angel|pirat|pirate|hai\b|shark|lava|kostyme|costume/i;
+    const outfit = (design as { outfit?: { top?: string; bottom?: string; accessories?: unknown[] } }).outfit;
+    const outfitEmpty = !outfit || ((outfit.top ?? "none") === "none" && (outfit.bottom ?? "none") === "none" && (outfit.accessories ?? []).length === 0);
+    if (!input.previousOutfit && outfitEmpty && THEMED.test(input.prompt)) {
+      console.warn("ai.themed_outfit_empty_retry", { prompt: input.prompt });
+      const correctivePrompt = `${this.buildPrompt(input, "generate")}\n\nIMPORTANT CORRECTION: your previous answer left the outfit empty. This prompt is a THEMED costume request — you MUST fill outfit.top, outfit.bottom, outfit.shoes and the theme's mandatory accessories exactly as the themed-look rules above describe. Returning outfit fields as none is WRONG for this request.`;
+      const retryResult = await this.askModel(correctivePrompt);
+      this.logRawSchemaDiff(retryResult, input);
+      const retryDesign = aiValidationService.ensureDesign(normalizeDesignPayload(input, retryResult));
+      const retryOutfit = (retryDesign as { outfit?: { top?: string; bottom?: string; accessories?: unknown[] } }).outfit;
+      const retryEmpty = !retryOutfit || ((retryOutfit.top ?? "none") === "none" && (retryOutfit.bottom ?? "none") === "none" && (retryOutfit.accessories ?? []).length === 0);
+      if (!retryEmpty) design = retryDesign;
+    }
     const generationId = userId
       ? await this.saveGeneration(userId, input.prompt, "generate", design, input.style ?? null)
       : randomUUID();
