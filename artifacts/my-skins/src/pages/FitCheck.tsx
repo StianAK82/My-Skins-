@@ -86,6 +86,45 @@ const COMBOS: Combo[][] = [
     { label: "Marshmallow-hode", model: "proportioned_r15", garment: { top: "hoodie", bottom: "pants" }, customParts: [{ name: "Marshmallow head", shape: "headcover", attach: "face", color: "#FFF7EE", size: "large" }] },
     { label: "Hånd-kule + skulderslange", model: "heroic", garment: { top: "hoodie", bottom: "pants" }, customParts: [{ name: "Glødende kule", shape: "orb", attach: "right_hand", color: "#22d3ee", size: "medium" }, { name: "Skulderslange", shape: "snake", attach: "left_shoulder", color: "#a855f7", size: "medium" }] },
   ],
+  // Page 9 — extreme stress combos: renderer must survive without crashing
+  [
+    {
+      label: "STRESS: alle 16 festepunkter, size large (r15)",
+      model: "proportioned_r15",
+      garment: { top: "hoodie", bottom: "pants", shoes: "boots" },
+      customParts: (["forehead", "head_top", "face", "neck", "chest", "belly", "back", "hips", "left_shoulder", "right_shoulder", "left_hand", "right_hand", "left_leg", "right_leg", "left_foot", "right_foot"] as const).map((attach, i) => ({
+        name: `Del ${i + 1}`,
+        shape: (["horn", "spike", "orb", "plate", "band", "snake", "fin", "blob"] as const)[i % 8],
+        attach,
+        color: "#f97316",
+        size: "large" as const,
+      })),
+    },
+    {
+      label: "STRESS: 4x store headcovers oppå hverandre (blocky)",
+      model: "classic_blocky",
+      garment: { top: "tshirt", bottom: "pants" },
+      customParts: [
+        { name: "Cover 1", shape: "headcover", attach: "face", color: "#FFF7EE", size: "large" },
+        { name: "Cover 2", shape: "headcover", attach: "head_top", color: "#22d3ee", size: "large" },
+        { name: "Cover 3", shape: "headcover", attach: "forehead", color: "#a855f7", size: "large" },
+        { name: "Cover 4", shape: "headcover", attach: "face", color: "#ef4444", size: "large" },
+      ],
+    },
+    {
+      label: "STRESS: alle 16 festepunkter, size large (heroic)",
+      model: "heroic",
+      garment: { top: "dress", bottom: null },
+      slots: { hair: slotItem("hair_snakes", "#3E8E4E"), back: slotItem("back_wings") },
+      customParts: (["forehead", "head_top", "face", "neck", "chest", "belly", "back", "hips", "left_shoulder", "right_shoulder", "left_hand", "right_hand", "left_leg", "right_leg", "left_foot", "right_foot"] as const).map((attach, i) => ({
+        name: `Del ${i + 1}`,
+        shape: (["headcover", "snake", "horn", "spike", "orb", "plate", "band", "fin", "blob"] as const)[i % 9],
+        attach,
+        color: "#84cc16",
+        size: "large" as const,
+      })),
+    },
+  ],
 ];
 
 const ALL_COMBOS: Combo[] = COMBOS.flat();

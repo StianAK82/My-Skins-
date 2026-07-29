@@ -98,6 +98,88 @@ test("revision mode: explicitly provided empty accessories array is respected (r
   assert.deepEqual(outfit.accessories, []);
 });
 
+test("customParts: valid headcover part is kept as-is", () => {
+  const outfit = outfitOf(normalizeDesignPayload(
+    { prompt: "marshmallow-hode", itemType: "classic_shirt" },
+    { outfit: { customParts: [{ name: "Marshmallow head", shape: "headcover", attach: "face", color: "#FFF7EE", size: "large" }] } },
+  ));
+  assert.deepEqual(outfit.customParts, [
+    { name: "Marshmallow head", shape: "headcover", attach: "face", color: "#FFF7EE", size: "large" },
+  ]);
+});
+
+test("customParts: mixed-language names are preserved and trimmed to 40 chars", () => {
+  const longName = "Kjempelang drakehorn-navnet som aldri tar slutt i det hele tatt";
+  const outfit = outfitOf(normalizeDesignPayload(
+    { prompt: "rare deler", itemType: "classic_shirt" },
+    { outfit: { customParts: [
+      { name: "  Pannehorn  ", shape: "horn", attach: "forehead", color: "#facc15", size: "medium" },
+      { name: "ドラゴンの角", shape: "spike", attach: "back", color: "#ef4444", size: "small" },
+      { name: longName, shape: "orb", attach: "left_hand", color: "#22d3ee", size: "large" },
+      { name: "", shape: "fin", attach: "hips", color: "#a855f7", size: "medium" },
+    ] } },
+  ));
+  assert.equal(outfit.customParts[0].name, "Pannehorn");
+  assert.equal(outfit.customParts[1].name, "ドラゴンの角");
+  assert.equal(outfit.customParts[2].name, longName.slice(0, 40));
+  // empty name falls back to the shape keyword
+  assert.equal(outfit.customParts[3].name, "fin");
+});
+
+test("customParts: more than 4 parts are truncated to the first 4", () => {
+  const many = ["forehead", "head_top", "chest", "back", "belly", "hips", "left_hand"].map((attach, i) => ({
+    name: `Del ${i + 1}`, shape: "orb", attach, color: "#112233", size: "large",
+  }));
+  const outfit = outfitOf(normalizeDesignPayload(
+    { prompt: "mange deler", itemType: "classic_shirt" },
+    { outfit: { customParts: many } },
+  ));
+  assert.equal(outfit.customParts.length, 4);
+  assert.deepEqual(outfit.customParts.map((p) => p.attach), ["forehead", "head_top", "chest", "back"]);
+});
+
+test("customParts: invalid shape/attach rows are dropped, valid rows survive", () => {
+  const outfit = outfitOf(normalizeDesignPayload(
+    { prompt: "rare deler", itemType: "classic_shirt" },
+    { outfit: { customParts: [
+      { name: "Ugyldig", shape: "tentacle", attach: "forehead", color: "#112233", size: "large" },
+      { name: "Feil feste", shape: "horn", attach: "elbow", color: "#112233", size: "large" },
+      { name: "OK", shape: "headcover", attach: "face", color: "not-a-color", size: "gigantic" },
+      42,
+      null,
+    ] } },
+  ));
+  assert.equal(outfit.customParts.length, 1);
+  assert.equal(outfit.customParts[0].shape, "headcover");
+  // invalid color/size fall back to safe defaults
+  assert.match(outfit.customParts[0].color, /^#[0-9a-fA-F]{6}$/);
+  assert.equal(outfit.customParts[0].size, "medium");
+});
+
+test("customParts revision: fully malformed array does not erase previous parts", () => {
+  const prevWithParts: Outfit = {
+    ...previousOutfit,
+    customParts: [{ name: "Pannehorn", shape: "horn", attach: "forehead", color: "#facc15", size: "medium" }],
+  };
+  const outfit = outfitOf(normalizeDesignPayload(
+    { prompt: "endre litt", itemType: "classic_shirt", previousOutfit: prevWithParts },
+    { outfit: { customParts: [{ shape: "nonsense", attach: "nowhere" }] } },
+  ));
+  assert.deepEqual(outfit.customParts, prevWithParts.customParts);
+});
+
+test("customParts revision: explicit empty array removes parts", () => {
+  const prevWithParts: Outfit = {
+    ...previousOutfit,
+    customParts: [{ name: "Pannehorn", shape: "horn", attach: "forehead", color: "#facc15", size: "medium" }],
+  };
+  const outfit = outfitOf(normalizeDesignPayload(
+    { prompt: "fjern hornet", itemType: "classic_shirt", previousOutfit: prevWithParts },
+    { outfit: { customParts: [] } },
+  ));
+  assert.deepEqual(outfit.customParts, []);
+});
+
 test("without previousOutfit, missing fields use defaults (no crash)", () => {
   const outfit = outfitOf(normalizeDesignPayload(
     { prompt: "en genser", itemType: "classic_shirt" },

@@ -1033,15 +1033,32 @@ function useWebGLAvailable(): boolean {
   return available;
 }
 
-class WebGLBoundary extends Component<{ fallback: ReactNode; children: ReactNode }, { failed: boolean }> {
-  state = { failed: false };
+class WebGLBoundary extends Component<{ fallback: ReactNode; resetKey?: string; children: ReactNode }, { failed: boolean; lastKey?: string }> {
+  state: { failed: boolean; lastKey?: string } = { failed: false, lastKey: this.props.resetKey };
   static getDerivedStateFromError() {
     return { failed: true };
+  }
+  componentDidUpdate() {
+    // A new design (different props) deserves a fresh render attempt so one bad
+    // AI response doesn't leave the preview stuck on the error screen forever.
+    if (this.state.failed && this.props.resetKey !== this.state.lastKey) {
+      this.setState({ failed: false, lastKey: this.props.resetKey });
+    }
   }
   render() {
     if (this.state.failed) return this.props.fallback;
     return this.props.children;
   }
+}
+
+function RenderErrorFallback() {
+  return (
+    <div className="w-full h-full flex flex-col items-center justify-center gap-3 bg-slate-950 rounded-lg p-4 text-center">
+      <div className="text-4xl" aria-hidden>🎨</div>
+      <p className="text-sm text-white font-medium">Oops! Figuren ble litt for vill for oss.</p>
+      <p className="text-xs text-white/60 max-w-[18rem]">Prøv å lage designet på nytt, eller endre litt på beskrivelsen — så fikser vi det!</p>
+    </div>
+  );
 }
 
 function PreviewFallback({ textureUrl }: { textureUrl?: string }) {
@@ -1072,7 +1089,7 @@ export function AvatarPreview({ textureUrl, className, avatarType = "neutral", v
   const scene = !webglAvailable ? (
     <PreviewFallback textureUrl={textureUrl} />
   ) : (
-    <WebGLBoundary fallback={<PreviewFallback textureUrl={textureUrl} />}>
+    <WebGLBoundary fallback={<RenderErrorFallback />} resetKey={JSON.stringify({ customParts, garment, slots: effectiveAvatar.slots, model: effectiveAvatar.modelVariant })}>
       <Canvas
         shadows
         dpr={[1, 1.5]}
