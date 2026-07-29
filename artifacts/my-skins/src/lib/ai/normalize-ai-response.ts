@@ -93,6 +93,8 @@ const aiResponseSchema = z.object({
       bottom: z.enum(["pants", "shorts", "skirt", "none"]),
       shoes: z.enum(["none", "sneakers", "boots"]),
       shoesColor: z.string().optional(),
+      topDescription: z.string().optional(),
+      bottomDescription: z.string().optional(),
       hair: z.object({
         style: z.enum(["none", "short", "long", "ponytail", "twintails", "spiky", "curly", "braids", "wavy", "snakes"]),
         color: z.string(),

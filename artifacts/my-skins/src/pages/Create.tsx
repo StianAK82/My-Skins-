@@ -652,8 +652,8 @@ export default function Create() {
       setAiPhase(t.phaseDrawing);
       const skipped = { status: 0, data: {} as { imageUrl?: string } };
       const [top, bottom, hero] = await Promise.all([
-        wantsTop ? apiPost<{ imageUrl?: string }>("/ai/hero-image", { prompt: usedPrompt.slice(0, 600), kind: "garment-top" }) : Promise.resolve(skipped),
-        wantsBottom ? apiPost<{ imageUrl?: string }>("/ai/hero-image", { prompt: usedPrompt.slice(0, 600), kind: "garment-bottom" }) : Promise.resolve(skipped),
+        wantsTop ? apiPost<{ imageUrl?: string }>("/ai/hero-image", { prompt: (response.result.outfit?.topDescription ?? usedPrompt).slice(0, 600), kind: "garment-top" }) : Promise.resolve(skipped),
+        wantsBottom ? apiPost<{ imageUrl?: string }>("/ai/hero-image", { prompt: (response.result.outfit?.bottomDescription ?? usedPrompt).slice(0, 600), kind: "garment-bottom" }) : Promise.resolve(skipped),
         wantsMotif ? apiPost<{ imageUrl?: string }>("/ai/hero-image", { prompt: usedPrompt }) : Promise.resolve(skipped),
       ]);
 
@@ -799,16 +799,16 @@ export default function Create() {
       setOutfitItems({ uploadable, previewOnly, unsupported: unsupportedItems, changed });
 
       // Textures: only regenerate garment art for pieces that changed; keep the rest.
-      const topChanged = lastOutfit.top !== outfit.top;
-      const bottomChanged = lastOutfit.bottom !== outfit.bottom;
+      const topChanged = lastOutfit.top !== outfit.top || lastOutfit.topDescription !== outfit.topDescription;
+      const bottomChanged = lastOutfit.bottom !== outfit.bottom || lastOutfit.bottomDescription !== outfit.bottomDescription;
       const combinedPrompt = `${lastPromptRef.current}. Endring: ${text}`.slice(0, 600);
       const layersNow = () => useDesignStore.getState().state.layers;
       if (topChanged || bottomChanged) {
         setAiPhase(t.phaseDrawingNew);
         const skipped = { status: 0, data: {} as { imageUrl?: string } };
         const [top, bottom] = await Promise.all([
-          topChanged && outfit.top !== "none" ? apiPost<{ imageUrl?: string }>("/ai/hero-image", { prompt: combinedPrompt, kind: "garment-top" }) : Promise.resolve(skipped),
-          bottomChanged && outfit.bottom !== "none" ? apiPost<{ imageUrl?: string }>("/ai/hero-image", { prompt: combinedPrompt, kind: "garment-bottom" }) : Promise.resolve(skipped),
+          topChanged && outfit.top !== "none" ? apiPost<{ imageUrl?: string }>("/ai/hero-image", { prompt: (outfit.topDescription ?? combinedPrompt).slice(0, 600), kind: "garment-top" }) : Promise.resolve(skipped),
+          bottomChanged && outfit.bottom !== "none" ? apiPost<{ imageUrl?: string }>("/ai/hero-image", { prompt: (outfit.bottomDescription ?? combinedPrompt).slice(0, 600), kind: "garment-bottom" }) : Promise.resolve(skipped),
         ]);
         if (topChanged) {
           for (const layer of layersNow().filter((l) => l.name === "AI-overdel")) deleteLayer(layer.id);

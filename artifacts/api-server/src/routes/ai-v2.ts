@@ -81,6 +81,7 @@ router.post("/ai/hero-image", async (req, res): Promise<void> => {
           "If the description mentions a zipper (glidelås/dragkedja): draw ONE clear full-length zipper running straight down the CENTER of the panel from top edge to bottom edge, with visible metal teeth and a zipper pull.",
           "If the description mentions buttons (knapper/knappar): draw a clear button placket down the center front with evenly spaced, visible buttons from top to bottom.",
           "Do NOT draw a hood or hood outline unless the description explicitly mentions a hood (hette/hood/hoodie/hettegenser).",
+          "Do NOT draw faces, eyes, mouths, heads, or melted/dripping creature parts on the fabric — those belong on the character's head/body, never on the clothes.",
           "Do NOT draw a person, mannequin, hanger, background, or the garment's outline/silhouette — only the flat cloth surface with its details, edge-to-edge.",
           "Even lighting, no vignette, no border, no text, no watermark.",
         ].join(" ")

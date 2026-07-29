@@ -162,6 +162,14 @@ export function normalizeDesignPayload(input: NormalizeInput, payload: unknown):
       const c = (typeof outfitSource.shoesColor === "string" && /^#[0-9a-fA-F]{6}$/.test(outfitSource.shoesColor)) ? outfitSource.shoesColor : prev?.shoesColor;
       return c ? { shoesColor: c } : {};
     })(),
+    ...(() => {
+      const extra: Record<string, string> = {};
+      const top = typeof outfitSource.topDescription === "string" && outfitSource.topDescription.trim() ? outfitSource.topDescription.trim().slice(0, 400) : prev?.topDescription;
+      const bottom = typeof outfitSource.bottomDescription === "string" && outfitSource.bottomDescription.trim() ? outfitSource.bottomDescription.trim().slice(0, 400) : prev?.bottomDescription;
+      if (top) extra.topDescription = top;
+      if (bottom) extra.bottomDescription = bottom;
+      return extra;
+    })(),
     hair: {
       style: hairStyles.includes(hairSource.style as typeof hairStyles[number]) ? hairSource.style as typeof hairStyles[number] : (prev?.hair.style ?? "none"),
       color: normalizeHex(hairSource.color) ?? prev?.hair.color ?? "#1f2937",

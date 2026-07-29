@@ -115,6 +115,8 @@ export const aiOutfitSchema = z.object({
   bottom: z.enum(["pants", "shorts", "skirt", "none"]),
   shoes: z.enum(["none", "sneakers", "boots"]),
   shoesColor: hexColorSchema.optional(),
+  topDescription: z.string().max(400).optional(),
+  bottomDescription: z.string().max(400).optional(),
   hair: z.object({
     style: z.enum(["none", "short", "long", "ponytail", "twintails", "spiky", "curly", "braids", "wavy", "snakes"]),
     color: hexColorSchema,
