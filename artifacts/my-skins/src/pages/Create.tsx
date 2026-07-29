@@ -265,6 +265,10 @@ function buildOutfitItemLists(outfit: OutfitPlan, conflicts: string[], t: Dict):
 
 export default function Create() {
   const offscreenCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  // 3D export: the AvatarPreview registers a «make .glb» function here.
+  const glbExportRef = useRef<(() => Promise<Blob>) | null>(null);
+  const [glbBusy, setGlbBusy] = useState(false);
+  const [show3dGuide, setShow3dGuide] = useState(false);
   const [lang, setLang] = useState<Lang>(() => detectLang());
   const t = getDict(lang);
   // Latest dictionary for callbacks/effects that shouldn't re-run on language change.
@@ -899,6 +903,35 @@ export default function Create() {
     return { shirt, pants: pants || undefined, tshirt };
   };
 
+  // «3D-veien»: export the live 3D preview (avatar + outfit) as a .glb file
+  // and show the parent guide. Free – it is just a file download.
+  const download3d = async () => {
+    const exporter = glbExportRef.current;
+    if (glbBusy) return;
+    if (!exporter) {
+      // No WebGL / preview not mounted – tell the user instead of doing nothing.
+      setUploadStatus(t.glbFailed);
+      return;
+    }
+    setGlbBusy(true);
+    try {
+      const blob = await exporter();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "my-skin-3d.glb";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 10_000);
+      setShow3dGuide(true);
+    } catch {
+      setUploadStatus(t.glbFailed);
+    } finally {
+      setGlbBusy(false);
+    }
+  };
+
   const uploadToRoblox = async () => {
     if (uploadBusy || !hasDesign) return;
     setUploadBusy(true);
@@ -1007,6 +1040,7 @@ export default function Create() {
               animated
               garment={garmentConfig}
               customParts={displayedCustomParts}
+              exportRef={glbExportRef}
             />
           </div>
 
@@ -1132,6 +1166,17 @@ export default function Create() {
               {uploadBusy ? <Loader2 className="mr-2 h-6 w-6 animate-spin" /> : <Upload className="mr-2 h-6 w-6" />}
               {uploadBusy ? t.working : t.sendToRoblox}
             </Button>
+            <div className="flex flex-col items-center">
+              <button
+                type="button"
+                className="rounded-xl border-2 border-violet-500/50 bg-violet-500/10 px-5 py-2.5 text-sm font-semibold text-violet-300 hover:bg-violet-500/20 disabled:opacity-40"
+                onClick={() => void download3d()}
+                disabled={!hasDesign || glbBusy || aiLoading}
+              >
+                {glbBusy ? t.glbWorking : t.glbButton}
+              </button>
+              <p className="mt-1 text-xs text-slate-500">{t.glbHint}</p>
+            </div>
             {robloxMe?.configured ? (
               robloxMe.loggedIn ? (
                 <p className="text-sm text-slate-300">
@@ -1237,6 +1282,46 @@ export default function Create() {
           </details>
         </section>
       </div>
+
+      {show3dGuide ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={() => setShow3dGuide(false)}>
+          <div
+            className="max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-2xl border-2 border-violet-500/40 bg-slate-900 p-6 shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <h2 className="mb-3 text-xl font-bold text-violet-300">{t.guideTitle}</h2>
+            <p className="mb-4 text-sm text-slate-300">{t.guideIntro}</p>
+            <ol className="mb-4 space-y-3 text-sm text-slate-200">
+              {t.guideSteps.map((step, i) => (
+                <li key={i} className="flex gap-3">
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-violet-500/30 text-xs font-bold text-violet-200">
+                    {i + 1}
+                  </span>
+                  <span>{step}</span>
+                </li>
+              ))}
+            </ol>
+            <p className="mb-5 rounded-lg border border-slate-700 bg-slate-800/60 p-3 text-xs text-slate-400">{t.guideNote}</p>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <button
+                type="button"
+                className="rounded-xl border border-violet-500/50 bg-violet-500/10 px-4 py-2 text-sm font-semibold text-violet-300 hover:bg-violet-500/20 disabled:opacity-40"
+                onClick={() => void download3d()}
+                disabled={glbBusy}
+              >
+                {glbBusy ? t.glbWorking : t.guideDownloadAgain}
+              </button>
+              <button
+                type="button"
+                className="rounded-xl bg-slate-700 px-4 py-2 text-sm font-semibold text-slate-100 hover:bg-slate-600"
+                onClick={() => setShow3dGuide(false)}
+              >
+                {t.guideClose}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

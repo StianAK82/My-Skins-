@@ -1,5 +1,5 @@
-import { Component, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Canvas, useFrame } from "@react-three/fiber";
+import { Component, useEffect, useMemo, useRef, useState, type MutableRefObject, type ReactNode } from "react";
+import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { OrbitControls, RoundedBox, ContactShadows, SoftShadows } from "@react-three/drei";
 import { EffectComposer, Bloom } from "@react-three/postprocessing";
 import * as THREE from "three";
@@ -41,6 +41,9 @@ type AvatarPreviewProps = {
   accessories?: { hair?: string; hat?: string; glasses?: string; beard?: string; backpack?: string };
   avatarState?: AvatarState;
   garment?: GarmentConfig;
+  // When provided, the preview registers a function here that exports the
+  // currently shown avatar (with outfit) as a binary .glb blob.
+  exportRef?: MutableRefObject<(() => Promise<Blob>) | null>;
   customParts?: {
     name: string;
     shape: "horn" | "spike" | "orb" | "plate" | "band" | "snake" | "fin" | "blob" | "headcover";
@@ -1070,7 +1073,7 @@ function SceneContent({ maps, view, itemType, rotation, avatar, mode, animated =
 
       <Stage />
 
-      <group rotation-y={rotation}>
+      <group name="avatar-root" rotation-y={rotation}>
         <IdleGroup enabled={animated}>
           <RobloxAvatar maps={maps} view={view} itemType={itemType} avatar={avatar} mode={mode} garment={garment} customParts={customParts} />
         </IdleGroup>
@@ -1083,6 +1086,25 @@ function SceneContent({ maps, view, itemType, rotation, avatar, mode, animated =
       <OrbitControls enablePan={false} enableDamping dampingFactor={0.08} minPolarAngle={0.2} maxPolarAngle={Math.PI / 1.8} minDistance={2.2} maxDistance={6.2} target={cameraTarget} />
     </>
   );
+}
+
+// Registers a "export the avatar as a .glb file" function on the ref the page
+// hands us. Lives inside <Canvas> so it can reach the live three.js scene.
+function ExportBridge({ exportRef }: { exportRef: MutableRefObject<(() => Promise<Blob>) | null> }) {
+  const scene = useThree((s) => s.scene);
+  useEffect(() => {
+    exportRef.current = async () => {
+      const { GLTFExporter } = await import("three/examples/jsm/exporters/GLTFExporter.js");
+      const root = scene.getObjectByName("avatar-root") ?? scene;
+      const result = await new GLTFExporter().parseAsync(root, { binary: true, onlyVisible: true });
+      if (result instanceof ArrayBuffer) return new Blob([result], { type: "model/gltf-binary" });
+      return new Blob([JSON.stringify(result)], { type: "model/gltf+json" });
+    };
+    return () => {
+      exportRef.current = null;
+    };
+  }, [scene, exportRef]);
+  return null;
 }
 
 function detectWebGL(): boolean {
@@ -1142,7 +1164,7 @@ function PreviewFallback({ textureUrl }: { textureUrl?: string }) {
   );
 }
 
-export function AvatarPreview({ textureUrl, className, avatarType = "neutral", view: controlledView, onViewChange, itemType = "shirt", dimension, previewMode, studioMode = false, animated = false, avatarState, garment, customParts }: AvatarPreviewProps) {
+export function AvatarPreview({ textureUrl, className, avatarType = "neutral", view: controlledView, onViewChange, itemType = "shirt", dimension, previewMode, studioMode = false, animated = false, avatarState, garment, customParts, exportRef }: AvatarPreviewProps) {
   const resolvedMode: PreviewMode = previewMode ?? (dimension === "3d" ? "avatar" : "clothing");
   const [internalView, setInternalView] = useState<"front" | "back">("front");
   const [zoom, setZoom] = useState(resolvedMode === "clothing" ? 3.6 : 4.9);
@@ -1166,6 +1188,7 @@ export function AvatarPreview({ textureUrl, className, avatarType = "neutral", v
         className="w-full h-full"
       >
         <SceneContent maps={maps} view={view} itemType={itemType} rotation={rotation} avatar={effectiveAvatar} mode={resolvedMode} animated={animated} garment={garment} customParts={customParts} />
+        {exportRef ? <ExportBridge exportRef={exportRef} /> : null}
       </Canvas>
     </WebGLBoundary>
   );

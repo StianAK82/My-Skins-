@@ -103,6 +103,17 @@ export type Dict = {
   sendingToPayment: string;
   cantStartPayment: string;
   genericFail: string;
+  // 2D/3D delivery choice + parent guide for the 3D route.
+  glbButton: string;
+  glbHint: string;
+  glbWorking: string;
+  glbFailed: string;
+  guideTitle: string;
+  guideIntro: string;
+  guideSteps: string[];
+  guideNote: string;
+  guideClose: string;
+  guideDownloadAgain: string;
 };
 
 const no: Dict = {
@@ -198,6 +209,22 @@ const no: Dict = {
   sendingToPayment: "Sender deg til betaling (10 kr for 3 opplastinger)…",
   cantStartPayment: "Kunne ikke starte betaling. Prøv igjen.",
   genericFail: "Noe gikk galt. Prøv igjen.",
+  glbButton: "🧊 Last ned som 3D-fil (gratis)",
+  glbHint: "For foreldre med Roblox Studio – hele figuren som 3D-modell",
+  glbWorking: "Lager 3D-filen…",
+  glbFailed: "Kunne ikke lage 3D-filen. Prøv igjen (3D-visningen må være synlig).",
+  guideTitle: "🧊 Slik bruker du 3D-filen (for en voksen)",
+  guideIntro: "3D-filen (.glb) inneholder hele figuren med antrekket – akkurat slik den ser ut her. For å få den inn i Roblox trengs Roblox Studio på en PC/Mac. Slik gjør dere det:",
+  guideSteps: [
+    "Last ned og installer Roblox Studio gratis fra create.roblox.com (logg inn med barnets konto eller din egen).",
+    "Åpne Roblox Studio og lag et nytt prosjekt (velg «Baseplate»).",
+    "Dra 3D-filen (my-skin-3d.glb) rett inn i 3D-vinduet i Studio – figuren dukker opp som en modell.",
+    "Vil dere at figuren skal kunne BRUKES som avatar-klær, må plagget gjøres om til «layered clothing» med Roblox sitt Avatar Setup-verktøy i Studio (fanen «Avatar» → «Avatar Setup»). Dette er det avanserte steget – Roblox har egne videoguider for det.",
+    "For å SELGE/publisere 3D-plagg på Roblox krever Roblox: ID-verifisering eller foreldrekobling på kontoen, Roblox Plus/Premium-abonnement, 80 Robux i opplastingsavgift og et publiseringsforskudd. Dette er Roblox sine regler og gjelder alle.",
+  ],
+  guideNote: "Tips: 2D-knappen («Send til Roblox») er fortsatt den enkleste veien – den fungerer uten Studio. 3D-filen kan også åpnes i gratisprogrammer som Blender, eller bare vises frem 😊",
+  guideClose: "Lukk",
+  guideDownloadAgain: "📥 Last ned 3D-filen på nytt",
 };
 
 const en: Dict = {
@@ -291,6 +318,22 @@ const en: Dict = {
   createButton: "Make skin",
   sendingDirect: "Sending your outfit straight to your Roblox account…",
   sendingToPayment: "Taking you to payment (10 kr for 3 uploads)…",
+  glbButton: "🧊 Download as 3D file (free)",
+  glbHint: "For parents with Roblox Studio – the whole avatar as a 3D model",
+  glbWorking: "Creating the 3D file…",
+  glbFailed: "Couldn't create the 3D file. Try again (the 3D preview must be visible).",
+  guideTitle: "🧊 How to use the 3D file (for an adult)",
+  guideIntro: "The 3D file (.glb) contains the whole avatar with the outfit – exactly as it looks here. To get it into Roblox you need Roblox Studio on a PC/Mac. Here's how:",
+  guideSteps: [
+    "Download and install Roblox Studio for free from create.roblox.com (sign in with your child's account or your own).",
+    "Open Roblox Studio and create a new project (choose “Baseplate”).",
+    "Drag the 3D file (my-skin-3d.glb) straight into the 3D viewport in Studio – the avatar appears as a model.",
+    "To make the outfit WEARABLE as avatar clothing, the garment must be converted to “layered clothing” with Roblox's Avatar Setup tool in Studio (the “Avatar” tab → “Avatar Setup”). This is the advanced step – Roblox has its own video guides for it.",
+    "To SELL/publish 3D items on Roblox, Roblox requires: ID verification or a linked parent account, a Roblox Plus/Premium membership, an 80 Robux upload fee and a publishing advance. These are Roblox's rules and apply to everyone.",
+  ],
+  guideNote: "Tip: the 2D button (“Send to Roblox”) is still the easiest route – it works without Studio. The 3D file can also be opened in free tools like Blender, or just shown off 😊",
+  guideClose: "Close",
+  guideDownloadAgain: "📥 Download the 3D file again",
   cantStartPayment: "Couldn't start payment. Please try again.",
   genericFail: "Something went wrong. Please try again.",
 };
