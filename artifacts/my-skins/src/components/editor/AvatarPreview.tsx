@@ -1,6 +1,6 @@
 import { Component, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
-import { OrbitControls, RoundedBox, Environment, Lightformer, ContactShadows, SoftShadows } from "@react-three/drei";
+import { OrbitControls, RoundedBox, ContactShadows, SoftShadows } from "@react-three/drei";
 import { EffectComposer, Bloom } from "@react-three/postprocessing";
 import * as THREE from "three";
 import { Button } from "@/components/ui/button";
@@ -932,21 +932,25 @@ function RobloxAvatar({ maps, view, itemType, avatar, mode, garment, customParts
 }
 
 function StudioEnvironment() {
+  // NOTE: Do NOT use <Environment> with <Lightformer> children here — the
+  // light panels leak into the visible scene as giant walls that slice
+  // through the avatar when the camera orbits. Plain lights instead.
   return (
-    <Environment resolution={256} frames={1}>
-      <color attach="background" args={["#050811"]} />
-      <Lightformer intensity={3} rotation-x={Math.PI / 2} position={[0, 5, -2]} scale={[12, 12, 1]} color="#ffffff" />
-      <Lightformer intensity={2} rotation-y={Math.PI / 2} position={[-5, 2, 0]} scale={[10, 10, 1]} color="#ec4899" />
-      <Lightformer intensity={2} rotation-y={-Math.PI / 2} position={[5, 2, 0]} scale={[10, 10, 1]} color="#38bdf8" />
-      <Lightformer intensity={1.5} rotation-y={Math.PI} position={[0, 2, 4]} scale={[8, 6, 1]} color="#ffffff" />
-    </Environment>
+    <>
+      <ambientLight intensity={0.5} color="#dbeafe" />
+      <directionalLight position={[0, 6, -3]} intensity={1.1} color="#ffffff" />
+      <directionalLight position={[-5, 2, 1]} intensity={1.4} color="#ec4899" />
+      <directionalLight position={[5, 2, 1]} intensity={1.4} color="#38bdf8" />
+    </>
   );
 }
 
 function Stage() {
   return (
     <group position={[0, -0.42, 0]}>
-      <mesh rotation-x={-Math.PI / 2} receiveShadow position={[0, 0, 0]}>
+      {/* Floor disc — NOTE: cylinderGeometry is already flat (axis along Y);
+          rotating it -90° turns it into a giant vertical wall through the avatar. */}
+      <mesh receiveShadow position={[0, -0.05, 0]}>
         <cylinderGeometry args={[2.8, 2.8, 0.1, 64]} />
         <meshStandardMaterial color="#05070d" roughness={0.2} metalness={0.6} />
       </mesh>
