@@ -298,8 +298,19 @@ export default function Create() {
   const [reviseText, setReviseText] = useState("");
   // History stack: one snapshot per successful revision, so «Angre» rolls back one step.
   const [undoStack, setUndoStack] = useState<UndoSnapshot[]>([]);
+  // When the AI proposes several headcovers, the child picks which one is shown (null = first).
+  const [selectedHeadcover, setSelectedHeadcover] = useState<string | null>(null);
 
   const { state, setAiPlanPreview, setAiAvatarPreview, deleteLayer, addLayer, applyAiPlan, setPaintSwatch, setAvatarSlot, loadSnapshot } = useDesignStore();
+
+  // The renderer only shows one headcover at a time; when the AI proposes several,
+  // the child picks which one via chips. We filter here so the preview updates instantly.
+  const headcoverOptions = (lastOutfit?.customParts ?? []).filter((p) => p.shape === "headcover");
+  const shownHeadcover = selectedHeadcover ?? headcoverOptions[0]?.name ?? null;
+  const displayedCustomParts =
+    headcoverOptions.length > 1
+      ? lastOutfit?.customParts?.filter((p) => p.shape !== "headcover" || p.name === shownHeadcover)
+      : lastOutfit?.customParts;
   const hasDesign = state.layers.length > 0 || Boolean(state.baseColor);
 
   const refreshStatus = useCallback(async () => {
@@ -593,6 +604,7 @@ export default function Create() {
       }
       // Remember the plan so the child can revise it («gjør vingene større») without starting over.
       setLastOutfit(outfit ?? null);
+      setSelectedHeadcover(null);
       lastPromptRef.current = usedPrompt;
       const payload = {
         model: "ClassicTextureAI.v3",
@@ -822,6 +834,10 @@ export default function Create() {
       }
 
       setLastOutfit(outfit);
+      // Keep the child's headcover choice only if that part still exists in the new plan.
+      setSelectedHeadcover((current) =>
+        current && (outfit.customParts ?? []).some((p) => p.shape === "headcover" && p.name === current) ? current : null,
+      );
       lastPromptRef.current = `${lastPromptRef.current}. ${text}`.slice(0, 900);
       setReviseText("");
       // The revision succeeded – remember what it replaced so «Angre» can undo it.
@@ -849,6 +865,7 @@ export default function Create() {
     loadSnapshot(structuredClone(snapshot.designState));
     setGarmentConfig(snapshot.garmentConfig);
     setLastOutfit(snapshot.outfit);
+    setSelectedHeadcover(null);
     lastPromptRef.current = snapshot.prompt;
     setOutfitItems(snapshot.outfitItems);
     outfitRef.current = snapshot.outfitRefValue;
@@ -977,9 +994,32 @@ export default function Create() {
               studioMode
               animated
               garment={garmentConfig}
-              customParts={lastOutfit?.customParts}
+              customParts={displayedCustomParts}
             />
           </div>
+
+          {headcoverOptions.length > 1 && (
+            <div className="mt-4 rounded-xl border border-slate-700 bg-slate-900/60 p-4 text-sm">
+              <div className="mb-2 font-semibold text-violet-300">{t.headcoverChoiceTitle}</div>
+              <div className="flex flex-wrap gap-2">
+                {headcoverOptions.map((part) => (
+                  <button
+                    key={part.name}
+                    type="button"
+                    onClick={() => setSelectedHeadcover(part.name)}
+                    className={`flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs transition active:scale-95 ${
+                      part.name === shownHeadcover
+                        ? "border-violet-400 bg-violet-500/20 text-violet-200"
+                        : "border-slate-600/60 bg-slate-800/60 text-slate-300 hover:border-slate-500"
+                    }`}
+                  >
+                    <span className="h-3 w-3 rounded-full border border-slate-500/50" style={{ backgroundColor: part.color }} />
+                    {part.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           
           {outfitItems && (outfitItems.uploadable.length > 0 || outfitItems.previewOnly.length > 0 || outfitItems.unsupported.length > 0 || (outfitItems.changed?.length ?? 0) > 0) && (
             <div className="mt-4 rounded-xl border border-slate-700 bg-slate-900/60 p-4 space-y-3 text-sm">
