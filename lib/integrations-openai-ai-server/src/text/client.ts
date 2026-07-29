@@ -14,8 +14,7 @@ export interface GarmentClassification {
 export async function classifyGarmentDescription(description: string): Promise<GarmentClassification> {
   assertOpenAiConfigured();
   const response = await openai.chat.completions.create({
-    model: "gpt-4o-mini",
-    temperature: 0,
+    model: "gpt-5.4-mini",
     response_format: { type: "json_object" },
     messages: [
       {
