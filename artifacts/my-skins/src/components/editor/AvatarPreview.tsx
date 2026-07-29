@@ -403,6 +403,39 @@ function GarmentOverlay({
             />
           )}
 
+          {/* PRINCESS GOWN SKIRT — one big bell from the waist down (like the
+              real Roblox ballgowns), rendered ONCE on the lower torso instead
+              of per-leg puffs. */}
+          {top === "dress" && (partId === "lowerTorso" || partId === "hips" || (partId === "torso" && baseModelId !== "proportioned_r15" && baseModelId !== "heroic")) && (
+            <group position={[0, -args[1] / 2, 0]} scale={[1, 1, Math.max(0.7, args[2] / args[0])]}>
+              {/* main bell */}
+              <mesh position={[0, -args[1] * 0.7, 0]} castShadow receiveShadow>
+                <cylinderGeometry args={[args[0] * 0.58, args[0] * 1.1, args[1] * 1.6, 24]} />
+                <meshStandardMaterial map={maps.shirt.front} color={shirtColor} roughness={0.6} metalness={0.08} />
+              </mesh>
+              {/* hem ring for a soft rounded bottom edge */}
+              <mesh position={[0, -args[1] * 1.5, 0]} rotation={[Math.PI / 2, 0, 0]} castShadow>
+                <torusGeometry args={[args[0] * 1.06, args[0] * 0.07, 12, 32]} />
+                <meshStandardMaterial map={maps.shirt.front} color={shirtColor} roughness={0.6} metalness={0.08} />
+              </mesh>
+              {/* waist sash */}
+              <mesh position={[0, 0.02, 0]} castShadow>
+                <cylinderGeometry args={[args[0] * 0.64, args[0] * 0.66, 0.1, 24]} />
+                <meshStandardMaterial color={shirtColor} roughness={0.45} metalness={0.2} />
+              </mesh>
+            </group>
+          )}
+
+          {/* PUFF SLEEVES — small rounded shoulder puffs, classic princess look */}
+          {top === "dress" && (isBlockyArm || isR15TopArm) && (
+            <group position={[0, args[1] * (isR15TopArm ? 0.3 : 0.35), 0]}>
+              <mesh castShadow scale={[1.25, 0.9, 1.25]}>
+                <sphereGeometry args={[Math.max(args[0], args[2]) * 0.62, 16, 16]} />
+                <meshStandardMaterial map={maps.shirt.side} color={shirtColor} roughness={0.6} metalness={0.08} />
+              </mesh>
+            </group>
+          )}
+
           {/* RIBBED HEM (TORSO) */}
           {(top === "hoodie" || top === "sweater" || top === "jacket") && isBottomTorso && (
             <group position={[0, -args[1]/2 + 0.06, 0]}>
@@ -565,7 +598,7 @@ function GarmentOverlay({
       )}
 
       {/* SKIRT */}
-      {bottom === "skirt" && isTopLeg && (
+      {bottom === "skirt" && top !== "dress" && isTopLeg && (
         <group position={[0, baseModelId === 'proportioned_r15' ? 0 : args[1]*0.15, 0]}>
           {/* Fitted waistband */}
           <group position={[0, args[1]/2 - 0.04, 0]}>
@@ -583,18 +616,7 @@ function GarmentOverlay({
         </group>
       )}
 
-      {/* DRESS SKIRT (when dress is the top) */}
-      {top === "dress" && isTopLeg && (
-        <group position={[0, baseModelId === 'proportioned_r15' ? 0 : args[1]*0.15, 0]}>
-          {/* A-line flare */}
-          <group position={[0, baseModelId === 'proportioned_r15' ? -0.05 : 0.1, 0]}>
-            <mesh castShadow receiveShadow rotation={[0, 0, 0]}>
-              <cylinderGeometry args={[args[0] * 1.5, args[0] * 1.08, baseModelId === 'proportioned_r15' ? args[1] * 0.9 : args[1] * 0.7, 16]} />
-              <meshStandardMaterial map={maps.shirt.front} color={shirtColor} roughness={0.75} metalness={0.05} />
-            </mesh>
-          </group>
-        </group>
-      )}
+      {/* (Princess gown skirt renders once on the lower torso — no per-leg puffs.) */}
 
       {/* SNEAKERS */}
       {shoes === "sneakers" && isBottomLeg && (
