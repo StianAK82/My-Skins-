@@ -23,7 +23,7 @@ type Combo = {
   slots?: Partial<Record<AvatarCosmeticSlot, AvatarSlotItem | null>>;
   customParts?: Array<{
     name: string;
-    shape: "horn" | "spike" | "orb" | "plate" | "band" | "snake" | "fin" | "blob";
+    shape: "horn" | "spike" | "orb" | "plate" | "band" | "snake" | "fin" | "blob" | "headcover";
     attach: "forehead" | "head_top" | "face" | "neck" | "chest" | "belly" | "back" | "hips" | "left_shoulder" | "right_shoulder" | "left_hand" | "right_hand" | "left_leg" | "right_leg" | "left_foot" | "right_foot";
     color: string;
     size: "small" | "medium" | "large";
@@ -83,6 +83,7 @@ const COMBOS: Combo[][] = [
   [
     { label: "Slangehår + pannehorn", model: "proportioned_r15", garment: { top: "tshirt", bottom: "pants" }, slots: { hair: slotItem("hair_snakes", "#3E8E4E") }, customParts: [{ name: "Pannehorn", shape: "horn", attach: "forehead", color: "#facc15", size: "medium" }] },
     { label: "Ryggpigger + magehorn", model: "classic_blocky", garment: { top: "tshirt", bottom: "pants" }, customParts: [{ name: "Ryggpigger", shape: "spike", attach: "back", color: "#ef4444", size: "large" }, { name: "Magehorn", shape: "horn", attach: "belly", color: "#3b82f6", size: "large" }] },
+    { label: "Marshmallow-hode", model: "proportioned_r15", garment: { top: "hoodie", bottom: "pants" }, customParts: [{ name: "Marshmallow head", shape: "headcover", attach: "face", color: "#FFF7EE", size: "large" }] },
     { label: "Hånd-kule + skulderslange", model: "heroic", garment: { top: "hoodie", bottom: "pants" }, customParts: [{ name: "Glødende kule", shape: "orb", attach: "right_hand", color: "#22d3ee", size: "medium" }, { name: "Skulderslange", shape: "snake", attach: "left_shoulder", color: "#a855f7", size: "medium" }] },
   ],
 ];

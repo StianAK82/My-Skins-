@@ -102,7 +102,7 @@ const aiResponseSchema = z.object({
       })).max(6),
       customParts: z.array(z.object({
         name: z.string(),
-        shape: z.enum(["horn", "spike", "orb", "plate", "band", "snake", "fin", "blob"]),
+        shape: z.enum(["horn", "spike", "orb", "plate", "band", "snake", "fin", "blob", "headcover"]),
         attach: z.enum(["forehead", "head_top", "face", "neck", "chest", "belly", "back", "hips", "left_shoulder", "right_shoulder", "left_hand", "right_hand", "left_leg", "right_leg", "left_foot", "right_foot"]),
         color: z.string(),
         size: z.enum(["small", "medium", "large"]),

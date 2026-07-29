@@ -1002,8 +1002,9 @@ export default function Create() {
                 <div>
                   <div className="flex items-center gap-2 mb-2">
                     <Upload className="h-4 w-4 text-emerald-400" />
-                    <span className="font-semibold text-emerald-400">Lastes opp til Roblox</span>
+                    <span className="font-semibold text-emerald-400">Blir med inn i Roblox 🎮</span>
                   </div>
+                  <p className="text-xs text-slate-400 mb-2">Klær (gensere, bukser, kjoler …) kan lastes opp, det bestemmer Roblox.</p>
                   <div className="flex flex-wrap gap-2">
                     {outfitItems.uploadable.map((item, i) => (
                       <span key={i} className="px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-xs">
@@ -1018,8 +1019,9 @@ export default function Create() {
                 <div>
                   <div className="flex items-center gap-2 mb-2">
                     <Sparkles className="h-4 w-4 text-sky-400" />
-                    <span className="font-semibold text-sky-400">Kun forhåndsvisning</span>
+                    <span className="font-semibold text-sky-400">Ser du bare her 👀</span>
                   </div>
+                  <p className="text-xs text-slate-400 mb-2">Roblox lar oss ikke laste opp slike 3D-deler ennå – men de vises på figuren din her!</p>
                   <div className="flex flex-wrap gap-2">
                     {outfitItems.previewOnly.map((item, i) => (
                       <span key={i} className="px-3 py-1 rounded-full bg-sky-500/20 text-sky-300 border border-sky-500/30 text-xs">

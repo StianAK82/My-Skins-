@@ -42,7 +42,7 @@ type AvatarPreviewProps = {
   garment?: GarmentConfig;
   customParts?: {
     name: string;
-    shape: "horn" | "spike" | "orb" | "plate" | "band" | "snake" | "fin" | "blob";
+    shape: "horn" | "spike" | "orb" | "plate" | "band" | "snake" | "fin" | "blob" | "headcover";
     attach: "forehead" | "head_top" | "face" | "neck" | "chest" | "belly" | "back" | "hips" | "left_shoulder" | "right_shoulder" | "left_hand" | "right_hand" | "left_leg" | "right_leg" | "left_foot" | "right_foot";
     color: string;
     size: "small" | "medium" | "large";
@@ -849,6 +849,21 @@ function CustomPartsOverlay({ partId, args, customParts, baseModelId }: { partId
                   <sphereGeometry args={[0.12, 16, 16]} />
                   {m}
                 </mesh>
+              );
+            case "headcover":
+              // Wraps the whole head (marshmallow head, pumpkin head, ...):
+              // a soft rounded shell slightly larger than the head part itself.
+              // Rendered relative to the head group's center, ignoring the attach offset.
+              return (
+                <group position={[-pos[0], -pos[1], -pos[2]]} rotation={[-rot[0], -rot[1], -rot[2]]}>
+                  <RoundedBox
+                    args={[args[0] * 1.18, args[1] * 1.18, args[2] * 1.18]}
+                    radius={Math.min(args[0], args[1], args[2]) * 0.35}
+                    smoothness={4}
+                  >
+                    <meshStandardMaterial color={p.color} roughness={0.85} metalness={0} />
+                  </RoundedBox>
+                </group>
               );
             default:
               return null;

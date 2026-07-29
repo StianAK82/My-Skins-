@@ -168,7 +168,7 @@ export function normalizeDesignPayload(input: NormalizeInput, payload: unknown):
       return [{ kind: row.kind as typeof accessoryKinds[number], color: normalizeHex(row.color) ?? colorPalette[0] ?? "#334155" }];
     }),
     customParts: (() => {
-      const shapes = ["horn", "spike", "orb", "plate", "band", "snake", "fin", "blob"] as const;
+      const shapes = ["horn", "spike", "orb", "plate", "band", "snake", "fin", "blob", "headcover"] as const;
       const attaches = ["forehead", "head_top", "face", "neck", "chest", "belly", "back", "hips", "left_shoulder", "right_shoulder", "left_hand", "right_hand", "left_leg", "right_leg", "left_foot", "right_foot"] as const;
       const sizes = ["small", "medium", "large"] as const;
       const modelSent = Array.isArray(outfitSource.customParts);
