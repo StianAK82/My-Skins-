@@ -143,16 +143,18 @@ function useClothingMaps(textureUrl?: string) {
 
 function makeStandardMaterial(part: AvatarRenderPart, color: string, texture: ThreeTexture | null) {
   return (
-    <meshStandardMaterial
-      color={part.useAssetColor ? color : (part.color ?? "#94a3b8")}
+    <meshPhysicalMaterial
+      color={texture ? "#ffffff" : (part.useAssetColor ? color : (part.color ?? "#94a3b8"))}
       map={texture ?? undefined}
       emissive={part.emissive}
       emissiveIntensity={part.emissiveIntensity ? part.emissiveIntensity * 3 : 0}
       transparent={part.transparent}
       opacity={part.opacity ?? 1}
-      metalness={part.metalness ?? 0.1}
-      roughness={part.roughness ?? 0.68}
+      metalness={part.metalness ?? 0.05}
+      roughness={part.roughness ?? 0.5}
       alphaTest={part.alphaTest}
+      clearcoat={part.metalness ? 0.0 : 0.2}
+      clearcoatRoughness={0.3}
     />
   );
 }
@@ -170,7 +172,7 @@ function RenderAssetPart({ part, assetColor }: { part: AvatarRenderPart; assetCo
     // Radius must stay below half the smallest dimension or the geometry folds into spikes.
     const maxRadius = Math.max(0.005, Math.min(part.args[0], part.args[1], part.args[2]) / 2 - 0.005);
     const radius = Math.min(part.radius ?? 0.04, maxRadius);
-    return <RoundedBox args={part.args as [number, number, number]} radius={radius} smoothness={part.smoothness ?? 4} {...shared}>{makeStandardMaterial(part, assetColor, texture)}</RoundedBox>;
+    return <RoundedBox args={part.args as [number, number, number]} radius={radius} smoothness={part.smoothness ?? 12} {...shared}>{makeStandardMaterial(part, assetColor, texture)}</RoundedBox>;
   }
   if (part.primitive === "box") {
     return <mesh {...shared}><boxGeometry args={part.args as [number, number, number]} />{makeStandardMaterial(part, assetColor, texture)}</mesh>;
@@ -213,7 +215,7 @@ function AvatarCosmetic({ slot, avatar, mode }: { slot: AvatarCosmeticSlot; avat
   useEffect(() => () => texture?.dispose(), [texture]);
 
   if (asset.renderMode === "decal") {
-    return <mesh position={[position[0], position[1], position[2] + 0.02]} rotation={rotation} scale={scale}><planeGeometry args={[0.36, 0.36]} /><meshStandardMaterial map={texture ?? undefined} transparent alphaTest={0.1} /></mesh>;
+    return <mesh position={[position[0], position[1], position[2] + 0.02]} rotation={rotation} scale={scale}><planeGeometry args={[0.36, 0.36]} /><meshPhysicalMaterial map={texture ?? undefined} transparent alphaTest={0.1} roughness={0.75} metalness={0.02} sheen={0.4} sheenRoughness={0.5} /></mesh>;
   }
 
   return (
@@ -233,20 +235,20 @@ function BodyPart({ material, args, position, radius, smoothness, maps, skinTone
   skinTone: string;
 }) {
   if (material === "skin") {
-    return <RoundedBox args={args} radius={radius} smoothness={smoothness} position={position} castShadow frustumCulled={false}><meshStandardMaterial color={skinTone} roughness={0.35} metalness={0.05} /></RoundedBox>;
+    return <RoundedBox args={args} radius={radius} smoothness={smoothness} position={position} castShadow frustumCulled={false}><meshPhysicalMaterial color={skinTone} roughness={0.6} metalness={0.05} /></RoundedBox>;
   }
   const mapSet = material === "shirt" ? maps.shirt : maps.pants;
-  const baseColor = material === "shirt" ? "#f8fafc" : "#e2e8f0";
-  const topColor = material === "shirt" ? "#dbeafe" : "#cbd5e1";
-  const bottomColor = material === "shirt" ? "#e2e8f0" : "#bfdbfe";
+  const baseColor = "#ffffff";
+  const topColor = "#ffffff";
+  const bottomColor = "#ffffff";
   return (
     <RoundedBox args={args} radius={radius} smoothness={smoothness} position={position} castShadow frustumCulled={false}>
-      <meshStandardMaterial attach="material-0" map={mapSet.side} color={baseColor} roughness={0.4} metalness={0.05} />
-      <meshStandardMaterial attach="material-1" map={mapSet.side} color={baseColor} roughness={0.4} metalness={0.05} />
-      <meshStandardMaterial attach="material-2" color={topColor} roughness={0.4} metalness={0.05} />
-      <meshStandardMaterial attach="material-3" color={bottomColor} roughness={0.4} metalness={0.05} />
-      <meshStandardMaterial attach="material-4" map={mapSet.front} color={baseColor} roughness={0.4} metalness={0.05} />
-      <meshStandardMaterial attach="material-5" map={mapSet.back} color={baseColor} roughness={0.4} metalness={0.05} />
+      <meshPhysicalMaterial attach="material-0" map={mapSet.side} color={baseColor} roughness={0.75} metalness={0.02} sheen={0.4} sheenRoughness={0.5} />
+      <meshPhysicalMaterial attach="material-1" map={mapSet.side} color={baseColor} roughness={0.75} metalness={0.02} sheen={0.4} sheenRoughness={0.5} />
+      <meshPhysicalMaterial attach="material-2" color={topColor} roughness={0.75} metalness={0.02} sheen={0.4} sheenRoughness={0.5} />
+      <meshPhysicalMaterial attach="material-3" color={bottomColor} roughness={0.75} metalness={0.02} sheen={0.4} sheenRoughness={0.5} />
+      <meshPhysicalMaterial attach="material-4" map={mapSet.front} color={baseColor} roughness={0.75} metalness={0.02} sheen={0.4} sheenRoughness={0.5} />
+      <meshPhysicalMaterial attach="material-5" map={mapSet.back} color={baseColor} roughness={0.75} metalness={0.02} sheen={0.4} sheenRoughness={0.5} />
     </RoundedBox>
   );
 }
@@ -290,8 +292,8 @@ function GarmentOverlay({
   const isTopLeg = (baseModelId === "proportioned_r15" && (partId === "leftUpperLeg" || partId === "rightUpperLeg")) ||
                    (baseModelId !== "proportioned_r15" && (partId === "leftLeg" || partId === "rightLeg"));
 
-  const shirtColor = "#f8fafc";
-  const pantsColor = "#e2e8f0";
+  const shirtColor = "#ffffff";
+  const pantsColor = "#ffffff";
   const shirtMapFront = maps.shirt.front;
   const shirtMapBack = maps.shirt.back;
   const shirtMapSide = maps.shirt.side;
@@ -303,8 +305,8 @@ function GarmentOverlay({
           {/* HOOD - resting behind neck on main torso */}
           {top === "hoodie" && isMainTorso && (
             <group position={[0, args[1]/2 - 0.05, -args[2]/2 - 0.05]}>
-              <RoundedBox args={[args[0] * 0.8, 0.25, 0.3]} radius={0.08} smoothness={4} castShadow receiveShadow rotation={[-0.2, 0, 0]}>
-                <meshStandardMaterial map={shirtMapBack} color={shirtColor} roughness={0.7} metalness={0.05} />
+              <RoundedBox args={[args[0] * 0.8, 0.25, 0.3]} radius={0.08} smoothness={12} castShadow receiveShadow rotation={[-0.2, 0, 0]}>
+                <meshPhysicalMaterial map={shirtMapBack} color={shirtColor} roughness={0.75} metalness={0.02} sheen={0.4} sheenRoughness={0.5} />
               </RoundedBox>
             </group>
           )}
@@ -312,8 +314,8 @@ function GarmentOverlay({
           {/* HOOD FOLDS - draped over shoulders */}
           {top === "hoodie" && isMainTorso && (
             <group position={[0, args[1]/2 - 0.02, 0]}>
-              <RoundedBox args={[args[0] * 0.9, 0.15, args[2] * 1.05]} radius={0.05} smoothness={4} castShadow receiveShadow>
-                <meshStandardMaterial map={shirtMapFront} color={shirtColor} roughness={0.7} metalness={0.05} />
+              <RoundedBox args={[args[0] * 0.9, 0.15, args[2] * 1.05]} radius={0.05} smoothness={12} castShadow receiveShadow>
+                <meshPhysicalMaterial map={shirtMapFront} color={shirtColor} roughness={0.75} metalness={0.02} sheen={0.4} sheenRoughness={0.5} />
               </RoundedBox>
             </group>
           )}
@@ -323,20 +325,20 @@ function GarmentOverlay({
             <group position={[0, args[1]/2 - 0.1, args[2]/2 + 0.02]}>
               <mesh position={[-0.15, -0.15, 0]} castShadow rotation={[0, 0, 0.05]}>
                 <cylinderGeometry args={[0.012, 0.012, 0.3, 8]} />
-                <meshStandardMaterial color="#ffffff" roughness={0.9} />
+                <meshPhysicalMaterial color="#ffffff" roughness={0.75} metalness={0.02} sheen={0.4} sheenRoughness={0.5} />
               </mesh>
               <mesh position={[-0.16, -0.3, 0]} castShadow>
                 <cylinderGeometry args={[0.014, 0.014, 0.04, 8]} />
-                <meshStandardMaterial color="#94a3b8" roughness={0.5} />
+                <meshPhysicalMaterial color="#94a3b8" roughness={0.75} metalness={0.02} sheen={0.4} sheenRoughness={0.5} />
               </mesh>
               
               <mesh position={[0.15, -0.15, 0]} castShadow rotation={[0, 0, -0.05]}>
                 <cylinderGeometry args={[0.012, 0.012, 0.3, 8]} />
-                <meshStandardMaterial color="#ffffff" roughness={0.9} />
+                <meshPhysicalMaterial color="#ffffff" roughness={0.75} metalness={0.02} sheen={0.4} sheenRoughness={0.5} />
               </mesh>
               <mesh position={[0.16, -0.3, 0]} castShadow>
                 <cylinderGeometry args={[0.014, 0.014, 0.04, 8]} />
-                <meshStandardMaterial color="#94a3b8" roughness={0.5} />
+                <meshPhysicalMaterial color="#94a3b8" roughness={0.75} metalness={0.02} sheen={0.4} sheenRoughness={0.5} />
               </mesh>
             </group>
           )}
@@ -344,17 +346,17 @@ function GarmentOverlay({
           {/* KANGAROO POCKET */}
           {top === "hoodie" && isBottomTorso && (
             <group position={[0, -args[1]/2 + 0.25, args[2]/2 + 0.02]}>
-              <RoundedBox args={[args[0] * 0.7, 0.35, 0.08]} radius={0.04} smoothness={4} castShadow receiveShadow>
-                <meshStandardMaterial map={shirtMapFront} color={shirtColor} roughness={0.7} metalness={0.05} />
+              <RoundedBox args={[args[0] * 0.7, 0.35, 0.08]} radius={0.04} smoothness={12} castShadow receiveShadow>
+                <meshPhysicalMaterial map={shirtMapFront} color={shirtColor} roughness={0.75} metalness={0.02} sheen={0.4} sheenRoughness={0.5} />
               </RoundedBox>
               {/* Pocket seams/openings */}
               <mesh position={[-args[0] * 0.35 + 0.04, 0, 0.03]} rotation={[0, 0, 0.4]}>
                 <cylinderGeometry args={[0.02, 0.02, 0.25, 8]} />
-                <meshStandardMaterial color="#0f172a" opacity={0.3} transparent roughness={0.9} />
+                <meshPhysicalMaterial color="#0f172a" opacity={0.3} transparent roughness={0.75} metalness={0.02} sheen={0.4} sheenRoughness={0.5} />
               </mesh>
               <mesh position={[args[0] * 0.35 - 0.04, 0, 0.03]} rotation={[0, 0, -0.4]}>
                 <cylinderGeometry args={[0.02, 0.02, 0.25, 8]} />
-                <meshStandardMaterial color="#0f172a" opacity={0.3} transparent roughness={0.9} />
+                <meshPhysicalMaterial color="#0f172a" opacity={0.3} transparent roughness={0.75} metalness={0.02} sheen={0.4} sheenRoughness={0.5} />
               </mesh>
             </group>
           )}
@@ -362,8 +364,8 @@ function GarmentOverlay({
           {/* COLLAR (SWEATER & TSHIRT) */}
           {(top === "sweater" || top === "tshirt") && isMainTorso && (
             <group position={[0, args[1]/2, 0]}>
-              <RoundedBox args={[args[0] * 0.45, 0.06, args[2] * 0.5]} radius={0.02} smoothness={4} castShadow receiveShadow>
-                <meshStandardMaterial map={shirtMapFront} color={shirtColor} roughness={0.8} metalness={0.05} />
+              <RoundedBox args={[args[0] * 0.45, 0.06, args[2] * 0.5]} radius={0.02} smoothness={12} castShadow receiveShadow>
+                <meshPhysicalMaterial map={shirtMapFront} color={shirtColor} roughness={0.75} metalness={0.02} sheen={0.4} sheenRoughness={0.5} />
               </RoundedBox>
             </group>
           )}
@@ -371,8 +373,8 @@ function GarmentOverlay({
           {/* JACKET COLLAR - fold-over style */}
           {top === "jacket" && isMainTorso && (
             <group position={[0, args[1]/2 - 0.03, args[2]/2 + 0.01]}>
-              <RoundedBox args={[args[0] * 0.5, 0.14, 0.08]} radius={0.03} smoothness={4} castShadow receiveShadow rotation={[0.3, 0, 0]}>
-                <meshStandardMaterial map={shirtMapFront} color={shirtColor} roughness={0.7} metalness={0.05} />
+              <RoundedBox args={[args[0] * 0.5, 0.14, 0.08]} radius={0.03} smoothness={12} castShadow receiveShadow rotation={[0.3, 0, 0]}>
+                <meshPhysicalMaterial map={shirtMapFront} color={shirtColor} roughness={0.75} metalness={0.02} sheen={0.4} sheenRoughness={0.5} />
               </RoundedBox>
             </group>
           )}
@@ -381,13 +383,13 @@ function GarmentOverlay({
           {top === "jacket" && isMainTorso && (
             <>
               <group position={[0.08, 0, args[2]/2 + 0.015]}>
-                <RoundedBox args={[0.06, args[1] * 0.9, 0.02]} radius={0.01} smoothness={4} castShadow receiveShadow>
-                  <meshStandardMaterial color="#1e293b" roughness={0.6} metalness={0.1} />
+                <RoundedBox args={[0.06, args[1] * 0.9, 0.02]} radius={0.01} smoothness={12} castShadow receiveShadow>
+                  <meshPhysicalMaterial color="#1e293b" roughness={0.75} metalness={0.02} sheen={0.4} sheenRoughness={0.5} />
                 </RoundedBox>
               </group>
               <group position={[-0.08, 0, args[2]/2 + 0.015]}>
-                <RoundedBox args={[0.06, args[1] * 0.9, 0.02]} radius={0.01} smoothness={4} castShadow receiveShadow>
-                  <meshStandardMaterial color="#1e293b" roughness={0.6} metalness={0.1} />
+                <RoundedBox args={[0.06, args[1] * 0.9, 0.02]} radius={0.01} smoothness={12} castShadow receiveShadow>
+                  <meshPhysicalMaterial color="#1e293b" roughness={0.75} metalness={0.02} sheen={0.4} sheenRoughness={0.5} />
                 </RoundedBox>
               </group>
             </>
@@ -400,7 +402,7 @@ function GarmentOverlay({
               args={[args[0] * 1.04, args[1] * 0.98, args[2] * 1.04]}
               position={[0, 0, 0]}
               radius={0.06}
-              smoothness={4}
+              smoothness={12}
               maps={maps}
               skinTone={skinTone}
             />
@@ -414,17 +416,17 @@ function GarmentOverlay({
               {/* main bell */}
               <mesh position={[0, -args[1] * 0.7, 0]} castShadow receiveShadow>
                 <cylinderGeometry args={[args[0] * 0.58, args[0] * 1.1, args[1] * 1.6, 24]} />
-                <meshStandardMaterial map={maps.shirt.front} color={shirtColor} roughness={0.6} metalness={0.08} />
+                <meshPhysicalMaterial map={maps.shirt.front} color={shirtColor} roughness={0.75} metalness={0.02} sheen={0.4} sheenRoughness={0.5} />
               </mesh>
               {/* hem ring for a soft rounded bottom edge */}
               <mesh position={[0, -args[1] * 1.5, 0]} rotation={[Math.PI / 2, 0, 0]} castShadow>
                 <torusGeometry args={[args[0] * 1.06, args[0] * 0.07, 12, 32]} />
-                <meshStandardMaterial map={maps.shirt.front} color={shirtColor} roughness={0.6} metalness={0.08} />
+                <meshPhysicalMaterial map={maps.shirt.front} color={shirtColor} roughness={0.75} metalness={0.02} sheen={0.4} sheenRoughness={0.5} />
               </mesh>
               {/* waist sash */}
               <mesh position={[0, 0.02, 0]} castShadow>
                 <cylinderGeometry args={[args[0] * 0.64, args[0] * 0.66, 0.1, 24]} />
-                <meshStandardMaterial color={shirtColor} roughness={0.45} metalness={0.2} />
+                <meshPhysicalMaterial color={shirtColor} roughness={0.75} metalness={0.02} sheen={0.4} sheenRoughness={0.5} />
               </mesh>
             </group>
           )}
@@ -434,7 +436,7 @@ function GarmentOverlay({
             <group position={[0, args[1] * (isR15TopArm ? 0.3 : 0.35), 0]}>
               <mesh castShadow scale={[1.25, 0.9, 1.25]}>
                 <sphereGeometry args={[Math.max(args[0], args[2]) * 0.62, 16, 16]} />
-                <meshStandardMaterial map={maps.shirt.side} color={shirtColor} roughness={0.6} metalness={0.08} />
+                <meshPhysicalMaterial map={maps.shirt.side} color={shirtColor} roughness={0.75} metalness={0.02} sheen={0.4} sheenRoughness={0.5} />
               </mesh>
             </group>
           )}
@@ -442,13 +444,13 @@ function GarmentOverlay({
           {/* RIBBED HEM (TORSO) */}
           {(top === "hoodie" || top === "sweater" || top === "jacket") && isBottomTorso && (
             <group position={[0, -args[1]/2 + 0.06, 0]}>
-              <RoundedBox args={[args[0] * 1.05, 0.12, args[2] * 1.05]} radius={0.02} smoothness={4} castShadow receiveShadow>
-                <meshStandardMaterial map={shirtMapFront} color={shirtColor} roughness={0.8} metalness={0.05} />
+              <RoundedBox args={[args[0] * 1.05, 0.12, args[2] * 1.05]} radius={0.02} smoothness={12} castShadow receiveShadow>
+                <meshPhysicalMaterial map={shirtMapFront} color={shirtColor} roughness={0.75} metalness={0.02} sheen={0.4} sheenRoughness={0.5} />
               </RoundedBox>
               {/* Little detail indent for the hem */}
               <mesh position={[0, 0.06, args[2]*0.52]} rotation={[0, 0, 0]}>
                 <boxGeometry args={[args[0]*1.03, 0.01, 0.02]} />
-                <meshStandardMaterial color="#0f172a" opacity={0.15} transparent roughness={0.9} />
+                <meshPhysicalMaterial color="#0f172a" opacity={0.15} transparent roughness={0.75} metalness={0.02} sheen={0.4} sheenRoughness={0.5} />
               </mesh>
             </group>
           )}
@@ -456,8 +458,8 @@ function GarmentOverlay({
           {/* ARM CUFFS (HOODIE, SWEATER, JACKET) */}
           {(top === "hoodie" || top === "sweater" || top === "jacket") && (isBlockyArm || isR15BottomArm) && (
             <group position={[0, -args[1]/2 + 0.05, 0]}>
-              <RoundedBox args={[args[0] * 1.1, 0.12, args[2] * 1.1]} radius={0.02} smoothness={4} castShadow receiveShadow>
-                <meshStandardMaterial map={shirtMapSide} color={shirtColor} roughness={0.8} metalness={0.05} />
+              <RoundedBox args={[args[0] * 1.1, 0.12, args[2] * 1.1]} radius={0.02} smoothness={12} castShadow receiveShadow>
+                <meshPhysicalMaterial map={shirtMapSide} color={shirtColor} roughness={0.75} metalness={0.02} sheen={0.4} sheenRoughness={0.5} />
               </RoundedBox>
             </group>
           )}
@@ -467,15 +469,15 @@ function GarmentOverlay({
             <>
               {isBlockyArm && (
                 <group position={[0, 0, 0]}>
-                  <RoundedBox args={[args[0] * 1.1, 0.08, args[2] * 1.1]} radius={0.02} smoothness={4} castShadow receiveShadow>
-                    <meshStandardMaterial map={shirtMapSide} color={shirtColor} roughness={0.8} metalness={0.05} />
+                  <RoundedBox args={[args[0] * 1.1, 0.08, args[2] * 1.1]} radius={0.02} smoothness={12} castShadow receiveShadow>
+                    <meshPhysicalMaterial map={shirtMapSide} color={shirtColor} roughness={0.75} metalness={0.02} sheen={0.4} sheenRoughness={0.5} />
                   </RoundedBox>
                 </group>
               )}
               {isR15TopArm && (
                 <group position={[0, -args[1]/2 + 0.04, 0]}>
-                  <RoundedBox args={[args[0] * 1.1, 0.08, args[2] * 1.1]} radius={0.02} smoothness={4} castShadow receiveShadow>
-                    <meshStandardMaterial map={shirtMapSide} color={shirtColor} roughness={0.8} metalness={0.05} />
+                  <RoundedBox args={[args[0] * 1.1, 0.08, args[2] * 1.1]} radius={0.02} smoothness={12} castShadow receiveShadow>
+                    <meshPhysicalMaterial map={shirtMapSide} color={shirtColor} roughness={0.75} metalness={0.02} sheen={0.4} sheenRoughness={0.5} />
                   </RoundedBox>
                 </group>
               )}
@@ -489,7 +491,7 @@ function GarmentOverlay({
               args={[args[0] * 1.05, args[1] * 0.98, args[2] * 1.05]}
               position={[0, 0, 0]}
               radius={0.06}
-              smoothness={4}
+              smoothness={12}
               maps={maps}
               skinTone={skinTone}
             />
@@ -505,7 +507,7 @@ function GarmentOverlay({
                     args={[args[0] * 1.05, args[1] * 0.5, args[2] * 1.05]}
                     position={[0, 0, 0]}
                     radius={0.06}
-                    smoothness={4}
+                    smoothness={12}
                     maps={maps}
                     skinTone={skinTone}
                   />
@@ -517,7 +519,7 @@ function GarmentOverlay({
                   args={[args[0] * 1.05, args[1] * 0.98, args[2] * 1.05]}
                   position={[0, 0, 0]}
                   radius={0.06}
-                  smoothness={4}
+                  smoothness={12}
                   maps={maps}
                   skinTone={skinTone}
                 />
@@ -532,7 +534,7 @@ function GarmentOverlay({
               args={[args[0] * 1.04, args[1] * 0.98, args[2] * 1.04]}
               position={[0, 0, 0]}
               radius={0.06}
-              smoothness={4}
+              smoothness={12}
               maps={maps}
               skinTone={skinTone}
             />
@@ -549,22 +551,22 @@ function GarmentOverlay({
               args={[args[0] * 1.08, args[1] * 0.98, args[2] * 1.08]}
               position={[0, 0, 0]}
               radius={0.06}
-              smoothness={4}
+              smoothness={12}
               maps={maps}
               skinTone={skinTone}
             />
           )}
           {isBottomLeg && (
             <group position={[0, -args[1]/2 + 0.05, 0]}>
-              <RoundedBox args={[args[0] * 1.12, 0.1, args[2] * 1.12]} radius={0.02} smoothness={4} castShadow receiveShadow>
-                <meshStandardMaterial map={maps.pants.front} color={pantsColor} roughness={0.8} metalness={0.05} />
+              <RoundedBox args={[args[0] * 1.12, 0.1, args[2] * 1.12]} radius={0.02} smoothness={12} castShadow receiveShadow>
+                <meshPhysicalMaterial map={maps.pants.front} color={pantsColor} roughness={0.75} metalness={0.02} sheen={0.4} sheenRoughness={0.5} />
               </RoundedBox>
             </group>
           )}
           {isTopLeg && (
             <group position={[0, args[1]/2 - 0.04, 0]}>
-              <RoundedBox args={[args[0] * 1.1, 0.08, args[2] * 1.1]} radius={0.02} smoothness={4} castShadow receiveShadow>
-                <meshStandardMaterial map={maps.pants.front} color={pantsColor} roughness={0.8} metalness={0.05} />
+              <RoundedBox args={[args[0] * 1.1, 0.08, args[2] * 1.1]} radius={0.02} smoothness={12} castShadow receiveShadow>
+                <meshPhysicalMaterial map={maps.pants.front} color={pantsColor} roughness={0.75} metalness={0.02} sheen={0.4} sheenRoughness={0.5} />
               </RoundedBox>
             </group>
           )}
@@ -581,18 +583,18 @@ function GarmentOverlay({
                 args={[args[0] * 1.08, baseModelId === 'proportioned_r15' ? args[1] * 0.98 : args[1] * 0.5, args[2] * 1.08]}
                 position={[0, 0, 0]}
                 radius={0.06}
-                smoothness={4}
+                smoothness={12}
                 maps={maps}
                 skinTone={skinTone}
               />
               <group position={[0, baseModelId === 'proportioned_r15' ? -args[1]/2 + 0.05 : -args[1]*0.25 + 0.05, 0]}>
-                <RoundedBox args={[args[0] * 1.1, 0.08, args[2] * 1.1]} radius={0.02} smoothness={4} castShadow receiveShadow>
-                  <meshStandardMaterial map={maps.pants.front} color={pantsColor} roughness={0.8} metalness={0.05} />
+                <RoundedBox args={[args[0] * 1.1, 0.08, args[2] * 1.1]} radius={0.02} smoothness={12} castShadow receiveShadow>
+                  <meshPhysicalMaterial map={maps.pants.front} color={pantsColor} roughness={0.75} metalness={0.02} sheen={0.4} sheenRoughness={0.5} />
                 </RoundedBox>
               </group>
               <group position={[0, args[1]/2 - 0.04, 0]}>
-                <RoundedBox args={[args[0] * 1.1, 0.08, args[2] * 1.1]} radius={0.02} smoothness={4} castShadow receiveShadow>
-                  <meshStandardMaterial map={maps.pants.front} color={pantsColor} roughness={0.8} metalness={0.05} />
+                <RoundedBox args={[args[0] * 1.1, 0.08, args[2] * 1.1]} radius={0.02} smoothness={12} castShadow receiveShadow>
+                  <meshPhysicalMaterial map={maps.pants.front} color={pantsColor} roughness={0.75} metalness={0.02} sheen={0.4} sheenRoughness={0.5} />
                 </RoundedBox>
               </group>
             </group>
@@ -605,15 +607,15 @@ function GarmentOverlay({
         <group position={[0, baseModelId === 'proportioned_r15' ? 0 : args[1]*0.15, 0]}>
           {/* Fitted waistband */}
           <group position={[0, args[1]/2 - 0.04, 0]}>
-            <RoundedBox args={[args[0] * 1.1, 0.08, args[2] * 1.1]} radius={0.02} smoothness={4} castShadow receiveShadow>
-              <meshStandardMaterial map={maps.pants.front} color={pantsColor} roughness={0.8} metalness={0.05} />
+            <RoundedBox args={[args[0] * 1.1, 0.08, args[2] * 1.1]} radius={0.02} smoothness={12} castShadow receiveShadow>
+              <meshPhysicalMaterial map={maps.pants.front} color={pantsColor} roughness={0.75} metalness={0.02} sheen={0.4} sheenRoughness={0.5} />
             </RoundedBox>
           </group>
           {/* Flared A-line skirt volume */}
           <group position={[0, baseModelId === 'proportioned_r15' ? -0.05 : 0.1, 0]}>
             <mesh castShadow receiveShadow rotation={[0, 0, 0]}>
               <cylinderGeometry args={[args[0] * 1.4, args[0] * 1.12, baseModelId === 'proportioned_r15' ? args[1] * 0.85 : args[1] * 0.65, 16]} />
-              <meshStandardMaterial map={maps.pants.front} color={pantsColor} roughness={0.75} metalness={0.05} />
+              <meshPhysicalMaterial map={maps.pants.front} color={pantsColor} roughness={0.75} metalness={0.02} sheen={0.4} sheenRoughness={0.5} />
             </mesh>
           </group>
         </group>
@@ -633,27 +635,27 @@ function GarmentOverlay({
               <group position={[0, -args[1]/2 - 0.02, 0]}>
                 {/* Main shoe body - chunky rounded box wrapping the foot */}
                 <RoundedBox args={[args[0] * 1.18, 0.22, args[2] * 1.3]} radius={0.08} smoothness={6} castShadow receiveShadow>
-                  <meshStandardMaterial color={shoeBodyColor} roughness={0.65} metalness={0.08} />
+                  <meshPhysicalMaterial color={shoeBodyColor} roughness={0.75} metalness={0.02} sheen={0.4} sheenRoughness={0.5} />
                 </RoundedBox>
                 
                 {/* Sole slab underneath - lighter and wider */}
                 <group position={[0, -0.14, 0.02]}>
                   <RoundedBox args={[args[0] * 1.22, 0.08, args[2] * 1.34]} radius={0.04} smoothness={6} castShadow receiveShadow>
-                    <meshStandardMaterial color={soleColor} roughness={0.75} metalness={0.1} />
+                    <meshPhysicalMaterial color={soleColor} roughness={0.75} metalness={0.02} sheen={0.4} sheenRoughness={0.5} />
                   </RoundedBox>
                 </group>
                 
                 {/* Toe cap - rounded protective front */}
                 <group position={[0, -0.04, args[2] * 0.65 + 0.02]}>
                   <RoundedBox args={[args[0] * 1.16, 0.16, args[2] * 0.24]} radius={0.08} smoothness={6} castShadow receiveShadow>
-                    <meshStandardMaterial color={soleColor} roughness={0.7} metalness={0.12} />
+                    <meshPhysicalMaterial color={soleColor} roughness={0.75} metalness={0.02} sheen={0.4} sheenRoughness={0.5} />
                   </RoundedBox>
                 </group>
                 
                 {/* Tongue hint - small padded piece near ankle */}
                 <group position={[0, 0.08, args[2] * 0.3]}>
-                  <RoundedBox args={[args[0] * 0.6, 0.18, 0.08]} radius={0.04} smoothness={4} castShadow receiveShadow>
-                    <meshStandardMaterial color={shoeBodyColor} roughness={0.68} metalness={0.05} />
+                  <RoundedBox args={[args[0] * 0.6, 0.18, 0.08]} radius={0.04} smoothness={12} castShadow receiveShadow>
+                    <meshPhysicalMaterial color={shoeBodyColor} roughness={0.75} metalness={0.02} sheen={0.4} sheenRoughness={0.5} />
                   </RoundedBox>
                 </group>
                 
@@ -661,13 +663,13 @@ function GarmentOverlay({
                 <group position={[0, 0.04, args[2] * 0.4]}>
                   <mesh castShadow>
                     <cylinderGeometry args={[0.015, 0.015, args[0] * 0.7, 8]} />
-                    <meshStandardMaterial color={laceColor} roughness={0.85} />
+                    <meshPhysicalMaterial color={laceColor} roughness={0.75} metalness={0.02} sheen={0.4} sheenRoughness={0.5} />
                   </mesh>
                 </group>
                 <group position={[0, 0.08, args[2] * 0.25]}>
                   <mesh castShadow rotation={[0, 0, Math.PI / 2]}>
                     <cylinderGeometry args={[0.015, 0.015, args[0] * 0.65, 8]} />
-                    <meshStandardMaterial color={laceColor} roughness={0.85} />
+                    <meshPhysicalMaterial color={laceColor} roughness={0.75} metalness={0.02} sheen={0.4} sheenRoughness={0.5} />
                   </mesh>
                 </group>
               </group>
@@ -687,27 +689,27 @@ function GarmentOverlay({
               <group position={[0, -args[1]/2 - 0.02, 0]}>
                 {/* Main boot shaft - tall, reaching up the leg */}
                 <RoundedBox args={[args[0] * 1.2, args[1] * 0.7, args[2] * 1.32]} radius={0.09} smoothness={6} castShadow receiveShadow>
-                  <meshStandardMaterial color={bootBodyColor} roughness={0.6} metalness={0.12} />
+                  <meshPhysicalMaterial color={bootBodyColor} roughness={0.75} metalness={0.02} sheen={0.4} sheenRoughness={0.5} />
                 </RoundedBox>
                 
                 {/* Chunky sole platform */}
                 <group position={[0, -args[1] * 0.35 - 0.08, 0.02]}>
                   <RoundedBox args={[args[0] * 1.24, 0.16, args[2] * 1.36]} radius={0.05} smoothness={6} castShadow receiveShadow>
-                    <meshStandardMaterial color={bootSoleColor} roughness={0.8} metalness={0.15} />
+                    <meshPhysicalMaterial color={bootSoleColor} roughness={0.75} metalness={0.02} sheen={0.4} sheenRoughness={0.5} />
                   </RoundedBox>
                 </group>
                 
                 {/* Toe guard reinforcement */}
                 <group position={[0, -args[1] * 0.3, args[2] * 0.66 + 0.02]}>
                   <RoundedBox args={[args[0] * 1.18, 0.2, args[2] * 0.26]} radius={0.09} smoothness={6} castShadow receiveShadow>
-                    <meshStandardMaterial color={bootSoleColor} roughness={0.65} metalness={0.18} />
+                    <meshPhysicalMaterial color={bootSoleColor} roughness={0.75} metalness={0.02} sheen={0.4} sheenRoughness={0.5} />
                   </RoundedBox>
                 </group>
                 
                 {/* Upper cuff/collar */}
                 <group position={[0, args[1] * 0.35 - 0.04, 0]}>
-                  <RoundedBox args={[args[0] * 1.22, 0.1, args[2] * 1.34]} radius={0.03} smoothness={4} castShadow receiveShadow>
-                    <meshStandardMaterial color={bootSoleColor} roughness={0.7} metalness={0.1} />
+                  <RoundedBox args={[args[0] * 1.22, 0.1, args[2] * 1.34]} radius={0.03} smoothness={12} castShadow receiveShadow>
+                    <meshPhysicalMaterial color={bootSoleColor} roughness={0.75} metalness={0.02} sheen={0.4} sheenRoughness={0.5} />
                   </RoundedBox>
                 </group>
               </group>
@@ -790,7 +792,7 @@ function CustomPartsOverlay({ partId, args, customParts, baseModelId }: { partId
         const partScale: [number, number, number] = [scaleMulti, scaleMulti, scaleMulti];
 
         const renderShape = () => {
-          const m = <meshStandardMaterial color={p.color} roughness={0.5} metalness={0.2} />;
+          const m = <meshPhysicalMaterial color={p.color} roughness={0.75} metalness={0.02} sheen={0.4} sheenRoughness={0.5} />;
           switch (p.shape) {
             case "horn":
               // Tilt the horn upward so it never points straight at the camera
@@ -836,19 +838,22 @@ function CustomPartsOverlay({ partId, args, customParts, baseModelId }: { partId
               return (
                 <mesh position={[0, 0, 0.15]}>
                   <sphereGeometry args={[0.12, 24, 24]} />
-                  <meshStandardMaterial color={p.color} emissive={p.color} emissiveIntensity={1.5} toneMapped={false} />
+                  <meshPhysicalMaterial color={p.color} emissive={p.color} emissiveIntensity={1.5} toneMapped={false} roughness={0.75} metalness={0.02} sheen={0.4} sheenRoughness={0.5} />
                 </mesh>
               );
             case "plate":
               return (
                 <group position={[0, 0, 0.03]}>
-                  <RoundedBox args={[0.3, 0.3, 0.06]} radius={0.02} smoothness={4}>{m}</RoundedBox>
+                  <RoundedBox args={[0.3, 0.3, 0.06]} radius={0.02} smoothness={12}>{m}</RoundedBox>
                 </group>
               );
             case "band":
+              // Elliptical band hugging the attached body part (was a wide circular
+              // "hula hoop" floating around the waist). Local Y is squashed to the
+              // part's depth so the ring follows the body silhouette.
               return (
-                <group rotation={[Math.PI/2, 0, 0]} position={[0, 0, -args[2]*0.5]}>
-                  <mesh><torusGeometry args={[Math.max(args[0], args[2])*0.6, 0.05, 16, 32]} />{m}</mesh>
+                <group rotation={[Math.PI/2, 0, 0]} position={[0, 0, -args[2]*0.5]} scale={[1, Math.max(args[2] / Math.max(args[0], 0.01), 0.45), 1]}>
+                  <mesh><torusGeometry args={[args[0] * 0.58 + 0.03, 0.045, 16, 40]} />{m}</mesh>
                 </group>
               );
             case "snake":
@@ -901,9 +906,9 @@ function CustomPartsOverlay({ partId, args, customParts, baseModelId }: { partId
                   <RoundedBox
                     args={[args[0] * 1.18, args[1] * 1.18, args[2] * 1.18]}
                     radius={Math.min(args[0], args[1], args[2]) * 0.35}
-                    smoothness={4}
+                    smoothness={12}
                   >
-                    <meshStandardMaterial color={p.color} roughness={0.85} metalness={0} />
+                    <meshPhysicalMaterial color={p.color} roughness={0.75} metalness={0.02} sheen={0.4} sheenRoughness={0.5} />
                   </RoundedBox>
                   {(() => {
                     const z = args[2] * 0.59 + 0.012;
@@ -985,16 +990,55 @@ function RobloxAvatar({ maps, view, itemType, avatar, mode, garment, customParts
   );
 }
 
+// Rough low-end heuristic for kids' tablets/phones: few CPU cores or coarse
+// pointer + small screen. Lowers shadow samples and skips bloom to hold 60fps.
+const LOW_END_DEVICE =
+  typeof navigator !== "undefined" &&
+  ((navigator.hardwareConcurrency ?? 8) <= 4 ||
+    (typeof window !== "undefined" && window.matchMedia?.("(pointer: coarse)").matches && window.screen.width < 900));
+
 function StudioEnvironment() {
-  // NOTE: Do NOT use <Environment> with <Lightformer> children here — the
-  // light panels leak into the visible scene as giant walls that slice
-  // through the avatar when the camera orbits. Plain lights instead.
+  const { gl, scene } = useThree();
+  
+  useEffect(() => {
+    let pmremGenerator: any;
+    let envScene: any;
+    let renderTarget: any;
+    let cancelled = false;
+    // @ts-ignore
+    import("three/examples/jsm/environments/RoomEnvironment.js")
+      .then(({ RoomEnvironment }) => {
+        if (cancelled) return;
+        pmremGenerator = new THREE.PMREMGenerator(gl);
+        pmremGenerator.compileEquirectangularShader();
+        envScene = new RoomEnvironment();
+        renderTarget = pmremGenerator.fromScene(envScene);
+        scene.environment = renderTarget.texture;
+        // RoomEnvironment is bright — dial it down so it only adds soft reflections,
+        // otherwise skin tones blow out past the bloom threshold.
+        (scene as any).environmentIntensity = 0.35;
+      })
+      .catch((e) => console.error("Could not load RoomEnvironment", e));
+
+    return () => {
+      cancelled = true;
+      scene.environment = null;
+      // Dispose the PMREM render target (and its texture) too, or GPU memory
+      // accumulates on every remount of the preview.
+      if (renderTarget) renderTarget.dispose();
+      if (pmremGenerator) pmremGenerator.dispose();
+      if (envScene) envScene.dispose();
+    };
+  }, [gl, scene]);
+
   return (
     <>
-      <ambientLight intensity={0.5} color="#dbeafe" />
-      <directionalLight position={[0, 6, -3]} intensity={1.1} color="#ffffff" />
-      <directionalLight position={[-5, 2, 1]} intensity={1.4} color="#ec4899" />
-      <directionalLight position={[5, 2, 1]} intensity={1.4} color="#38bdf8" />
+      <ambientLight intensity={0.45} color="#ffffff" />
+      <hemisphereLight intensity={0.5} color="#ffffff" groundColor="#334155" />
+      <directionalLight position={[0, 8, 4]} intensity={1.6} color="#ffffff" castShadow shadow-mapSize={[1024, 1024]} shadow-bias={-0.0001} />
+      <directionalLight position={[-6, 4, -2]} intensity={1.1} color="#dbeafe" />
+      <directionalLight position={[6, 4, -2]} intensity={1.1} color="#e0e7ff" />
+      <spotLight position={[0, 6, -6]} intensity={1.8} color="#ffffff" angle={0.8} penumbra={1} distance={15} />
     </>
   );
 }
@@ -1002,26 +1046,18 @@ function StudioEnvironment() {
 function Stage() {
   return (
     <group position={[0, -0.42, 0]}>
-      {/* Floor disc — NOTE: cylinderGeometry is already flat (axis along Y);
-          rotating it -90° turns it into a giant vertical wall through the avatar. */}
+      {/* Studio Pedestal */}
       <mesh receiveShadow position={[0, -0.05, 0]}>
-        <cylinderGeometry args={[2.8, 2.8, 0.1, 64]} />
-        <meshStandardMaterial color="#05070d" roughness={0.2} metalness={0.6} />
+        <cylinderGeometry args={[2.0, 2.1, 0.1, 64]} />
+        <meshPhysicalMaterial color="#0f172a" roughness={0.15} metalness={0.8} clearcoat={1.0} clearcoatRoughness={0.1} />
       </mesh>
       
-      {/* Inner glowing ring */}
-      <mesh rotation-x={-Math.PI / 2} position={[0, 0.052, 0]}>
-        <ringGeometry args={[1.4, 1.45, 64]} />
-        <meshBasicMaterial color={new THREE.Color("#38bdf8").multiplyScalar(5)} toneMapped={false} transparent opacity={0.9} />
+      <mesh receiveShadow position={[0, 0.005, 0]}>
+        <cylinderGeometry args={[1.9, 1.9, 0.1, 64]} />
+        <meshPhysicalMaterial color="#1e293b" roughness={0.6} metalness={0.2} />
       </mesh>
       
-      {/* Outer glowing ring */}
-      <mesh rotation-x={-Math.PI / 2} position={[0, 0.052, 0]}>
-        <ringGeometry args={[2.5, 2.55, 64]} />
-        <meshBasicMaterial color={new THREE.Color("#ec4899").multiplyScalar(5)} toneMapped={false} transparent opacity={0.9} />
-      </mesh>
-      
-      <ContactShadows position={[0, 0.055, 0]} scale={4} far={2} blur={1.5} opacity={0.8} color="#000000" />
+      <ContactShadows position={[0, 0.056, 0]} scale={5} far={2} blur={2.5} opacity={0.85} color="#000000" />
     </group>
   );
 }
@@ -1052,25 +1088,9 @@ function SceneContent({ maps, view, itemType, rotation, avatar, mode, animated =
     <>
       <color attach="background" args={["#050811"]} />
       <fog attach="fog" args={["#050811", 5, 14]} />
-      <SoftShadows size={12} samples={8} focus={0.5} />
+      <SoftShadows size={15} samples={LOW_END_DEVICE ? 6 : 16} focus={0.5} />
       <StudioEnvironment />
       
-      <hemisphereLight intensity={0.75} color="#ffffff" groundColor="#0f172a" />
-      
-      <spotLight
-        position={[3, 7, 5]}
-        intensity={mode === "clothing" ? 3.5 : 3}
-        color="#ffffff"
-        castShadow
-        penumbra={1}
-        angle={0.7}
-        shadow-mapSize={[1024, 1024]}
-        shadow-bias={-0.0001}
-      />
-      
-      <spotLight position={[-4, 4, -4]} intensity={5} color="#ec4899" penumbra={1} distance={15} />
-      <spotLight position={[4, 3, -4]} intensity={5} color="#38bdf8" penumbra={1} distance={15} />
-
       <Stage />
 
       <group name="avatar-root" rotation-y={rotation}>
@@ -1079,9 +1099,11 @@ function SceneContent({ maps, view, itemType, rotation, avatar, mode, animated =
         </IdleGroup>
       </group>
 
-      <EffectComposer multisampling={0}>
-        <Bloom luminanceThreshold={2.0} mipmapBlur intensity={1.0} />
-      </EffectComposer>
+      {!LOW_END_DEVICE && (
+        <EffectComposer multisampling={0}>
+          <Bloom luminanceThreshold={2.0} mipmapBlur intensity={1.0} />
+        </EffectComposer>
+      )}
 
       <OrbitControls enablePan={false} enableDamping dampingFactor={0.08} minPolarAngle={0.2} maxPolarAngle={Math.PI / 1.8} minDistance={2.2} maxDistance={6.2} target={cameraTarget} />
     </>
