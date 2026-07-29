@@ -868,6 +868,9 @@ function CustomPartsOverlay({ partId, args, customParts, baseModelId }: { partId
               // Wraps the whole head (marshmallow head, pumpkin head, ...):
               // a soft rounded shell slightly larger than the head part itself.
               // Rendered relative to the head group's center, ignoring the attach offset.
+              // Like the real Roblox item, the cover has its OWN simple face
+              // (dot eyes + smile) painted on the front — the avatar's normal
+              // face is hidden while a headcover is worn.
               return (
                 <group position={[-pos[0], -pos[1], -pos[2]]} rotation={[-rot[0], -rot[1], -rot[2]]}>
                   <RoundedBox
@@ -877,6 +880,30 @@ function CustomPartsOverlay({ partId, args, customParts, baseModelId }: { partId
                   >
                     <meshStandardMaterial color={p.color} roughness={0.85} metalness={0} />
                   </RoundedBox>
+                  {(() => {
+                    const z = args[2] * 0.59 + 0.012;
+                    const ex = args[0] * 0.19;
+                    const ey = args[1] * 0.12;
+                    const dark = "#141414";
+                    return (
+                      <group>
+                        {/* dot eyes */}
+                        <mesh position={[-ex, ey, z]} scale={[1, 1.35, 0.4]}>
+                          <sphereGeometry args={[args[0] * 0.075, 12, 12]} />
+                          <meshBasicMaterial color={dark} />
+                        </mesh>
+                        <mesh position={[ex, ey, z]} scale={[1, 1.35, 0.4]}>
+                          <sphereGeometry args={[args[0] * 0.075, 12, 12]} />
+                          <meshBasicMaterial color={dark} />
+                        </mesh>
+                        {/* smile: torus arc, opening upwards */}
+                        <mesh position={[0, -args[1] * 0.16, z]} rotation={[0, 0, Math.PI]}>
+                          <torusGeometry args={[args[0] * 0.22, args[0] * 0.035, 10, 24, Math.PI]} />
+                          <meshBasicMaterial color={dark} />
+                        </mesh>
+                      </group>
+                    );
+                  })()}
                 </group>
               );
             default:
@@ -927,6 +954,7 @@ function RobloxAvatar({ maps, view, itemType, avatar, mode, garment, customParts
       </group>
       {(["face", "hair", "hat", "neck", "leftShoulder", "rightShoulder", "back", "leftFootwear", "rightFootwear", "aura"] as AvatarCosmeticSlot[])
         .filter((slot) => !(garment?.shoes && (slot === "leftFootwear" || slot === "rightFootwear")))
+        .filter((slot) => !(customParts?.some((p) => p.shape === "headcover") && (slot === "face" || slot === "hair" || slot === "hat")))
         .map((slot) => <AvatarCosmetic key={slot} slot={slot} avatar={avatar} mode={mode} />)}
     </group>
   );
