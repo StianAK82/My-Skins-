@@ -158,6 +158,10 @@ export function normalizeDesignPayload(input: NormalizeInput, payload: unknown):
     top: topOptions.includes(outfitSource.top as typeof topOptions[number]) ? outfitSource.top as typeof topOptions[number] : (prev?.top ?? "sweater"),
     bottom: bottomOptions.includes(outfitSource.bottom as typeof bottomOptions[number]) ? outfitSource.bottom as typeof bottomOptions[number] : (prev?.bottom ?? "pants"),
     shoes: shoeOptions.includes(outfitSource.shoes as typeof shoeOptions[number]) ? outfitSource.shoes as typeof shoeOptions[number] : (prev?.shoes ?? "none"),
+    ...(() => {
+      const c = (typeof outfitSource.shoesColor === "string" && /^#[0-9a-fA-F]{6}$/.test(outfitSource.shoesColor)) ? outfitSource.shoesColor : prev?.shoesColor;
+      return c ? { shoesColor: c } : {};
+    })(),
     hair: {
       style: hairStyles.includes(hairSource.style as typeof hairStyles[number]) ? hairSource.style as typeof hairStyles[number] : (prev?.hair.style ?? "none"),
       color: normalizeHex(hairSource.color) ?? prev?.hair.color ?? "#1f2937",

@@ -19,6 +19,7 @@ export type GarmentConfig = {
   top?: "hoodie" | "sweater" | "tshirt" | "jacket" | "dress" | null;
   bottom?: "pants" | "shorts" | "skirt" | null;
   shoes?: "sneakers" | "boots" | null;
+  shoesColor?: string | null;
 };
 
 type AvatarPreviewProps = {
@@ -599,7 +600,7 @@ function GarmentOverlay({
       {shoes === "sneakers" && isBottomLeg && (
         <>
           {(() => {
-            const shoeBodyColor = sampleTextureColor(maps.pants.front) !== "#ffffff" ? sampleTextureColor(maps.pants.front) : "#f8fafc";
+            const shoeBodyColor = garment.shoesColor || (sampleTextureColor(maps.pants.front) !== "#ffffff" ? sampleTextureColor(maps.pants.front) : "#f8fafc");
             const soleColor = "#cbd5e1";
             const laceColor = "#0f172a";
             
@@ -654,7 +655,7 @@ function GarmentOverlay({
       {shoes === "boots" && isBottomLeg && (
         <>
           {(() => {
-            const bootBodyColor = sampleTextureColor(maps.pants.front) !== "#ffffff" ? sampleTextureColor(maps.pants.front) : "#1e293b";
+            const bootBodyColor = garment.shoesColor || (sampleTextureColor(maps.pants.front) !== "#ffffff" ? sampleTextureColor(maps.pants.front) : "#1e293b");
             const bootSoleColor = "#475569";
             
             return (

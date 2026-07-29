@@ -506,6 +506,7 @@ export default function Create() {
           top: outfit.top === "none" ? null : (outfit.top as "hoodie" | "sweater" | "tshirt" | "jacket" | "dress"),
           bottom: outfit.bottom === "none" ? null : outfit.bottom as "pants" | "shorts" | "skirt",
           shoes: outfit.shoes === "none" ? null : outfit.shoes as "sneakers" | "boots",
+          shoesColor: outfit.shoesColor ?? null,
         });
       } else {
         setGarmentConfig({
@@ -760,6 +761,7 @@ export default function Create() {
         top: outfit.top === "none" ? null : (outfit.top as "hoodie" | "sweater" | "tshirt" | "jacket" | "dress"),
         bottom: outfit.bottom === "none" ? null : outfit.bottom as "pants" | "shorts" | "skirt",
         shoes: outfit.shoes === "none" ? null : outfit.shoes as "sneakers" | "boots",
+        shoesColor: outfit.shoesColor ?? null,
       });
 
       // Only touch the avatar slots that actually changed – everything else stays put.
