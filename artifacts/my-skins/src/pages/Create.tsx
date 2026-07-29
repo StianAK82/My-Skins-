@@ -17,6 +17,7 @@ import {
   type OutfitFiles,
 } from "@/lib/editor/outfit";
 import { resolveAvatarSlotAssets } from "@/lib/ai/asset-resolver";
+import { LANGS, detectLang, getDict, saveLang, type Dict, type Lang } from "@/lib/i18n";
 
 function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
@@ -69,20 +70,7 @@ function downloadPng(dataUrl: string, filename: string) {
 }
 
 // Big tap-to-create ideas so even small kids (who can't read yet) can use the app.
-const IDEAS: Array<{ emoji: string; label: string; prompt: string }> = [
-  { emoji: "🐉", label: "Drage", prompt: "en kul grønn drage som puster oransje ild" },
-  { emoji: "🥷", label: "Ninja", prompt: "en tøff svart ninja med rødt pannebånd og sverd" },
-  { emoji: "👸", label: "Prinsesse", prompt: "en vakker prinsessekjole i rosa og gull med glitter og krone" },
-  { emoji: "🦄", label: "Enhjørning", prompt: "en søt regnbue-enhjørning med stjerner og glitter" },
-  { emoji: "⚽", label: "Fotball", prompt: "en kul fotballdrakt med fotball på brystet og striper" },
-  { emoji: "🧟", label: "Zombie", prompt: "en skummel grønn zombie med revet t-skjorte" },
-  { emoji: "🦸", label: "Superhelt", prompt: "en superheltdrakt i rødt og blått med lyn på brystet" },
-  { emoji: "🐱", label: "Kattepus", prompt: "en søt katt med rosa sløyfe og poter" },
-  { emoji: "🚀", label: "Astronaut", prompt: "en kul astronautdrakt med rakett og stjerner" },
-  { emoji: "🦈", label: "Hai", prompt: "en tøff blå hai med skarpe tenner" },
-  { emoji: "🌋", label: "Lava", prompt: "svart drakt med glødende oransje lava og flammer" },
-  { emoji: "🎮", label: "Gamer", prompt: "en kul gamer-hettegenser med spillkontroll og neonlys" },
-];
+// Emojis/prompts live in the translation dictionaries (see i18n.ts).
 
 const API_BASE = `${import.meta.env.BASE_URL.replace(/\/$/, "")}/api`;
 const PENDING_SKIN_KEY = "mySkins.pendingSkin";
@@ -125,10 +113,10 @@ function openRobloxWithFiles(files: OutfitFiles) {
 
 type RobloxMe = { loggedIn: boolean; configured?: boolean; name?: string; picture?: string };
 
-const DIRECT_ITEMS: Array<{ key: keyof OutfitFiles; type: string; name: string; label: string }> = [
-  { key: "shirt", type: "shirt", name: "My Skins overdel", label: "overdelen" },
-  { key: "pants", type: "pants", name: "My Skins bukse", label: "buksa" },
-  { key: "tshirt", type: "tshirt", name: "My Skins t-skjorte", label: "t-skjorta" },
+const DIRECT_ITEMS: Array<{ key: keyof OutfitFiles; type: "shirt" | "pants" | "tshirt"; name: string }> = [
+  { key: "shirt", type: "shirt", name: "My Skins overdel" },
+  { key: "pants", type: "pants", name: "My Skins bukse" },
+  { key: "tshirt", type: "tshirt", name: "My Skins t-skjorte" },
 ];
 
 // The AI's structured outfit plan (subset of the server response we act on).
@@ -196,49 +184,33 @@ const ACCESSORY_ASSET_MAP: Record<string, Array<{ slot: AccessorySlot; assetId: 
   pixel_aura: [{ slot: "aura", assetId: "aura_pixel_spark" }],
 };
 
-const SLOT_NB: Record<string, string> = { hat: "hode", back: "rygg", neck: "hals", leftShoulder: "venstre skulder", rightShoulder: "høyre skulder", aura: "aura" };
-
-// Kid-friendly Norwegian names for outfit values shown in the item/changed lists.
-const NB_NAME: Record<string, string> = {
-  hoodie: "hettegenser", sweater: "genser", tshirt: "t-skjorte", jacket: "jakke", dress: "kjole",
-  pants: "bukse", shorts: "shorts", skirt: "skjørt", sneakers: "joggesko", boots: "støvler",
-  cap: "caps", beanie: "lue", hat: "hatt", helmet: "hjelm", crown: "krone", glasses: "briller",
-  mask: "maske", unicorn_horn: "enhjørning-hette", dragon_hood: "drage-hette",
-  wings: "vinger", backpack: "ryggsekk", bag: "veske", necklace: "kjede",
-  scarf: "skjerf", horns: "horn", tail: "hale", belt: "belte", gloves: "hansker",
-  jetpack: "jetpack", sword: "sverd", shoulder_guards: "skulderplater", shoulder_pet: "skuldervenn",
-  aura: "lysring", flame_aura: "ildring", pixel_aura: "pikselgnister", wavy: "bølgete",
-  short: "kort", long: "langt", ponytail: "hestehale", twintails: "to haler", spiky: "piggete",
-  curly: "krøllete", braids: "fletter", none: "ingen",
-};
-const nb = (value: string) => NB_NAME[value] ?? value;
-
 // Which outfit fields changed between two plans – shown in the item list after a revision.
-function diffOutfits(prev: OutfitPlan, next: OutfitPlan): string[] {
+function diffOutfits(prev: OutfitPlan, next: OutfitPlan, t: Dict): string[] {
+  const name = (value: string) => t.itemNames[value] ?? value;
   const changes: string[] = [];
-  if (prev.top !== next.top) changes.push(`Overdel: ${nb(prev.top)} → ${nb(next.top)}`);
-  if (prev.bottom !== next.bottom) changes.push(`Underdel: ${nb(prev.bottom)} → ${nb(next.bottom)}`);
-  if (prev.shoes !== next.shoes) changes.push(`Sko: ${nb(prev.shoes)} → ${nb(next.shoes)}`);
-  if (prev.hair.style !== next.hair.style) changes.push(`Hår: ${nb(prev.hair.style)} → ${nb(next.hair.style)}`);
-  else if (next.hair.style !== "none" && prev.hair.color !== next.hair.color) changes.push("Hår: ny farge");
+  if (prev.top !== next.top) changes.push(`${t.fieldTop}: ${name(prev.top)} → ${name(next.top)}`);
+  if (prev.bottom !== next.bottom) changes.push(`${t.fieldBottom}: ${name(prev.bottom)} → ${name(next.bottom)}`);
+  if (prev.shoes !== next.shoes) changes.push(`${t.fieldShoes}: ${name(prev.shoes)} → ${name(next.shoes)}`);
+  if (prev.hair.style !== next.hair.style) changes.push(`${t.fieldHair}: ${name(prev.hair.style)} → ${name(next.hair.style)}`);
+  else if (next.hair.style !== "none" && prev.hair.color !== next.hair.color) changes.push(t.itemNewColor(t.fieldHair));
   
   const prevAcc = new Map(prev.accessories.map((a) => [a.kind, a.color]));
   const nextAcc = new Map(next.accessories.map((a) => [a.kind, a.color]));
-  for (const [kind] of prevAcc.entries()) if (!nextAcc.has(kind)) changes.push(`Fjernet: ${nb(kind)}`);
+  for (const [kind] of prevAcc.entries()) if (!nextAcc.has(kind)) changes.push(t.removed(name(kind)));
   for (const [kind, color] of nextAcc.entries()) {
-    if (!prevAcc.has(kind)) changes.push(`Ny: ${nb(kind)}`);
-    else if (prevAcc.get(kind) !== color) changes.push(`${nb(kind)}: ny farge`);
+    if (!prevAcc.has(kind)) changes.push(t.added(name(kind)));
+    else if (prevAcc.get(kind) !== color) changes.push(t.itemNewColor(name(kind)));
   }
 
   const prevParts = new Map((prev.customParts ?? []).map((p) => [p.name, p]));
   const nextParts = new Map((next.customParts ?? []).map((p) => [p.name, p]));
-  for (const [name] of prevParts.entries()) if (!nextParts.has(name)) changes.push(`Fjernet: ${name}`);
+  for (const [name] of prevParts.entries()) if (!nextParts.has(name)) changes.push(t.removed(name));
   for (const [name, part] of nextParts.entries()) {
-    if (!prevParts.has(name)) changes.push(`Ny: ${name}`);
+    if (!prevParts.has(name)) changes.push(t.added(name));
     else {
       const prevP = prevParts.get(name)!;
       if (prevP.color !== part.color || prevP.size !== part.size || prevP.attach !== part.attach) {
-        changes.push(`${name}: oppdatert`);
+        changes.push(t.itemUpdated(name));
       }
     }
   }
@@ -247,7 +219,7 @@ function diffOutfits(prev: OutfitPlan, next: OutfitPlan): string[] {
 }
 
 // Map an outfit's accessories to preview slots (one item per slot, first wins).
-function mapOutfitToSlots(outfit: OutfitPlan): { slots: Record<string, { assetId: string; color: string }>; conflicts: string[] } {
+function mapOutfitToSlots(outfit: OutfitPlan, t: Dict): { slots: Record<string, { assetId: string; color: string }>; conflicts: string[] } {
   const slots: Record<string, { assetId: string; color: string }> = {};
   const conflicts: string[] = [];
   for (const acc of outfit.accessories) {
@@ -255,7 +227,7 @@ function mapOutfitToSlots(outfit: OutfitPlan): { slots: Record<string, { assetId
     if (!mapped) continue;
     const taken = mapped.find((entry) => slots[entry.slot]);
     if (taken) {
-      conflicts.push(`${acc.kind} (kun plass til én ting i ${SLOT_NB[taken.slot] ?? taken.slot}-sporet)`);
+      conflicts.push(t.conflict(acc.kind, t.slotNames[taken.slot] ?? taken.slot));
       continue;
     }
     for (const entry of mapped) {
@@ -266,16 +238,18 @@ function mapOutfitToSlots(outfit: OutfitPlan): { slots: Record<string, { assetId
 }
 
 // Item list (uploadable vs preview-only) for the UI panel.
-function buildOutfitItemLists(outfit: OutfitPlan, conflicts: string[]): { uploadable: string[]; previewOnly: string[] } {
+function buildOutfitItemLists(outfit: OutfitPlan, conflicts: string[], t: Dict): { uploadable: string[]; previewOnly: string[] } {
+  const name = (value: string) => t.itemNames[value] ?? value;
   const uploadable: string[] = [];
   const previewOnly: string[] = [];
-  if (outfit.top !== "none") uploadable.push(`Overdel (${outfit.top})`);
-  if (outfit.bottom !== "none") uploadable.push(`Underdel (${outfit.bottom})`);
-  if (outfit.shoes !== "none") previewOnly.push(`Sko (${outfit.shoes})`);
-  if (outfit.hair.style !== "none") previewOnly.push(`Hår (${outfit.hair.style})`);
+  if (outfit.top !== "none") uploadable.push(`${t.fieldTop} (${name(outfit.top)})`);
+  if (outfit.bottom !== "none") uploadable.push(`${t.fieldBottom} (${name(outfit.bottom)})`);
+  if (outfit.shoes !== "none") previewOnly.push(`${t.fieldShoes} (${name(outfit.shoes)})`);
+  if (outfit.hair.style !== "none") previewOnly.push(`${t.fieldHair} (${name(outfit.hair.style)})`);
   for (const acc of outfit.accessories) {
     if (!ACCESSORY_ASSET_MAP[acc.kind] || conflicts.some((s) => s.includes(acc.kind))) continue;
-    previewOnly.push(acc.kind.charAt(0).toUpperCase() + acc.kind.slice(1));
+    const label = name(acc.kind);
+    previewOnly.push(label.charAt(0).toUpperCase() + label.slice(1));
   }
   if (outfit.customParts) {
     for (const part of outfit.customParts) {
@@ -285,11 +259,17 @@ function buildOutfitItemLists(outfit: OutfitPlan, conflicts: string[]): { upload
   return { uploadable, previewOnly };
 }
 
-const UPLOAD_DONE_MSG =
-  "Antrekket er lastet ned som tre filer: overdel (Shirt), bukse (Pants) og t-skjorte-motiv. Roblox sin side er åpnet – last opp overdelen som «Shirt», buksa som «Pants» og motivet som «T-Shirt».";
-
 export default function Create() {
   const offscreenCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const [lang, setLang] = useState<Lang>(() => detectLang());
+  const t = getDict(lang);
+  // Latest dictionary for callbacks/effects that shouldn't re-run on language change.
+  const tRef = useRef(t);
+  tRef.current = t;
+  const chooseLang = (next: Lang) => {
+    setLang(next);
+    saveLang(next);
+  };
   const [previewTexture, setPreviewTexture] = useState<string>("");
   const [prompt, setPrompt] = useState("");
   const [aiError, setAiError] = useState<string>("");
@@ -341,31 +321,33 @@ export default function Create() {
   // Upload the whole outfit straight to the logged-in Roblox account.
   // Returns a status message; falls back to manual downloads if anything fails.
   const directUpload = useCallback(async (files: OutfitFiles): Promise<{ msg: string; allOk: boolean }> => {
+    const tt = tRef.current;
     const uploaded: string[] = [];
     const failed: string[] = [];
     for (const item of DIRECT_ITEMS) {
       const dataUrl = files[item.key];
       if (!dataUrl) continue;
+      const label = tt.garmentLabels[item.type];
       try {
         const res = await apiPost<{ ok?: boolean; error?: string }>("/auth/roblox/upload", {
           type: item.type,
           name: item.name,
           pngDataUrl: dataUrl,
         });
-        if (res.status === 200 && res.data.ok) uploaded.push(item.label);
-        else failed.push(item.label);
+        if (res.status === 200 && res.data.ok) uploaded.push(label);
+        else failed.push(label);
       } catch {
-        failed.push(item.label);
+        failed.push(label);
       }
     }
     if (failed.length === 0) {
-      return { msg: `🎉 Ferdig! Antrekket (${uploaded.join(", ")}) er sendt rett til Roblox-kontoen din. Husk: Roblox tar 10 Robux per plagg.`, allOk: true };
+      return { msg: tt.directDone(uploaded.join(", ")), allOk: true };
     }
     // Something failed – give the user the manual route so nothing is lost.
     openRobloxWithFiles(files);
-    const uploadedPart = uploaded.length > 0 ? `Sendt direkte: ${uploaded.join(", ")}. ` : "";
+    const uploadedPart = uploaded.length > 0 ? tt.sentDirectPrefix(uploaded.join(", ")) : "";
     return {
-      msg: `${uploadedPart}Roblox godtok ikke direkte opplasting av ${failed.join(", ")} (dette kan kreve ID-verifisert konto og minst 10 Robux). ${UPLOAD_DONE_MSG}`,
+      msg: `${uploadedPart}${tt.directFailed(failed.join(", "))}${tt.uploadDoneMsg}`,
       allOk: false,
     };
   }, []);
@@ -376,7 +358,7 @@ export default function Create() {
     void refreshRobloxMe();
     const params = new URLSearchParams(window.location.search);
     if (params.get("robloxLogin") === "failed") {
-      setUploadStatus("Roblox-innloggingen ble avbrutt. Prøv igjen, eller last ned filene manuelt.");
+      setUploadStatus(tRef.current.robloxLoginAborted);
       window.history.replaceState({}, "", window.location.pathname);
     } else if (params.get("robloxLogin") === "ok") {
       window.history.replaceState({}, "", window.location.pathname);
@@ -385,6 +367,7 @@ export default function Create() {
     if (!paidSession) return;
     const cleanUrl = window.location.pathname;
     (async () => {
+      const tt = tRef.current;
       try {
         const { paid } = await apiGet<{ paid: boolean }>(`/payments/verify?session_id=${encodeURIComponent(paidSession)}`);
         const pendingRaw = window.localStorage.getItem(PENDING_SKIN_KEY);
@@ -396,24 +379,24 @@ export default function Create() {
             setReadyFiles(pending);
             const me = await apiGet<RobloxMe>("/auth/roblox/me").catch(() => null);
             if (me?.loggedIn) {
-              setUploadStatus("Betaling godkjent! Sender antrekket til Roblox…");
+              setUploadStatus(tt.paymentApprovedSending);
               const result = await directUpload(pending);
               if (result.allOk) window.localStorage.removeItem(PENDING_SKIN_KEY);
-              setUploadStatus(`Betaling godkjent – du har fått 3 opplastinger! ${result.msg}`);
+              setUploadStatus(`${tt.paidCreditsPrefix} ${result.msg}`);
             } else {
               openRobloxWithFiles(pending);
-              setUploadStatus(`Betaling godkjent – du har fått 3 opplastinger! ${UPLOAD_DONE_MSG} Startet ikke nedlastingen? Bruk knappen «Last ned filene på nytt» under.`);
+              setUploadStatus(`${tt.paidCreditsPrefix} ${tt.uploadDoneMsg} ${tt.paidNoDownloadHint}`);
             }
           } else {
-            setUploadStatus("Betaling godkjent, men opplastingen kunne ikke brukes. Trykk «Last opp til Roblox» igjen.");
+            setUploadStatus(tt.paidButConsumeFailed);
           }
         } else if (paid) {
-          setUploadStatus("Betaling godkjent – du har fått 3 opplastinger! Lag skinnet på nytt og trykk «Last opp til Roblox».");
+          setUploadStatus(tt.paidNoPending);
         } else {
-          setUploadStatus("Betalingen ble ikke fullført. Prøv igjen.");
+          setUploadStatus(tt.paymentNotCompleted);
         }
       } catch {
-        setUploadStatus("Kunne ikke bekrefte betalingen. Prøv igjen.");
+        setUploadStatus(tRef.current.paymentVerifyFailed);
       } finally {
         window.history.replaceState({}, "", cleanUrl);
         void refreshStatus();
@@ -442,7 +425,7 @@ export default function Create() {
     setAiLoading(true);
     setAiError("");
     setUploadStatus("");
-    setAiPhase("Lager designet…");
+    setAiPhase(t.phaseCreating);
     setOutfitItems(null);
     setUndoStack([]); // a brand-new skin starts a fresh history
     try {
@@ -576,7 +559,7 @@ export default function Create() {
         }
 
         // Accessory mapping (one item per slot; first wins)
-        const { slots: accessorySlots, conflicts } = mapOutfitToSlots(outfit);
+        const { slots: accessorySlots, conflicts } = mapOutfitToSlots(outfit, t);
         unsupportedItems.push(...conflicts);
         for (const [slot, item] of Object.entries(accessorySlots)) {
           previewAvatar.slots = {
@@ -593,7 +576,7 @@ export default function Create() {
         }
 
         // Build item list for UI
-        const { uploadable, previewOnly } = buildOutfitItemLists(outfit, conflicts);
+        const { uploadable, previewOnly } = buildOutfitItemLists(outfit, conflicts, t);
         setOutfitItems({
           uploadable,
           previewOnly,
@@ -603,9 +586,9 @@ export default function Create() {
         // No outfit plan – just show what we rendered
         const uploadable: string[] = [];
         const previewOnlyItems: string[] = [];
-        if (wantsTop) uploadable.push("Overdel");
-        if (wantsBottom) uploadable.push("Underdel");
-        if (wantsShoes) previewOnlyItems.push("Sko");
+        if (wantsTop) uploadable.push(t.fieldTop);
+        if (wantsBottom) uploadable.push(t.fieldBottom);
+        if (wantsShoes) previewOnlyItems.push(t.fieldShoes);
         setOutfitItems({ uploadable, previewOnly: previewOnlyItems, unsupported: [] });
       }
       // Remember the plan so the child can revise it («gjør vingene større») without starting over.
@@ -647,7 +630,7 @@ export default function Create() {
       // Draw only the pieces that were asked for. A standalone motif is only added
       // when the prompt asks for one (logo, trykk, motiv, figur …) or is a themed skin.
       const wantsMotif = /logo|motiv|trykk|bilde|figur|mønster|print/i.test(pLow) || wantsCosmetics;
-      setAiPhase("Tegner klærne du beskrev… (kan ta opptil ett minutt)");
+      setAiPhase(t.phaseDrawing);
       const skipped = { status: 0, data: {} as { imageUrl?: string } };
       const [top, bottom, hero] = await Promise.all([
         wantsTop ? apiPost<{ imageUrl?: string }>("/ai/hero-image", { prompt: usedPrompt.slice(0, 600), kind: "garment-top" }) : Promise.resolve(skipped),
@@ -693,14 +676,14 @@ export default function Create() {
         });
       } else {
         outfitRef.current = { pantsBase: pantsColors.base, pantsAccent: pantsColors.accent, fabricUrl: bottomUrl };
-        if ((wantsTop && !topUrl) || (wantsBottom && !bottomUrl)) setAiError("Designet er klart, men selve motivet kunne ikke tegnes. Prøv «Lag skin» igjen.");
+        if ((wantsTop && !topUrl) || (wantsBottom && !bottomUrl)) setAiError(t.errMotif);
       }
     } catch (error) {
       const status = (error as { status?: number })?.status;
       if (status === 401 || status === 429) {
-        setAiError("AI-en er opptatt eller grensen er nådd. Prøv igjen om litt.");
+        setAiError(t.errBusy);
       } else {
-        setAiError("Noe gikk galt med AI-en. Prøv igjen, gjerne med en litt annen beskrivelse.");
+        setAiError(t.errGeneric);
       }
     } finally {
       generateLockRef.current = false;
@@ -725,7 +708,7 @@ export default function Create() {
     setAiLoading(true);
     setAiError("");
     setUploadStatus("");
-    setAiPhase("Endrer skinnet…");
+    setAiPhase(t.phaseRevising);
     // Snapshot the current look BEFORE any mutation, so «Angre» can restore it.
     const snapshot: UndoSnapshot = {
       designState: structuredClone(useDesignStore.getState().state),
@@ -752,7 +735,7 @@ export default function Create() {
       const outfit = response.result.outfit;
       if (!outfit) throw new Error("AI returned no outfit plan");
 
-      const changed = diffOutfits(lastOutfit, outfit);
+      const changed = diffOutfits(lastOutfit, outfit, t);
 
       // Garment config drives the 3D preview meshes.
       setGarmentConfig({
@@ -774,8 +757,8 @@ export default function Create() {
           rotation: { x: 0, y: 0, z: 0 },
         } : null);
       }
-      const prevSlots = mapOutfitToSlots(lastOutfit).slots;
-      const { slots: nextSlots, conflicts } = mapOutfitToSlots(outfit);
+      const prevSlots = mapOutfitToSlots(lastOutfit, t).slots;
+      const { slots: nextSlots, conflicts } = mapOutfitToSlots(outfit, t);
       for (const slot of new Set([...Object.keys(prevSlots), ...Object.keys(nextSlots)])) {
         const before = prevSlots[slot];
         const after = nextSlots[slot];
@@ -792,7 +775,7 @@ export default function Create() {
 
       // Item list: what the skin contains now + what was just changed.
       const unsupportedItems = [...(outfit.unsupported ?? []), ...conflicts];
-      const { uploadable, previewOnly } = buildOutfitItemLists(outfit, conflicts);
+      const { uploadable, previewOnly } = buildOutfitItemLists(outfit, conflicts, t);
       setOutfitItems({ uploadable, previewOnly, unsupported: unsupportedItems, changed });
 
       // Textures: only regenerate garment art for pieces that changed; keep the rest.
@@ -801,7 +784,7 @@ export default function Create() {
       const combinedPrompt = `${lastPromptRef.current}. Endring: ${text}`.slice(0, 600);
       const layersNow = () => useDesignStore.getState().state.layers;
       if (topChanged || bottomChanged) {
-        setAiPhase("Tegner de nye klærne… (kan ta opptil ett minutt)");
+        setAiPhase(t.phaseDrawingNew);
         const skipped = { status: 0, data: {} as { imageUrl?: string } };
         const [top, bottom] = await Promise.all([
           topChanged && outfit.top !== "none" ? apiPost<{ imageUrl?: string }>("/ai/hero-image", { prompt: combinedPrompt, kind: "garment-top" }) : Promise.resolve(skipped),
@@ -815,7 +798,7 @@ export default function Create() {
               addLayer({ name: "AI-overdel", type: "imageLayer", zone, image: topUrl, transform: { x: 0, y: 0, scale: 1.6, rotation: 0, opacity: 1 } });
             }
           } else if (outfit.top !== "none") {
-            setAiError("Endringen er lagret, men den nye overdelen kunne ikke tegnes. Prøv igjen.");
+            setAiError(t.errReviseTopDraw);
           }
         }
         if (bottomChanged) {
@@ -846,9 +829,9 @@ export default function Create() {
     } catch (error) {
       const status = (error as { status?: number })?.status;
       if (status === 401 || status === 429) {
-        setAiError("AI-en er opptatt eller grensen er nådd. Prøv igjen om litt.");
+        setAiError(t.errBusy);
       } else {
-        setAiError("Endringen gikk ikke gjennom. Prøv igjen, gjerne med litt andre ord.");
+        setAiError(t.errReviseGeneric);
       }
     } finally {
       generateLockRef.current = false;
@@ -899,11 +882,11 @@ export default function Create() {
       if (consume.status === 200 && consume.data.ok) {
         setReadyFiles(files);
         if (robloxMe?.loggedIn) {
-          setUploadStatus("Sender antrekket rett til Roblox-kontoen din…");
+          setUploadStatus(t.sendingDirect);
           setUploadStatus((await directUpload(files)).msg);
         } else {
           openRobloxWithFiles(files);
-          setUploadStatus(UPLOAD_DONE_MSG);
+          setUploadStatus(t.uploadDoneMsg);
         }
         await refreshStatus();
         return;
@@ -922,19 +905,19 @@ export default function Create() {
             /* storage unavailable – user can regenerate after payment */
           }
         }
-        setUploadStatus("Sender deg til betaling (10 kr for 3 opplastinger)…");
+        setUploadStatus(t.sendingToPayment);
         const checkout = await apiPost<{ checkoutUrl?: string; error?: string }>("/payments/create-checkout-session");
         if (checkout.data.checkoutUrl) {
           window.location.href = checkout.data.checkoutUrl;
           return;
         }
-        setUploadStatus(checkout.data.error ?? "Kunne ikke starte betaling. Prøv igjen.");
+        setUploadStatus(checkout.data.error ?? t.cantStartPayment);
         return;
       }
 
-      setUploadStatus("Noe gikk galt. Prøv igjen.");
+      setUploadStatus(t.genericFail);
     } catch {
-      setUploadStatus("Noe gikk galt. Prøv igjen.");
+      setUploadStatus(t.genericFail);
     } finally {
       setUploadBusy(false);
     }
@@ -943,14 +926,30 @@ export default function Create() {
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
       <div className="mx-auto max-w-3xl px-4 py-8 flex flex-col items-center gap-8">
-        <header className="text-center space-y-2">
+        <header className="relative w-full text-center space-y-2">
+          <div className="absolute right-0 top-0 flex gap-1">
+            {LANGS.map((l) => (
+              <button
+                key={l.code}
+                type="button"
+                title={l.label}
+                aria-label={l.label}
+                onClick={() => chooseLang(l.code)}
+                className={`rounded-lg border px-2 py-1 text-lg transition ${
+                  lang === l.code ? "border-emerald-400 bg-emerald-500/20" : "border-slate-700 bg-slate-900/70 opacity-60 hover:opacity-100"
+                }`}
+              >
+                {l.flag}
+              </button>
+            ))}
+          </div>
           <h1 className="text-4xl font-bold tracking-tight">My Skins</h1>
-          <p className="text-lg text-slate-300">👇 Trykk på et bilde – så lager vi skinnet! ✨</p>
+          <p className="text-lg text-slate-300">{t.tagline}</p>
         </header>
 
         <section className="w-full">
           <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
-            {IDEAS.map((idea) => (
+            {t.ideas.map((idea) => (
               <button
                 key={idea.label}
                 type="button"
@@ -987,7 +986,7 @@ export default function Create() {
               {(outfitItems.changed?.length ?? 0) > 0 && (
                 <div>
                   <div className="flex items-center gap-2 mb-2">
-                    <span className="font-semibold text-amber-400">🔁 Endret nå</span>
+                    <span className="font-semibold text-amber-400">{t.changedNow}</span>
                   </div>
                   <div className="flex flex-wrap gap-2">
                     {outfitItems.changed?.map((item, i) => (
@@ -1002,9 +1001,9 @@ export default function Create() {
                 <div>
                   <div className="flex items-center gap-2 mb-2">
                     <Upload className="h-4 w-4 text-emerald-400" />
-                    <span className="font-semibold text-emerald-400">Blir med inn i Roblox 🎮</span>
+                    <span className="font-semibold text-emerald-400">{t.goesIntoRoblox}</span>
                   </div>
-                  <p className="text-xs text-slate-400 mb-2">Klær (gensere, bukser, kjoler …) kan lastes opp, det bestemmer Roblox.</p>
+                  <p className="text-xs text-slate-400 mb-2">{t.goesIntoRobloxHint}</p>
                   <div className="flex flex-wrap gap-2">
                     {outfitItems.uploadable.map((item, i) => (
                       <span key={i} className="px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-xs">
@@ -1019,9 +1018,9 @@ export default function Create() {
                 <div>
                   <div className="flex items-center gap-2 mb-2">
                     <Sparkles className="h-4 w-4 text-sky-400" />
-                    <span className="font-semibold text-sky-400">Ser du bare her 👀</span>
+                    <span className="font-semibold text-sky-400">{t.previewOnlyTitle}</span>
                   </div>
-                  <p className="text-xs text-slate-400 mb-2">Roblox lar oss ikke laste opp slike 3D-deler ennå – men de vises på figuren din her!</p>
+                  <p className="text-xs text-slate-400 mb-2">{t.previewOnlyHint}</p>
                   <div className="flex flex-wrap gap-2">
                     {outfitItems.previewOnly.map((item, i) => (
                       <span key={i} className="px-3 py-1 rounded-full bg-sky-500/20 text-sky-300 border border-sky-500/30 text-xs">
@@ -1035,7 +1034,7 @@ export default function Create() {
               {outfitItems.unsupported.length > 0 && (
                 <div>
                   <div className="flex items-center gap-2 mb-2">
-                    <span className="font-semibold text-slate-400">⚠️ Ikke støttet</span>
+                    <span className="font-semibold text-slate-400">{t.unsupportedTitle}</span>
                   </div>
                   <div className="flex flex-wrap gap-2">
                     {outfitItems.unsupported.map((item, i) => (
@@ -1054,8 +1053,8 @@ export default function Create() {
           {aiLoading ? (
             <div className="flex flex-col items-center gap-2 rounded-2xl border-2 border-emerald-500/50 bg-emerald-500/10 p-5 text-center">
               <Loader2 className="h-8 w-8 animate-spin text-emerald-400" />
-              <p className="text-lg font-semibold">🎨 {aiPhase || "Lager skinnet ditt…"}</p>
-              <p className="text-sm text-slate-300">Vent litt – se på figuren! 👀</p>
+              <p className="text-lg font-semibold">🎨 {aiPhase || t.loadingDefault}</p>
+              <p className="text-sm text-slate-300">{t.loadingWait}</p>
             </div>
           ) : null}
           {aiError ? <p className="text-center text-sm text-red-400">{aiError}</p> : null}
@@ -1068,12 +1067,12 @@ export default function Create() {
               disabled={!hasDesign || uploadBusy || aiLoading}
             >
               {uploadBusy ? <Loader2 className="mr-2 h-6 w-6 animate-spin" /> : <Upload className="mr-2 h-6 w-6" />}
-              {uploadBusy ? "Jobber…" : "🎁 Send til Roblox!"}
+              {uploadBusy ? t.working : t.sendToRoblox}
             </Button>
             {robloxMe?.configured ? (
               robloxMe.loggedIn ? (
                 <p className="text-sm text-slate-300">
-                  🎮 Logget inn som <span className="font-semibold">{robloxMe.name}</span> – antrekket sendes rett til kontoen din!{" "}
+                  {t.loggedInAsPrefix} <span className="font-semibold">{robloxMe.name}</span> {t.loggedInAsSuffix}{" "}
                   <button
                     type="button"
                     className="underline text-slate-400 hover:text-slate-200"
@@ -1081,7 +1080,7 @@ export default function Create() {
                       void apiPost("/auth/roblox/logout").then(() => setRobloxMe({ loggedIn: false, configured: true }));
                     }}
                   >
-                    Logg ut
+                    {t.logout}
                   </button>
                 </p>
               ) : (
@@ -1092,15 +1091,13 @@ export default function Create() {
                     window.location.href = `${API_BASE}/auth/roblox/login?returnTo=${encodeURIComponent(window.location.pathname)}`;
                   }}
                 >
-                  🎮 Logg inn med Roblox (send skins rett til kontoen din)
+                  {t.loginWithRoblox}
                 </button>
               )
             ) : null}
             {skinStatus ? (
               <p className="text-sm text-slate-400">
-                {skinStatus.paidCredits > 0
-                  ? `⭐ ${skinStatus.paidCredits} opplastinger igjen`
-                  : "10 kr gir 3 opplastinger (en voksen hjelper med betalingen)"}
+                {skinStatus.paidCredits > 0 ? t.creditsLeft(skinStatus.paidCredits) : t.priceInfo}
               </p>
             ) : null}
             {uploadStatus ? <p className="text-sm text-emerald-400 text-center max-w-lg">{uploadStatus}</p> : null}
@@ -1110,15 +1107,15 @@ export default function Create() {
                 className="rounded-xl border border-slate-700 bg-slate-900 px-4 py-2 text-sm text-slate-300 hover:border-emerald-400"
                 onClick={() => openRobloxWithFiles(readyFiles)}
               >
-                📥 Last ned filene på nytt (gratis – du har allerede betalt)
+                {t.redownload}
               </button>
             ) : null}
-            {!hasDesign && !aiLoading ? <p className="text-sm text-slate-500">Trykk på et bilde øverst for å lage skinnet ditt! 👆</p> : null}
+            {!hasDesign && !aiLoading ? <p className="text-sm text-slate-500">{t.tapHint}</p> : null}
           </div>
 
           {hasDesign && lastOutfit && !aiLoading ? (
             <div className="w-full rounded-xl border-2 border-sky-500/40 bg-sky-500/5 p-4">
-              <p className="mb-2 text-sm font-semibold text-sky-300">🪄 Vil du endre noe? Skriv det her – resten beholdes!</p>
+              <p className="mb-2 text-sm font-semibold text-sky-300">{t.reviseTitle}</p>
               <form
                 className="flex flex-col sm:flex-row gap-2"
                 onSubmit={(event) => {
@@ -1129,13 +1126,13 @@ export default function Create() {
                 <Input
                   value={reviseText}
                   onChange={(event) => setReviseText(event.target.value)}
-                  placeholder="F.eks. «gjør vingene større» eller «bare capsen blå»"
+                  placeholder={t.revisePlaceholder}
                   className="h-12 bg-slate-900 border-slate-700 text-base"
                   disabled={aiLoading}
                 />
                 <Button type="submit" size="lg" className="h-12 px-6 bg-sky-500 text-sky-950 hover:bg-sky-400" disabled={aiLoading || !reviseText.trim()}>
                   <Sparkles className="mr-2 h-5 w-5" />
-                  Endre
+                  {t.reviseButton}
                 </Button>
               </form>
               {undoStack.length > 0 ? (
@@ -1147,14 +1144,14 @@ export default function Create() {
                   disabled={aiLoading}
                 >
                   <Undo2 className="mr-2 h-5 w-5" />
-                  ↩️ Angre siste endring
+                  {t.undoButton}
                 </Button>
               ) : null}
             </div>
           ) : null}
 
           <details className="w-full rounded-xl border border-slate-800 bg-slate-900/50 p-4">
-            <summary className="cursor-pointer text-sm font-semibold text-slate-300">✏️ Skriv ditt eget skin (for store barn og voksne)</summary>
+            <summary className="cursor-pointer text-sm font-semibold text-slate-300">{t.customSummary}</summary>
             <form
               className="mt-3 flex flex-col sm:flex-row gap-2"
               onSubmit={(event) => {
@@ -1165,13 +1162,13 @@ export default function Create() {
               <Input
                 value={prompt}
                 onChange={(event) => setPrompt(event.target.value)}
-                placeholder="F.eks. «svart drage-hettegenser med røde flammer»"
+                placeholder={t.customPlaceholder}
                 className="h-12 bg-slate-900 border-slate-700 text-base"
                 disabled={aiLoading}
               />
               <Button type="submit" size="lg" className="h-12 px-6" disabled={aiLoading || !prompt.trim()}>
                 <Sparkles className="mr-2 h-5 w-5" />
-                Lag skin
+                {t.createButton}
               </Button>
             </form>
           </details>
