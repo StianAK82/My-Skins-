@@ -137,6 +137,10 @@ type UndoSnapshot = {
 
 const UNDO_STACK_LIMIT = 10;
 
+// Sentinel for «Ingen» in the headcover chips – hides every headcover part.
+// Uses a value no AI part name can collide with.
+const HEADCOVER_NONE = "__none__";
+
 // Hair style → preview asset (shared by first-generation and revision flows).
 const HAIR_ASSET_MAP: Record<string, string> = {
   short: "hair_short",
@@ -298,7 +302,8 @@ export default function Create() {
   const [reviseText, setReviseText] = useState("");
   // History stack: one snapshot per successful revision, so «Angre» rolls back one step.
   const [undoStack, setUndoStack] = useState<UndoSnapshot[]>([]);
-  // When the AI proposes several headcovers, the child picks which one is shown (null = first).
+  // When the AI proposes several headcovers, the child picks which one is shown
+  // (null = first, HEADCOVER_NONE = hide all of them).
   const [selectedHeadcover, setSelectedHeadcover] = useState<string | null>(null);
 
   const { state, setAiPlanPreview, setAiAvatarPreview, deleteLayer, addLayer, applyAiPlan, setPaintSwatch, setAvatarSlot, loadSnapshot } = useDesignStore();
@@ -306,9 +311,10 @@ export default function Create() {
   // The renderer only shows one headcover at a time; when the AI proposes several,
   // the child picks which one via chips. We filter here so the preview updates instantly.
   const headcoverOptions = (lastOutfit?.customParts ?? []).filter((p) => p.shape === "headcover");
-  const shownHeadcover = selectedHeadcover ?? headcoverOptions[0]?.name ?? null;
+  const shownHeadcover =
+    selectedHeadcover === HEADCOVER_NONE ? HEADCOVER_NONE : selectedHeadcover ?? headcoverOptions[0]?.name ?? null;
   const displayedCustomParts =
-    headcoverOptions.length > 1
+    headcoverOptions.length > 0
       ? lastOutfit?.customParts?.filter((p) => p.shape !== "headcover" || p.name === shownHeadcover)
       : lastOutfit?.customParts;
   const hasDesign = state.layers.length > 0 || Boolean(state.baseColor);
@@ -834,9 +840,13 @@ export default function Create() {
       }
 
       setLastOutfit(outfit);
-      // Keep the child's headcover choice only if that part still exists in the new plan.
+      // Keep the child's headcover choice only if that part still exists in the new plan
+      // («Ingen» is always kept – the child asked to hide headcovers).
       setSelectedHeadcover((current) =>
-        current && (outfit.customParts ?? []).some((p) => p.shape === "headcover" && p.name === current) ? current : null,
+        current === HEADCOVER_NONE ||
+        (current && (outfit.customParts ?? []).some((p) => p.shape === "headcover" && p.name === current))
+          ? current
+          : null,
       );
       lastPromptRef.current = `${lastPromptRef.current}. ${text}`.slice(0, 900);
       setReviseText("");
@@ -998,7 +1008,7 @@ export default function Create() {
             />
           </div>
 
-          {headcoverOptions.length > 1 && (
+          {headcoverOptions.length > 0 && (
             <div className="mt-4 rounded-xl border border-slate-700 bg-slate-900/60 p-4 text-sm">
               <div className="mb-2 font-semibold text-violet-300">{t.headcoverChoiceTitle}</div>
               <div className="flex flex-wrap gap-2">
@@ -1017,6 +1027,17 @@ export default function Create() {
                     {part.name}
                   </button>
                 ))}
+                <button
+                  type="button"
+                  onClick={() => setSelectedHeadcover(HEADCOVER_NONE)}
+                  className={`flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs transition active:scale-95 ${
+                    shownHeadcover === HEADCOVER_NONE
+                      ? "border-violet-400 bg-violet-500/20 text-violet-200"
+                      : "border-slate-600/60 bg-slate-800/60 text-slate-300 hover:border-slate-500"
+                  }`}
+                >
+                  🚫 {t.headcoverNone}
+                </button>
               </div>
             </div>
           )}

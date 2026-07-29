@@ -78,6 +78,7 @@ export type Dict = {
   previewOnlyTitle: string;
   previewOnlyHint: string;
   headcoverChoiceTitle: string;
+  headcoverNone: string;
   unsupportedTitle: string;
   loadingDefault: string;
   loadingWait: string;
@@ -172,6 +173,7 @@ const no: Dict = {
   previewOnlyTitle: "Ser du bare her 👀",
   previewOnlyHint: "Roblox lar oss ikke laste opp slike 3D-deler ennå – men de vises på figuren din her!",
   headcoverChoiceTitle: "Velg hva som vises på hodet 🎩",
+  headcoverNone: "Ingen",
   unsupportedTitle: "⚠️ Ikke støttet",
   loadingDefault: "Lager skinnet ditt…",
   loadingWait: "Vent litt – se på figuren! 👀",
@@ -266,6 +268,7 @@ const en: Dict = {
   previewOnlyTitle: "Only visible here 👀",
   previewOnlyHint: "Roblox doesn't let us upload these 3D parts yet – but they show on your character here!",
   headcoverChoiceTitle: "Pick what shows on the head 🎩",
+  headcoverNone: "None",
   unsupportedTitle: "⚠️ Not supported",
   loadingDefault: "Making your skin…",
   loadingWait: "Hang on – watch your character! 👀",
