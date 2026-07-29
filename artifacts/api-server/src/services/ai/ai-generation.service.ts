@@ -148,7 +148,7 @@ export class AiGenerationService {
       "Full-outfit words mean top AND bottom: treningsdress/tracksuit=jacket+pants+sneakers, dress/suit=jacket+pants, fotballdrakt/football kit=tshirt+shorts+sneakers, ninja/kostyme/antrekk/outfit=top+bottom. The word 'skin' alone means a complete look (top+bottom).",
       "hair.style is \"none\" unless the user asks for hair. accessories only contains requested items (max 6).",
       "Everything in the outfit schema (shoes, hair, all listed accessory kinds) IS supported in the 3D preview — never list those in `unsupported`. Only put something in `unsupported` when it truly cannot be represented (e.g. a specific brand logo, an animal companion).",
-      "If the user only asks for one piece (e.g. only a t-shirt), set every other field to none/empty.",
+      "If the user only asks for one piece (e.g. only a t-shirt), set every other field to none/empty. Words like «bare», «kun», 'only', 'just' make this strict: «bare en blå caps» = ONLY {kind:'cap'} — top, bottom, shoes all none, nothing else added.",
       "",
       "customParts — NO LIMITS placement rule (strict): children can ask for ANYTHING anywhere on the body, and you MUST build it exactly where they say using `customParts` (max 4). Pick the closest shape + the exact attach point the child names.",
       "Examples: «horn i panna» → {name:'Horn i panna', shape:'horn', attach:'forehead'}; «horn i magen» → {shape:'horn', attach:'belly'}; «pigger på ryggen» → {shape:'spike', attach:'back'}; «magisk kule i hånda» → {shape:'orb', attach:'right_hand'}; «finner på beina» → {shape:'fin', attach:'left_leg'} + {attach:'right_leg'}.",
@@ -157,13 +157,14 @@ export class AiGenerationService {
       "Never refuse a placement, never move it somewhere more 'normal', never put it in `unsupported` — the child's exact wish wins. Use customParts for anything the accessory kinds don't cover.",
       "",
       "Themed looks (strict — use the ICONIC real-world costume, correct colors are mandatory):",
-      "When the prompt names a creature or figure (enhjørning, prinsesse, drage, ninja, superhelt, pirat, astronaut ...), the child wants to BE that figure. This OVERRIDES the single-piece rule: fill the FULL outfit — top AND bottom AND the theme's mandatory accessories below — never just a motif on a shirt, and never leave outfit fields at none for a themed request.",
+      "When the prompt names ANY creature, figure, profession, character or thing to look like — in ANY language — the child wants to BE that figure. Examples: enhjørning, prinsesse, drage, ninja, superhelt, pirat, astronaut, ridder/knight/riddare, politi/police, brannmann/firefighter, lege/doctor, robot, heks/witch, vampyr/vampire, konge/king, dronning/queen, julenisse/santa, gamer, alv/elf, troll, dinosaur, iskrem/ice cream, and every similar wish. This OVERRIDES the single-piece rule: fill the FULL outfit — top AND bottom AND the theme's iconic accessories — never just a motif on a shirt, and never leave outfit fields at none for a themed request.",
+      "Iconic looks for common figures (use real-world costume colors): ridder/knight=grey #9AA3AD metal-look jacket+pants, accessories helmet+sword+shoulder_guards; politi/police=dark navy #1B2A4A shirt+pants with gold badge motif, cap; brannmann/firefighter=yellow-beige #D9A441 jacket+pants with reflective grey stripes, helmet in red #C0392B; lege/doctor=white #FFFFFF coat (jacket) over blue scrubs pants; robot=grey #8D99AE metal panels top+bottom with glowing blue #38BDF8 accents, antenna via customParts; heks/witch=black #241B35 dress with purple #7C3AED accents, hat; vampyr/vampire=black #1A1A24 jacket + dark pants with red #8B0000 accents; konge/king=royal red #8B1E3F jacket with gold trim + dark pants, crown; julenisse/santa=red #C0392B jacket+pants with white trim, beanie in red, belt in black; gamer=dark hoodie+pants with neon #39FF14 accents and headset (via cap or customParts).",
       "- enhjørning/unicorn: WHITE base with pastel rainbow accents (pink #F8A8C8, purple #B78BE8, turquoise #7DD8D8, gold). top=hoodie or dress in white/pastel, accessories MUST include {kind:'unicorn_horn', color:'#F5C542'} (a unicorn head-hat: white ears + gold spiral horn + rainbow mane) and {kind:'tail', color:'#F8A8C8'}. Motif: rainbow/stars. NEVER dark or navy colors.",
       "- prinsesse/princess (eventyrprinsesse): a fairytale BALL GOWN — top=dress in pink #F7B6D2 or light blue #A8C8F0 with GOLD trim, fitted bodice + big voluminous skirt look, puffed sleeves. hair=long unless the user says otherwise, accessories MUST include {kind:'crown', color:'#F5C542'} (tiara) and may include {kind:'necklace'} and {kind:'gloves', color:'#FFFFFF'}. Elegant sparkle motif, NEVER dark/street colors.",
       "- drage/dragon: GREEN #3E8E4E or RED #C0392B scale-textured top+bottom (scale pattern motif on chest and belly panel in lighter #D8C878), accessories MUST include {kind:'dragon_hood', color matching body} (a dragon head-hat: hood with snout, teeth and horns), {kind:'wings', color matching body} and {kind:'tail'}. shoes=boots. Fierce but kid-friendly.",
       "- engel/angel: WHITE and gold look — top=dress or hoodie in white #FFFFFF with gold trim, accessories MUST include {kind:'wings', color:'#FFFFFF'} and {kind:'aura', color:'#F5C542'} (glowing halo ring).",
       "- ninja: BLACK #1F2937 fitted top+bottom, accessories MUST include {kind:'mask', color:'#111827'} and {kind:'sword', color:'#64748B'} (blades on the back), may include {kind:'belt', color:'#C0392B'}.",
-      "- astronaut/romfarer: a real NASA-style space suit — top=jacket AND bottom=pants in WHITE #F5F7FA with dark navy #1E2A44 panel lines and small orange #E8862E accents, shoes=boots (chunky moon boots, white/grey). accessories MUST include {kind:'helmet', color:'#FFFFFF'} (round space helmet with visor) and {kind:'backpack', color:'#D8DEE8'} (life-support pack). Motif: round mission patch on the chest, small rocket and stars. NEVER leave the outfit empty for an astronaut.",
+      "- astronaut/romfarer: a real NASA-style space suit — top=jacket AND bottom=pants in WHITE #F5F7FA with dark navy #1E2A44 panel lines and small orange #E8862E accents, shoes=boots (chunky moon boots, white/grey). accessories MUST include {kind:'helmet', color:'#FFFFFF'} (round space helmet with visor) and {kind:'backpack', color:'#D8DEE8'} (life-support pack). Motif: ONE round mission patch on the chest plus a small flag — the suit fabric itself stays plain white with panel seams, NEVER an all-over print of astronauts/rockets/stars. NEVER leave the outfit empty for an astronaut.",
       "For ANY themed request (animal, fantasy figure, profession), pick the real-world iconic costume colors and include the matching head accessory, wings/tail when the creature has them, and a motif that makes the texture read as that theme at a glance.",
       ...(input.previousOutfit ? [
         "",
@@ -254,20 +255,28 @@ export class AiGenerationService {
     const normalized = normalizeDesignPayload(input, modelResult);
     let design = aiValidationService.ensureDesign(normalized);
 
-    // Safety net: a themed request (astronaut, ninja, dragon …) must never come
-    // back with an empty 3D outfit — retry once with a corrective instruction.
-    const THEMED = /drage|dragon|ninja|superhelt|superhero|zombie|astronaut|romfar|space|prinsesse|princess|enhjørning|unicorn|engel|angel|pirat|pirate|hai\b|shark|lava|kostyme|costume/i;
-    const outfit = (design as { outfit?: { top?: string; bottom?: string; accessories?: unknown[] } }).outfit;
-    const outfitEmpty = !outfit || ((outfit.top ?? "none") === "none" && (outfit.bottom ?? "none") === "none" && (outfit.accessories ?? []).length === 0);
-    if (!input.previousOutfit && outfitEmpty && THEMED.test(input.prompt)) {
-      console.warn("ai.themed_outfit_empty_retry", { prompt: input.prompt });
-      const correctivePrompt = `${this.buildPrompt(input, "generate")}\n\nIMPORTANT CORRECTION: your previous answer left the outfit empty. This prompt is a THEMED costume request — you MUST fill outfit.top, outfit.bottom, outfit.shoes and the theme's mandatory accessories exactly as the themed-look rules above describe. Returning outfit fields as none is WRONG for this request.`;
+    // Safety net: a request must never come back with a COMPLETELY empty 3D
+    // outfit (no top, no bottom, no accessories, no custom parts, no hair) —
+    // that is wrong for every prompt. Retry once with a corrective instruction.
+    type OutfitLike = { top?: string; bottom?: string; shoes?: string; accessories?: unknown[]; customParts?: unknown[]; hair?: { style?: string } };
+    const isOutfitEmpty = (o: OutfitLike | undefined) =>
+      !o || (
+        (o.top ?? "none") === "none" &&
+        (o.bottom ?? "none") === "none" &&
+        (o.shoes ?? "none") === "none" &&
+        (o.accessories ?? []).length === 0 &&
+        (o.customParts ?? []).length === 0 &&
+        (o.hair?.style ?? "none") === "none"
+      );
+    const outfit = (design as { outfit?: OutfitLike }).outfit;
+    if (!input.previousOutfit && isOutfitEmpty(outfit)) {
+      console.warn("ai.outfit_empty_retry", { prompt: input.prompt });
+      const correctivePrompt = `${this.buildPrompt(input, "generate")}\n\nIMPORTANT CORRECTION: your previous answer left the 3D outfit COMPLETELY empty (no top, no bottom, no accessories). That is always wrong — the child asked for a look. If the prompt names any figure, creature, profession or theme, fill outfit.top, outfit.bottom, outfit.shoes and the theme's iconic accessories per the rules above. If it names specific garments, set exactly those. Never return an all-none outfit.`;
       const retryResult = await this.askModel(correctivePrompt);
       this.logRawSchemaDiff(retryResult, input);
       const retryDesign = aiValidationService.ensureDesign(normalizeDesignPayload(input, retryResult));
-      const retryOutfit = (retryDesign as { outfit?: { top?: string; bottom?: string; accessories?: unknown[] } }).outfit;
-      const retryEmpty = !retryOutfit || ((retryOutfit.top ?? "none") === "none" && (retryOutfit.bottom ?? "none") === "none" && (retryOutfit.accessories ?? []).length === 0);
-      if (!retryEmpty) design = retryDesign;
+      const retryOutfit = (retryDesign as { outfit?: OutfitLike }).outfit;
+      if (!isOutfitEmpty(retryOutfit)) design = retryDesign;
     }
     const generationId = userId
       ? await this.saveGeneration(userId, input.prompt, "generate", design, input.style ?? null)
