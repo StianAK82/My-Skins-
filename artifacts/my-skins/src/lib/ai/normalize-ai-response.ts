@@ -93,13 +93,20 @@ const aiResponseSchema = z.object({
       bottom: z.enum(["pants", "shorts", "skirt", "none"]),
       shoes: z.enum(["none", "sneakers", "boots"]),
       hair: z.object({
-        style: z.enum(["none", "short", "long", "ponytail", "twintails", "spiky", "curly", "braids", "wavy"]),
+        style: z.enum(["none", "short", "long", "ponytail", "twintails", "spiky", "curly", "braids", "wavy", "snakes"]),
         color: z.string(),
       }),
       accessories: z.array(z.object({
         kind: z.enum(["cap", "beanie", "hat", "helmet", "crown", "glasses", "mask", "wings", "backpack", "bag", "necklace", "scarf", "horns", "tail", "belt", "gloves", "unicorn_horn", "dragon_hood", "jetpack", "sword", "shoulder_guards", "shoulder_pet", "aura", "flame_aura", "pixel_aura"]),
         color: z.string(),
       })).max(6),
+      customParts: z.array(z.object({
+        name: z.string(),
+        shape: z.enum(["horn", "spike", "orb", "plate", "band", "snake", "fin", "blob"]),
+        attach: z.enum(["forehead", "head_top", "face", "neck", "chest", "belly", "back", "hips", "left_shoulder", "right_shoulder", "left_hand", "right_hand", "left_leg", "right_leg", "left_foot", "right_foot"]),
+        color: z.string(),
+        size: z.enum(["small", "medium", "large"]),
+      })).max(4).optional(),
       unsupported: z.array(z.string()),
       reason: z.string(),
     }).optional(),

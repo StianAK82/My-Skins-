@@ -16,6 +16,7 @@ const previousOutfit: Outfit = {
     { kind: "wings", color: "#FFFFFF" },
     { kind: "backpack", color: "#00FF00" },
   ],
+  customParts: [],
   unsupported: [],
   reason: "",
 };

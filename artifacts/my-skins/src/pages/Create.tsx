@@ -159,6 +159,7 @@ const HAIR_ASSET_MAP: Record<string, string> = {
   curly: "hair_curly",
   braids: "hair_braids",
   wavy: "hair_wavy_midnight",
+  snakes: "hair_snakes",
 };
 
 // Accessory kind → preview slot(s) + asset(s) (shared by first-generation and revision flows).
@@ -220,13 +221,28 @@ function diffOutfits(prev: OutfitPlan, next: OutfitPlan): string[] {
   if (prev.shoes !== next.shoes) changes.push(`Sko: ${nb(prev.shoes)} → ${nb(next.shoes)}`);
   if (prev.hair.style !== next.hair.style) changes.push(`Hår: ${nb(prev.hair.style)} → ${nb(next.hair.style)}`);
   else if (next.hair.style !== "none" && prev.hair.color !== next.hair.color) changes.push("Hår: ny farge");
+  
   const prevAcc = new Map(prev.accessories.map((a) => [a.kind, a.color]));
   const nextAcc = new Map(next.accessories.map((a) => [a.kind, a.color]));
-  for (const [kind] of prevAcc) if (!nextAcc.has(kind)) changes.push(`Fjernet: ${nb(kind)}`);
-  for (const [kind, color] of nextAcc) {
+  for (const [kind] of prevAcc.entries()) if (!nextAcc.has(kind)) changes.push(`Fjernet: ${nb(kind)}`);
+  for (const [kind, color] of nextAcc.entries()) {
     if (!prevAcc.has(kind)) changes.push(`Ny: ${nb(kind)}`);
     else if (prevAcc.get(kind) !== color) changes.push(`${nb(kind)}: ny farge`);
   }
+
+  const prevParts = new Map((prev.customParts ?? []).map((p) => [p.name, p]));
+  const nextParts = new Map((next.customParts ?? []).map((p) => [p.name, p]));
+  for (const [name] of prevParts.entries()) if (!nextParts.has(name)) changes.push(`Fjernet: ${name}`);
+  for (const [name, part] of nextParts.entries()) {
+    if (!prevParts.has(name)) changes.push(`Ny: ${name}`);
+    else {
+      const prevP = prevParts.get(name)!;
+      if (prevP.color !== part.color || prevP.size !== part.size || prevP.attach !== part.attach) {
+        changes.push(`${name}: oppdatert`);
+      }
+    }
+  }
+
   return changes;
 }
 
@@ -260,6 +276,11 @@ function buildOutfitItemLists(outfit: OutfitPlan, conflicts: string[]): { upload
   for (const acc of outfit.accessories) {
     if (!ACCESSORY_ASSET_MAP[acc.kind] || conflicts.some((s) => s.includes(acc.kind))) continue;
     previewOnly.push(acc.kind.charAt(0).toUpperCase() + acc.kind.slice(1));
+  }
+  if (outfit.customParts) {
+    for (const part of outfit.customParts) {
+      previewOnly.push(part.name);
+    }
   }
   return { uploadable, previewOnly };
 }
@@ -957,6 +978,7 @@ export default function Create() {
               studioMode
               animated
               garment={garmentConfig}
+              customParts={lastOutfit?.customParts}
             />
           </div>
           

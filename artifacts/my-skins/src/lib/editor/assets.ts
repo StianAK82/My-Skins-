@@ -174,6 +174,25 @@ const hairCurlyParts = [
   makePart("sphere", [0.11, 12, 12], { position: [0.18, 0.08, 0.22], useAssetColor: true }),
 ];
 
+
+const hairSnakesParts: AvatarRenderPart[] = [
+  makePart("roundedBox", [0.68, 0.2, 0.62], { radius: 0.1, position: [0, 0.05, 0], useAssetColor: true }),
+];
+[
+  { r: 0, d: 0.2 }, { r: Math.PI/4, d: 0.2 }, { r: Math.PI/2, d: 0.2 }, { r: 3*Math.PI/4, d: 0.2 },
+  { r: Math.PI, d: 0.2 }, { r: 5*Math.PI/4, d: 0.2 }, { r: 3*Math.PI/2, d: 0.2 }, { r: 7*Math.PI/4, d: 0.2 }
+].forEach(({r, d}) => {
+  const x = Math.sin(r) * d;
+  const z = Math.cos(r) * d;
+  // Outward curve
+  hairSnakesParts.push(makePart("cylinder", [0.03, 0.035, 0.15, 8], { position: [x*1.2, 0.15, z*1.2], rotation: [Math.cos(r)*0.5, -r, -Math.sin(r)*0.5], useAssetColor: true }));
+  hairSnakesParts.push(makePart("cylinder", [0.025, 0.03, 0.15, 8], { position: [x*1.5, 0.26, z*1.5], rotation: [Math.cos(r)*1.0, -r, -Math.sin(r)*1.0], useAssetColor: true }));
+  hairSnakesParts.push(makePart("sphere", [0.05, 8, 8], { position: [x*1.75, 0.33, z*1.75], useAssetColor: true }));
+  // Eyes
+  hairSnakesParts.push(makePart("sphere", [0.012, 8, 8], { position: [x*1.75 + Math.sin(r-0.4)*0.04, 0.35, z*1.75 + Math.cos(r-0.4)*0.04], color: "#ef4444" }));
+  hairSnakesParts.push(makePart("sphere", [0.012, 8, 8], { position: [x*1.75 + Math.sin(r+0.4)*0.04, 0.35, z*1.75 + Math.cos(r+0.4)*0.04], color: "#ef4444" }));
+});
+
 const hairBraidsParts = [
   makePart("roundedBox", [0.62, 0.24, 0.56], { radius: 0.15, position: [0, 0.08, 0], useAssetColor: true }),
   makePart("cylinder", [0.05, 0.06, 0.12, 10], { position: [-0.28, -0.08, 0.06], useAssetColor: true }),
@@ -271,6 +290,8 @@ export const AVATAR_ASSETS: AvatarAsset[] = [
   { id: "hair_long", name: "Long Hair", category: "hair", slot: "hair", color: "#2d1f1a", renderMode: "part_kit", modelPath: "/avatar/hair/long.glb", parts: hairLongParts, styleTags: ["elegant"], previewOnly: true, exportable: false },
   { id: "hair_ponytail", name: "Ponytail", category: "hair", slot: "hair", color: "#2d1f1a", renderMode: "part_kit", modelPath: "/avatar/hair/ponytail.glb", parts: hairPonytailParts, styleTags: ["sport"], previewOnly: true, exportable: false },
   { id: "hair_curly", name: "Curly Hair", category: "hair", slot: "hair", color: "#2d1f1a", renderMode: "part_kit", modelPath: "/avatar/hair/curly.glb", parts: hairCurlyParts, styleTags: ["playful"], previewOnly: true, exportable: false },
+
+  { id: "hair_snakes", name: "Snake Hair", category: "hair", slot: "hair", color: "#3E8E4E", renderMode: "part_kit", modelPath: "/avatar/hair/snakes.glb", parts: hairSnakesParts, styleTags: ["fantasy"], previewOnly: true, exportable: false },
   { id: "hair_braids", name: "Braids", category: "hair", slot: "hair", color: "#2d1f1a", renderMode: "part_kit", modelPath: "/avatar/hair/braids.glb", parts: hairBraidsParts, styleTags: ["elegant"], previewOnly: true, exportable: false },
 
   { id: "hat_street_cap", name: "Street Cap", category: "hat", slot: "hat", color: "#0f172a", renderMode: "part_kit", modelPath: "/avatar/hat/street-cap.glb", parts: [makePart("roundedBox", [0.65, 0.22, 0.6], { radius: 0.15, position: [0, 0.04, 0], useAssetColor: true }), makePart("roundedBox", [0.38, 0.05, 0.23], { radius: 0.03, position: [0, 0.01, 0.37], useAssetColor: true })], styleTags: ["street", "sport"], previewOnly: true, exportable: false, defaultOffset: { x: 0, y: 0.08, z: 0 } },

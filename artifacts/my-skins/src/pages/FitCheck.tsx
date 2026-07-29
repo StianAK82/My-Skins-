@@ -21,6 +21,13 @@ type Combo = {
   model: AvatarModelVariant;
   garment?: GarmentConfig;
   slots?: Partial<Record<AvatarCosmeticSlot, AvatarSlotItem | null>>;
+  customParts?: Array<{
+    name: string;
+    shape: "horn" | "spike" | "orb" | "plate" | "band" | "snake" | "fin" | "blob";
+    attach: "forehead" | "head_top" | "face" | "neck" | "chest" | "belly" | "back" | "hips" | "left_shoulder" | "right_shoulder" | "left_hand" | "right_hand" | "left_leg" | "right_leg" | "left_foot" | "right_foot";
+    color: string;
+    size: "small" | "medium" | "large";
+  }>;
 };
 
 const COMBOS: Combo[][] = [
@@ -72,6 +79,12 @@ const COMBOS: Combo[][] = [
     { label: "Heroic: hansker+briller+hale", model: "heroic", garment: { top: "tshirt", bottom: "pants" }, slots: { neck: slotItem("neck_gloves"), hat: slotItem("hat_glasses"), back: slotItem("back_tail") } },
     { label: "Heroic: maske + curly hår", model: "heroic", garment: { top: "tshirt", bottom: "pants" }, slots: { hat: slotItem("hat_mask") } },
   ],
+  // Page 8 — custom parts & snake hair
+  [
+    { label: "Slangehår + pannehorn", model: "proportioned_r15", garment: { top: "tshirt", bottom: "pants" }, slots: { hair: slotItem("hair_snakes", "#3E8E4E") }, customParts: [{ name: "Pannehorn", shape: "horn", attach: "forehead", color: "#facc15", size: "medium" }] },
+    { label: "Ryggpigger + magehorn", model: "classic_blocky", garment: { top: "tshirt", bottom: "pants" }, customParts: [{ name: "Ryggpigger", shape: "spike", attach: "back", color: "#ef4444", size: "large" }, { name: "Magehorn", shape: "horn", attach: "belly", color: "#3b82f6", size: "large" }] },
+    { label: "Hånd-kule + skulderslange", model: "heroic", garment: { top: "hoodie", bottom: "pants" }, customParts: [{ name: "Glødende kule", shape: "orb", attach: "right_hand", color: "#22d3ee", size: "medium" }, { name: "Skulderslange", shape: "snake", attach: "left_shoulder", color: "#a855f7", size: "medium" }] },
+  ],
 ];
 
 const ALL_COMBOS: Combo[] = COMBOS.flat();
@@ -97,6 +110,7 @@ export default function FitCheck() {
           dimension="3d"
           avatarState={avatar}
           garment={combo.garment}
+          customParts={combo.customParts}
           animated={false}
         />
       </div>

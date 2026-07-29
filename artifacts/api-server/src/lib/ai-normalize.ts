@@ -146,7 +146,7 @@ export function normalizeDesignPayload(input: NormalizeInput, payload: unknown):
   const topOptions = ["hoodie", "sweater", "tshirt", "jacket", "dress", "none"] as const;
   const bottomOptions = ["pants", "shorts", "skirt", "none"] as const;
   const shoeOptions = ["none", "sneakers", "boots"] as const;
-  const hairStyles = ["none", "short", "long", "ponytail", "twintails", "spiky", "curly", "braids", "wavy"] as const;
+  const hairStyles = ["none", "short", "long", "ponytail", "twintails", "spiky", "curly", "braids", "wavy", "snakes"] as const;
   const accessoryKinds = ["cap", "beanie", "hat", "helmet", "crown", "glasses", "mask", "wings", "backpack", "bag", "necklace", "scarf", "horns", "tail", "belt", "gloves", "unicorn_horn", "dragon_hood", "jetpack", "sword", "shoulder_guards", "shoulder_pet", "aura", "flame_aura", "pixel_aura"] as const;
 
   const hairSource = (outfitSource.hair && typeof outfitSource.hair === "object") ? outfitSource.hair as Record<string, unknown> : {};
@@ -167,6 +167,34 @@ export function normalizeDesignPayload(input: NormalizeInput, payload: unknown):
       if (!accessoryKinds.includes(row.kind as typeof accessoryKinds[number])) return [];
       return [{ kind: row.kind as typeof accessoryKinds[number], color: normalizeHex(row.color) ?? colorPalette[0] ?? "#334155" }];
     }),
+    customParts: (() => {
+      const shapes = ["horn", "spike", "orb", "plate", "band", "snake", "fin", "blob"] as const;
+      const attaches = ["forehead", "head_top", "face", "neck", "chest", "belly", "back", "hips", "left_shoulder", "right_shoulder", "left_hand", "right_hand", "left_leg", "right_leg", "left_foot", "right_foot"] as const;
+      const sizes = ["small", "medium", "large"] as const;
+      const modelSent = Array.isArray(outfitSource.customParts);
+      const src = modelSent ? outfitSource.customParts as unknown[] : (prev?.customParts ?? []);
+      const parsed = src.slice(0, 4).flatMap((entry, idx) => {
+        const row = (entry && typeof entry === "object") ? entry as Record<string, unknown> : {};
+        if (!shapes.includes(row.shape as typeof shapes[number])) return [];
+        if (!attaches.includes(row.attach as typeof attaches[number])) return [];
+        // In revision mode, partial rows inherit color/size from the matching previous part
+        // (same shape+attach, else same index) instead of palette defaults.
+        const prevMatch = prev?.customParts?.find((p) => p.shape === row.shape && p.attach === row.attach) ?? prev?.customParts?.[idx];
+        return [{
+          name: typeof row.name === "string" && row.name.trim() ? row.name.trim().slice(0, 40) : (prevMatch?.name ?? String(row.shape)),
+          shape: row.shape as typeof shapes[number],
+          attach: row.attach as typeof attaches[number],
+          color: normalizeHex(row.color) ?? prevMatch?.color ?? colorPalette[0] ?? "#334155",
+          size: sizes.includes(row.size as typeof sizes[number]) ? row.size as typeof sizes[number] : (prevMatch?.size ?? "medium"),
+        }];
+      });
+      // Revision safety: a malformed array (every row invalid) must not silently erase
+      // existing parts — only an explicit empty array [] means removal.
+      if (modelSent && parsed.length === 0 && (outfitSource.customParts as unknown[]).length > 0 && prev?.customParts?.length) {
+        return prev.customParts;
+      }
+      return parsed;
+    })(),
     unsupported: Array.isArray(outfitSource.unsupported)
       ? outfitSource.unsupported.filter((entry): entry is string => typeof entry === "string" && Boolean(entry.trim())).slice(0, 6)
       : [],
