@@ -9,3 +9,4 @@ The built-in Screenshot tool's browser lacks WebGL, so 3D previews render the fa
 **Gotchas:**
 - drei `SoftShadows` patches shaders globally — multiple simultaneous canvases break ("randRGB already has a body"); render ONE canvas per page (my-skins has hidden `/fit-check?combo=N` QA route, 24 combos).
 - drei `RoundedBox` radius must be < half the smallest dimension or geometry folds into spikes (AvatarPreview now clamps this).
+- Animated (IdleGroup-rotated) drei RoundedBox meshes get wrongly frustum-culled — arms vanished during the dance until `frustumCulled={false}` was set on BodyPart RoundedBoxes. Diagnose by capturing several timed frames of the animated canvas.

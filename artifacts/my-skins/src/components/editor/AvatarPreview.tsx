@@ -229,14 +229,14 @@ function BodyPart({ material, args, position, radius, smoothness, maps, skinTone
   skinTone: string;
 }) {
   if (material === "skin") {
-    return <RoundedBox args={args} radius={radius} smoothness={smoothness} position={position} castShadow><meshStandardMaterial color={skinTone} roughness={0.35} metalness={0.05} /></RoundedBox>;
+    return <RoundedBox args={args} radius={radius} smoothness={smoothness} position={position} castShadow frustumCulled={false}><meshStandardMaterial color={skinTone} roughness={0.35} metalness={0.05} /></RoundedBox>;
   }
   const mapSet = material === "shirt" ? maps.shirt : maps.pants;
   const baseColor = material === "shirt" ? "#f8fafc" : "#e2e8f0";
   const topColor = material === "shirt" ? "#dbeafe" : "#cbd5e1";
   const bottomColor = material === "shirt" ? "#e2e8f0" : "#bfdbfe";
   return (
-    <RoundedBox args={args} radius={radius} smoothness={smoothness} position={position} castShadow>
+    <RoundedBox args={args} radius={radius} smoothness={smoothness} position={position} castShadow frustumCulled={false}>
       <meshStandardMaterial attach="material-0" map={mapSet.side} color={baseColor} roughness={0.4} metalness={0.05} />
       <meshStandardMaterial attach="material-1" map={mapSet.side} color={baseColor} roughness={0.4} metalness={0.05} />
       <meshStandardMaterial attach="material-2" color={topColor} roughness={0.4} metalness={0.05} />
