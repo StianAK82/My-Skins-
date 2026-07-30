@@ -417,7 +417,40 @@ export const AVATAR_ASSETS: AvatarAsset[] = [
   { id: "footwear_tech_boot_r", name: "Tech Boot (Right)", category: "footwear", slot: "rightFootwear", color: "#1e293b", renderMode: "part_kit", modelPath: "/avatar/footwear/tech-boot-right.glb", parts: [makePart("roundedBox", [0.28, 0.28, 0.36], { radius: 0.06, useAssetColor: true, metalness: 0.2 }), makePart("roundedBox", [0.29, 0.08, 0.38], { radius: 0.02, position: [0, -0.12, 0], color: "#334155" })], styleTags: ["cyber", "tactical"] },
 
   { id: "aura_neon_ring", name: "Neon Aura", category: "aura", slot: "aura", color: "#22d3ee", renderMode: "part_kit", modelPath: "/avatar/aura/neon-ring.glb", parts: [makePart("torus", [0.78, 0.05, 16, 40], { rotation: [Math.PI / 2, 0, 0], useAssetColor: true, emissive: "#22d3ee", emissiveIntensity: 0.5, transparent: true, opacity: 0.72 })], styleTags: ["street", "cyber"], fantasyTags: ["angel"], role: "aura", importance: "decorative", previewOnly: true, exportable: false },
-  { id: "aura_flame_orbit", name: "Flame Orbit", category: "aura", slot: "aura", color: "#f97316", renderMode: "part_kit", modelPath: "/avatar/aura/flame-orbit.glb", parts: [makePart("torus", [0.78, 0.03, 10, 36], { rotation: [Math.PI / 2, 0, 0], useAssetColor: true, emissive: "#f97316", emissiveIntensity: 0.65, transparent: true, opacity: 0.65 }), makePart("cone", [0.08, 0.28, 10], { position: [-0.55, 0.1, 0], color: "#fb923c", emissive: "#f97316", emissiveIntensity: 0.45, transparent: true, opacity: 0.78 }), makePart("cone", [0.08, 0.28, 10], { position: [-0.25, 0.14, 0], color: "#fb923c", emissive: "#f97316", emissiveIntensity: 0.45, transparent: true, opacity: 0.78 }), makePart("cone", [0.08, 0.28, 10], { position: [0, 0.1, 0], color: "#fb923c", emissive: "#f97316", emissiveIntensity: 0.45, transparent: true, opacity: 0.78 }), makePart("cone", [0.08, 0.28, 10], { position: [0.25, 0.14, 0], color: "#fb923c", emissive: "#f97316", emissiveIntensity: 0.45, transparent: true, opacity: 0.78 }), makePart("cone", [0.08, 0.28, 10], { position: [0.55, 0.1, 0], color: "#fb923c", emissive: "#f97316", emissiveIntensity: 0.45, transparent: true, opacity: 0.78 })], styleTags: ["flame", "hero"], fantasyTags: ["dragon", "demon"], role: "aura", importance: "decorative", previewOnly: true, exportable: false },
+  { id: "aura_flame_orbit", name: "Flame Orbit", category: "aura", slot: "aura", color: "#f97316", renderMode: "part_kit", modelPath: "/avatar/aura/flame-orbit.glb", parts: [
+    // Faint ember glow at the base of the flames (thin, no more hula hoop).
+    makePart("torus", [0.52, 0.018, 10, 36], { rotation: [Math.PI / 2, 0, 0], color: "#ea580c", emissive: "#f97316", emissiveIntensity: 0.9, transparent: true, opacity: 0.45 }),
+    // Full circle of flame tongues: alternating tall orange and short yellow flames, tilted slightly outward.
+    ...Array.from({ length: 12 }, (_, i) => {
+      const angle = (i / 12) * Math.PI * 2;
+      const tall = i % 2 === 0;
+      const r = 0.52;
+      const height = tall ? 0.34 : 0.2;
+      return makePart("cone", [tall ? 0.07 : 0.05, height, 8], {
+        position: [Math.cos(angle) * r, height / 2 - 0.02, Math.sin(angle) * r],
+        rotation: [Math.sin(angle) * 0.28, 0, -Math.cos(angle) * 0.28],
+        color: tall ? "#fb923c" : "#fde047",
+        emissive: tall ? "#f97316" : "#facc15",
+        emissiveIntensity: tall ? 0.7 : 0.9,
+        transparent: true,
+        opacity: 0.85,
+      });
+    }),
+    // Small inner yellow cores inside the tall flames for a hot center.
+    ...Array.from({ length: 6 }, (_, i) => {
+      const angle = ((i * 2) / 12) * Math.PI * 2;
+      const r = 0.52;
+      return makePart("cone", [0.035, 0.2, 8], {
+        position: [Math.cos(angle) * r, 0.1, Math.sin(angle) * r],
+        rotation: [Math.sin(angle) * 0.28, 0, -Math.cos(angle) * 0.28],
+        color: "#fef08a",
+        emissive: "#fde047",
+        emissiveIntensity: 1.1,
+        transparent: true,
+        opacity: 0.9,
+      });
+    }),
+  ], styleTags: ["flame", "hero"], fantasyTags: ["dragon", "demon"], role: "aura", importance: "decorative", previewOnly: true, exportable: false },
   { id: "aura_pixel_spark", name: "Pixel Spark", category: "aura", slot: "aura", color: "#a855f7", renderMode: "part_kit", modelPath: "/avatar/aura/pixel-spark.glb", parts: [makePart("box", [0.08, 0.08, 0.08], { position: [-0.55, -0.03, -0.12], useAssetColor: true, emissive: "#a855f7", emissiveIntensity: 0.44 }), makePart("box", [0.08, 0.08, 0.08], { position: [-0.25, 0.1, 0.12], useAssetColor: true, emissive: "#a855f7", emissiveIntensity: 0.44 }), makePart("box", [0.08, 0.08, 0.08], { position: [0.05, -0.03, -0.12], useAssetColor: true, emissive: "#a855f7", emissiveIntensity: 0.44 }), makePart("box", [0.08, 0.08, 0.08], { position: [0.3, 0.1, 0.12], useAssetColor: true, emissive: "#a855f7", emissiveIntensity: 0.44 }), makePart("box", [0.08, 0.08, 0.08], { position: [0.6, -0.03, -0.12], useAssetColor: true, emissive: "#a855f7", emissiveIntensity: 0.44 })], styleTags: ["cyber", "pixel"] },
 ];
 
