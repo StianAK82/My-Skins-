@@ -21,3 +21,4 @@ export * from "./billing_invoices";
 export * from "./entitlements";
 export * from "./promo_codes";
 export * from "./promo_code_redemptions";
+export * from "./artifact_objects";

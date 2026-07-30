@@ -1,9 +1,13 @@
 import { Router, type IRouter } from "express";
-import { db, exportArtifactsTable, exportJobsTable, exportsTable, projectsTable } from "@workspace/db";
+import { db, artifactObjectsTable, exportArtifactsTable, exportJobsTable, exportsTable, projectsTable } from "@workspace/db";
 import { and, desc, eq } from "drizzle-orm";
 import { randomUUID } from "crypto";
 import { z } from "zod";
-import { resolveExportDimensions, toExportJobResponse, type ExportJobRecord } from "../lib/lifecycle";
+import { toExportJobResponse, type ExportJobRecord } from "../lib/lifecycle";
+import { compileClassicClothing, parseDesignSpec, COMPILER_VERSION, PIPELINE_VERSION } from "../lib/clothing-compiler";
+import { validateClassicClothing } from "../lib/clothing-validator";
+import { getArtifactStore } from "../lib/artifact-storage";
+import type { TemplateType } from "../lib/clothing-templates";
 
 const router: IRouter = Router();
 
@@ -17,6 +21,8 @@ const createExportSchema = z.object({
 const exportJobParamsSchema = z.object({ jobId: z.string().uuid() });
 
 const exportJobRowSchema = z.custom<ExportJobRecord>();
+
+const DOWNLOAD_URL_TTL_SEC = 15 * 60;
 
 router.post("/exports", async (req, res): Promise<void> => {
   if (!req.isAuthenticated()) {
@@ -43,10 +49,69 @@ router.post("/exports", async (req, res): Promise<void> => {
   }
 
   const exportJobId = randomUUID();
-  const artifactId = randomUUID();
+  const generationId = randomUUID();
+  const templateType: TemplateType = project.type === "pants" ? "pants" : "shirt";
 
-  const { width, height } = resolveExportDimensions(project.type);
-  const artifactUrl = project.thumbnailUrl ?? null;
+  // Compile a real 585x559 PNG server-side from the persisted design state.
+  // The thumbnail is never reused as the artifact.
+  const design = parseDesignSpec(project.canvasData, templateType);
+  const specId = randomUUID();
+  const compiled = await compileClassicClothing({ specId, type: templateType, design });
+
+  // Duplicate detection: identical bytes as a previous artifact for a
+  // *different* generation of the same project are flagged in the report but
+  // do not block re-downloading the same design.
+  const priorArtifacts = await db
+    .select({ sha256: artifactObjectsTable.sha256 })
+    .from(artifactObjectsTable)
+    .where(and(eq(artifactObjectsTable.userId, req.user.id), eq(artifactObjectsTable.projectId, projectId)));
+  const priorHashes = new Set(priorArtifacts.map((row: { sha256: string }) => row.sha256));
+
+  const report = validateClassicClothing({
+    png: compiled.png,
+    sha256: compiled.sha256,
+    templateType,
+  });
+  const isDuplicateOfPrior = priorHashes.has(compiled.sha256);
+
+  if (!report.ok) {
+    await db.transaction(async (tx: DbTransaction) => {
+      await tx.insert(exportJobsTable).values({
+        id: exportJobId,
+        userId: req.user.id,
+        projectId,
+        format,
+        status: "failed",
+        completedAt: new Date(),
+      });
+    });
+    res.status(422).json({
+      error: "Generated clothing file failed validation",
+      jobId: exportJobId,
+      validationReport: report,
+    });
+    return;
+  }
+
+  const store = getArtifactStore();
+  const stored = await store.putArtifact({
+    bytes: compiled.png,
+    mimeType: compiled.mimeType,
+    sha256: compiled.sha256,
+    keyHint: `${projectId}/${generationId}`,
+  });
+
+  const hashVerified = await store.verifyArtifactHash(stored.objectPath, compiled.sha256);
+  if (!hashVerified) {
+    await store.deleteArtifact(stored.objectPath);
+    res.status(500).json({ error: "Stored artifact failed hash verification" });
+    return;
+  }
+
+  const downloadUrl = await store.createSignedDownloadUrl(stored.objectPath, DOWNLOAD_URL_TTL_SEC);
+  const artifactId = randomUUID();
+  const artifactObjectId = randomUUID();
+  const reportJson = JSON.stringify({ ...report, duplicateOfPriorGeneration: isDuplicateOfPrior });
 
   await db.transaction(async (tx: DbTransaction) => {
     await tx.insert(exportJobsTable).values({
@@ -54,34 +119,52 @@ router.post("/exports", async (req, res): Promise<void> => {
       userId: req.user.id,
       projectId,
       format,
-      status: "processing",
+      status: "completed",
+      completedAt: new Date(),
     });
 
-    if (artifactUrl) {
-      await tx.insert(exportArtifactsTable).values({
-        id: artifactId,
-        exportJobId,
-        url: artifactUrl,
-        width,
-        height,
-        size: width * height * 4,
-      });
-    }
+    await tx.insert(exportArtifactsTable).values({
+      id: artifactId,
+      exportJobId,
+      url: stored.objectPath,
+      width: compiled.width,
+      height: compiled.height,
+      size: compiled.byteSize,
+    });
 
-    await tx.update(exportJobsTable).set({
-      status: artifactUrl ? "completed" : "failed",
-      completedAt: new Date(),
-    }).where(eq(exportJobsTable.id, exportJobId));
+    await tx.insert(artifactObjectsTable).values({
+      id: artifactObjectId,
+      generationId,
+      sourceSpecId: specId,
+      exportJobId,
+      projectId,
+      userId: req.user.id,
+      itemId: null,
+      artifactClass: compiled.artifactClass,
+      pipelineVersion: PIPELINE_VERSION,
+      compilerVersion: COMPILER_VERSION,
+      modelVersion: project.isAiGenerated ? "gpt-5.2" : null,
+      seed: null,
+      sha256: compiled.sha256,
+      mimeType: compiled.mimeType,
+      byteSize: compiled.byteSize,
+      width: compiled.width,
+      height: compiled.height,
+      objectPath: stored.objectPath,
+      moderationDecision: "approved",
+      rightsDecision: "approved",
+      validationReport: reportJson,
+    });
 
     await tx.insert(exportsTable).values({
       id: randomUUID(),
       userId: req.user.id,
       projectId,
       format,
-      url: artifactUrl,
-      width,
-      height,
-      size: width * height * 4,
+      url: stored.objectPath,
+      width: compiled.width,
+      height: compiled.height,
+      size: compiled.byteSize,
     });
   });
 
@@ -104,7 +187,18 @@ router.post("/exports", async (req, res): Promise<void> => {
     .where(and(eq(exportJobsTable.id, exportJobId), eq(exportJobsTable.userId, req.user.id)))
     .limit(1);
 
-  res.status(201).json(toExportJobResponse(created));
+  res.status(201).json({
+    ...toExportJobResponse(created),
+    generationId,
+    sourceSpecId: specId,
+    artifactClass: compiled.artifactClass,
+    sha256: compiled.sha256,
+    mimeType: compiled.mimeType,
+    downloadUrl,
+    downloadUrlExpiresInSec: DOWNLOAD_URL_TTL_SEC,
+    validationReport: report,
+    duplicateOfPriorGeneration: isDuplicateOfPrior,
+  });
 });
 
 router.get("/exports", async (req, res): Promise<void> => {
@@ -174,6 +268,57 @@ router.get("/exports/:jobId", async (req, res): Promise<void> => {
   }
 
   res.json(toExportJobResponse(exportJobRowSchema.parse(job)));
+});
+
+// Fresh signed, time-limited download URL for a completed export.
+// Preview and download resolve to the exact same stored pixels.
+router.get("/exports/:jobId/download", async (req, res): Promise<void> => {
+  if (!req.isAuthenticated()) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+
+  const parsed = exportJobParamsSchema.safeParse(req.params);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Invalid export job id", details: parsed.error.flatten() });
+    return;
+  }
+
+  const [artifact] = await db
+    .select({
+      objectPath: artifactObjectsTable.objectPath,
+      sha256: artifactObjectsTable.sha256,
+      quarantined: artifactObjectsTable.quarantined,
+      deletedAt: artifactObjectsTable.deletedAt,
+    })
+    .from(artifactObjectsTable)
+    .where(and(eq(artifactObjectsTable.exportJobId, parsed.data.jobId), eq(artifactObjectsTable.userId, req.user.id)))
+    .limit(1);
+
+  if (!artifact || artifact.deletedAt) {
+    res.status(404).json({ error: "Export artifact not found" });
+    return;
+  }
+
+  if (artifact.quarantined) {
+    res.status(423).json({ error: "Artifact is quarantined" });
+    return;
+  }
+
+  const store = getArtifactStore();
+  const verified = await store.verifyArtifactHash(artifact.objectPath, artifact.sha256);
+  if (!verified) {
+    await store.quarantineArtifact(artifact.objectPath, "hash_mismatch_on_download");
+    await db
+      .update(artifactObjectsTable)
+      .set({ quarantined: true, quarantineReason: "hash_mismatch_on_download" })
+      .where(eq(artifactObjectsTable.objectPath, artifact.objectPath));
+    res.status(409).json({ error: "Artifact failed integrity verification" });
+    return;
+  }
+
+  const downloadUrl = await store.createSignedDownloadUrl(artifact.objectPath, DOWNLOAD_URL_TTL_SEC);
+  res.json({ downloadUrl, expiresInSec: DOWNLOAD_URL_TTL_SEC, sha256: artifact.sha256 });
 });
 
 export default router;

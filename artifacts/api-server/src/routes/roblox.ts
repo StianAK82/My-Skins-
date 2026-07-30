@@ -23,12 +23,14 @@ import {
 } from "../lib/roblox-upload";
 import {
   buildProcessingAttempt,
+  isObjectStoragePath,
   MAX_UPLOAD_RETRIES,
   parseUploadExecutionMode,
   resolveLatestCanonicalExportArtifact,
   validateRetryEligibility,
   type CanonicalExportArtifactCandidate,
 } from "../lib/roblox-publish-pipeline";
+import { getArtifactStore } from "../lib/artifact-storage";
 
 const router: IRouter = Router();
 
@@ -374,12 +376,34 @@ async function processUploadJobNow(input: {
     return;
   }
 
+  // Object-storage-backed artifacts store internal object paths; resolve a
+  // signed, time-limited HTTP(S) URL that Roblox can fetch.
+  let consumableArtifactUrl = artifact.artifactUrl!;
+  if (isObjectStoragePath(artifact.artifactUrl)) {
+    try {
+      consumableArtifactUrl = await getArtifactStore().createSignedDownloadUrl(artifact.artifactUrl!, 15 * 60);
+    } catch (error) {
+      await db.transaction(async (tx: DbTransaction) => {
+        await transitionUploadJob(tx, { uploadJobId: input.uploadJobId, from: "processing", to: "failed", data: { lastErrorCode: "ARTIFACT_URL_SIGNING_FAILED", lastErrorMessage: "Could not create a signed download URL for the export artifact." } });
+        await appendUploadEvent(tx, {
+          uploadJobId: input.uploadJobId,
+          status: "failed",
+          code: "ARTIFACT_URL_SIGNING_FAILED",
+          message: "Could not create a signed download URL for the export artifact.",
+          detail: { attempt: attemptNumber, exportArtifactId: artifact.artifactId },
+        });
+      });
+      input.req.log.error({ uploadJobId: input.uploadJobId, err: error }, "roblox.upload.artifact_url_signing_failed");
+      return;
+    }
+  }
+
   const uploadResult = await submitClassicUpload({
     cfg: input.cfg,
     accessToken,
     projectId: input.projectId,
     projectType: input.projectType,
-    artifactUrl: artifact.artifactUrl!,
+    artifactUrl: consumableArtifactUrl,
     title: input.projectTitle,
     req: input.req,
   });

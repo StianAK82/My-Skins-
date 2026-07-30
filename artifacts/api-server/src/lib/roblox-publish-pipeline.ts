@@ -33,6 +33,17 @@ function isValidHttpUrl(value: string | null): boolean {
   }
 }
 
+// Object-storage-backed artifacts are stored as internal object paths
+// (e.g. "/bucket/.private/clothing-artifacts/<id>.png"). They are resolved to
+// a signed HTTP(S) URL at upload time.
+export function isObjectStoragePath(value: string | null): boolean {
+  return Boolean(value && value.startsWith("/") && !value.startsWith("//"));
+}
+
+export function isConsumableArtifactUrl(value: string | null): boolean {
+  return isValidHttpUrl(value) || isObjectStoragePath(value);
+}
+
 export function resolveLatestCanonicalExportArtifact(
   candidates: CanonicalExportArtifactCandidate[],
 ): CanonicalExportArtifactResolution {
@@ -41,7 +52,7 @@ export function resolveLatestCanonicalExportArtifact(
   }
 
   const artifact = candidates.find((candidate) =>
-    isValidHttpUrl(candidate.artifactUrl)
+    isConsumableArtifactUrl(candidate.artifactUrl)
     && candidate.width === CANONICAL_CLASSIC_PNG_WIDTH
     && candidate.height === CANONICAL_CLASSIC_PNG_HEIGHT
     && candidate.size > 0,

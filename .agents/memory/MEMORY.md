@@ -7,4 +7,5 @@
 - [Headless WebGL screenshots](headless-webgl-screenshots.md) — Screenshot tool lacks WebGL; use playwright-core + nix chromium + swiftshader; one canvas per page (SoftShadows breaks multi-canvas); /fit-check QA route.
 - [my-skins SafetyGateway](my-skins-safety-gateway.md) — all /api/ai/* goes through one child-safety middleware; characters rewritten, brand logos blocked, only normalized prompt+hash+decision stored.
 - [AI proxy lacks /moderations](ai-proxy-no-moderations.md) — Replit OpenAI proxy 400s on POST /moderations; moderate content via a vision chat check (gpt-5-mini + strict JSON verdict, fail-closed).
+- [Server-side clothing compiler](clothing-compiler.md) — exports compile real 585×559 PNGs server-side (@napi-rs/canvas must be esbuild-external), validate zones, store in App Storage with SHA-256 provenance + signed URLs.
 - [AI design generation (gpt-5.2)](my-skins-ai-generation.md) — gpt-image-1 hero image makes prompts literal; token budget must be generous or JSON truncates (422).
