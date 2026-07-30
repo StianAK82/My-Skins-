@@ -1105,7 +1105,12 @@ export default function Create() {
           )}
           
           {outfitItems && (outfitItems.uploadable.length > 0 || outfitItems.previewOnly.length > 0 || outfitItems.unsupported.length > 0 || (outfitItems.changed?.length ?? 0) > 0) && (
-            <div className="mt-4 rounded-xl border border-slate-700 bg-slate-900/60 p-4 space-y-3 text-sm">
+            <div
+              className="mt-4 rounded-xl border border-slate-700 bg-slate-900/60 p-4 space-y-3 text-sm"
+              data-testid="outfit-result"
+              data-generation-state={aiLoading ? "loading" : "complete"}
+              aria-label="Generated outfit result"
+            >
               {(outfitItems.changed?.length ?? 0) > 0 && (
                 <div>
                   <div className="flex items-center gap-2 mb-2">
