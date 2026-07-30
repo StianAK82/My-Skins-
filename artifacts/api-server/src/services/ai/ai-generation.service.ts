@@ -14,6 +14,7 @@ import { normalizeDesignPayload } from "../../lib/ai-normalize";
 import { computeRetentionUntil } from "../../lib/ai-retention";
 import { hashPrompt, lookupDecision } from "../../lib/safety-gateway";
 import { aiValidationService } from "./ai-validation.service";
+import { buildFaithfulnessCorrection, evaluateOutfitFaithfulness } from "../../lib/outfit-faithfulness";
 
 type GenerateInput = z.infer<typeof aiGenerateRequestSchema>;
 type StylizedInput = { prompt: string; avatarType?: string; bodyType?: string; style?: string };
@@ -139,7 +140,7 @@ export class AiGenerationService {
       '    "topDescription": "short ENGLISH description of ONLY the upper-body garment fabric (color, material, pattern, small chest motif) — used to paint the clothing texture",',
       '    "bottomDescription": "short ENGLISH description of ONLY the lower-body garment fabric (color, material, pattern) — used to paint the clothing texture",',
       '    "hair": {"style": "none|short|long|ponytail|twintails|spiky|curly|braids|wavy|snakes", "color": "#RRGGBB"},',
-      '    "accessories": [{"kind": "cap|beanie|hat|helmet|crown|glasses|mask|wings|backpack|bag|necklace|scarf|horns|tail|belt|gloves|unicorn_horn|dragon_hood|jetpack|sword|shoulder_guards|shoulder_pet|aura|flame_aura|pixel_aura", "color": "#RRGGBB"}],',
+      '    "accessories": [{"kind": "cap|beanie|hat|helmet|crown|glasses|mask|wings|backpack|bag|necklace|scarf|horns|tail|belt|gloves|unicorn_horn|dragon_hood|jetpack|sword|shoulder_guards|shoulder_pet|aura|flame_aura|pixel_aura", "color": "#RRGGBB", "size": "small|medium|large"}],',
       '    "customParts": [{"name": "string", "shape": "horn|spike|orb|plate|band|snake|fin|blob|headcover", "attach": "forehead|head_top|face|neck|chest|belly|back|hips|left_shoulder|right_shoulder|left_hand|right_hand|left_leg|right_leg|left_foot|right_foot", "color": "#RRGGBB", "size": "small|medium|large"}],',
       '    "unsupported": ["string"],',
       '    "reason": "string"',
@@ -233,12 +234,11 @@ export class AiGenerationService {
         lastError = new SyntaxError("AI returned empty content");
         continue;
       }
-      console.info("ai.model.raw_response", { attempt, content });
       try {
         return parseStrictJson(content);
       } catch (error) {
         lastError = error instanceof Error ? error : new SyntaxError("AI returned non-JSON content");
-        console.error("ai.model.invalid_json", { attempt, content, error: lastError });
+        console.error("ai.model.invalid_json", { attempt, error: lastError });
       }
     }
 
@@ -292,6 +292,23 @@ export class AiGenerationService {
       const retryDesign = aiValidationService.ensureDesign(normalizeDesignPayload(input, retryResult));
       const retryOutfit = (retryDesign as { outfit?: OutfitLike }).outfit;
       if (!isOutfitEmpty(retryOutfit)) design = retryDesign;
+    }
+    // Schema-valid model output may still omit requested pieces. Validate the
+    // normalized plan against deterministic multilingual requirements, retry
+    // once with exact corrections, and retain only a better-scoring result.
+    const candidateOutfit = (design as { outfit?: OutfitLike }).outfit;
+    if (!input.previousOutfit && candidateOutfit && !isOutfitEmpty(candidateOutfit)) {
+      const report = evaluateOutfitFaithfulness(input.prompt, candidateOutfit as Parameters<typeof evaluateOutfitFaithfulness>[1]);
+      if (!report.ok) {
+        console.warn("ai.outfit_faithfulness_retry", { requirements: report.requirements, issueCount: report.issues.length, score: report.score });
+        const retryResult = await this.askModel(`${this.buildPrompt(input, "generate")}\n\n${buildFaithfulnessCorrection(report)}`);
+        const retryDesign = aiValidationService.ensureDesign(normalizeDesignPayload(input, retryResult));
+        const retryOutfit = (retryDesign as { outfit?: OutfitLike }).outfit;
+        if (retryOutfit && !isOutfitEmpty(retryOutfit)) {
+          const retryReport = evaluateOutfitFaithfulness(input.prompt, retryOutfit as Parameters<typeof evaluateOutfitFaithfulness>[1]);
+          if (retryReport.score > report.score) design = retryDesign;
+        }
+      }
     }
     const generationId = userId
       ? await this.saveGeneration(userId, input.prompt, "generate", design, input.style ?? null)

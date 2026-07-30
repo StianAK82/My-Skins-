@@ -14,6 +14,7 @@ import {
   pickPantsColors,
   renderPantsTexture,
   renderTShirtTexture,
+  accessoryPreviewScale,
   type OutfitFiles,
 } from "@/lib/editor/outfit";
 import { resolveAvatarSlotAssets } from "@/lib/ai/asset-resolver";
@@ -216,8 +217,8 @@ function diffOutfits(prev: OutfitPlan, next: OutfitPlan, t: Dict): string[] {
   if (prev.hair.style !== next.hair.style) changes.push(`${t.fieldHair}: ${name(prev.hair.style)} → ${name(next.hair.style)}`);
   else if (next.hair.style !== "none" && prev.hair.color !== next.hair.color) changes.push(t.itemNewColor(t.fieldHair));
   
-  const prevAcc = new Map(prev.accessories.map((a) => [a.kind, a.color]));
-  const nextAcc = new Map(next.accessories.map((a) => [a.kind, a.color]));
+  const prevAcc = new Map(prev.accessories.map((a) => [a.kind, `${a.color}:${a.size}`]));
+  const nextAcc = new Map(next.accessories.map((a) => [a.kind, `${a.color}:${a.size}`]));
   for (const [kind] of prevAcc.entries()) if (!nextAcc.has(kind)) changes.push(t.removed(name(kind)));
   for (const [kind, color] of nextAcc.entries()) {
     if (!prevAcc.has(kind)) changes.push(t.added(name(kind)));
@@ -241,8 +242,8 @@ function diffOutfits(prev: OutfitPlan, next: OutfitPlan, t: Dict): string[] {
 }
 
 // Map an outfit's accessories to preview slots (one item per slot, first wins).
-function mapOutfitToSlots(outfit: OutfitPlan, t: Dict): { slots: Record<string, { assetId: string; color: string }>; conflicts: string[] } {
-  const slots: Record<string, { assetId: string; color: string }> = {};
+function mapOutfitToSlots(outfit: OutfitPlan, t: Dict): { slots: Record<string, { assetId: string; color: string; scale: number }>; conflicts: string[] } {
+  const slots: Record<string, { assetId: string; color: string; scale: number }> = {};
   const conflicts: string[] = [];
   for (const acc of outfit.accessories) {
     const mapped = ACCESSORY_ASSET_MAP[acc.kind];
@@ -253,7 +254,7 @@ function mapOutfitToSlots(outfit: OutfitPlan, t: Dict): { slots: Record<string, 
       continue;
     }
     for (const entry of mapped) {
-      slots[entry.slot] = { assetId: entry.assetId, color: acc.color };
+      slots[entry.slot] = { assetId: entry.assetId, color: acc.color, scale: accessoryPreviewScale(acc.size) };
     }
   }
   return { slots, conflicts };
@@ -606,7 +607,7 @@ export default function Create() {
             ...previewAvatar.slots,
             [slot]: {
               assetId: item.assetId,
-              scale: 1,
+              scale: item.scale,
               visible: true,
               color: item.color,
               offset: { x: 0, y: 0, z: 0 },
@@ -808,10 +809,10 @@ export default function Create() {
       for (const slot of new Set([...Object.keys(prevSlots), ...Object.keys(nextSlots)])) {
         const before = prevSlots[slot];
         const after = nextSlots[slot];
-        if (before?.assetId === after?.assetId && before?.color === after?.color) continue;
+        if (before?.assetId === after?.assetId && before?.color === after?.color && before?.scale === after?.scale) continue;
         setAvatarSlot(slot as "hat" | "back" | "neck", after ? {
           assetId: after.assetId,
-          scale: 1,
+          scale: after.scale,
           visible: true,
           color: after.color,
           offset: { x: 0, y: 0, z: 0 },
@@ -1104,7 +1105,12 @@ export default function Create() {
           )}
           
           {outfitItems && (outfitItems.uploadable.length > 0 || outfitItems.previewOnly.length > 0 || outfitItems.unsupported.length > 0 || (outfitItems.changed?.length ?? 0) > 0) && (
-            <div className="mt-4 rounded-xl border border-slate-700 bg-slate-900/60 p-4 space-y-3 text-sm">
+            <div
+              className="mt-4 rounded-xl border border-slate-700 bg-slate-900/60 p-4 space-y-3 text-sm"
+              data-testid="outfit-result"
+              data-generation-state={aiLoading ? "loading" : "complete"}
+              aria-label="Generated outfit result"
+            >
               {(outfitItems.changed?.length ?? 0) > 0 && (
                 <div>
                   <div className="flex items-center gap-2 mb-2">

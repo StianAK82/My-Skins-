@@ -124,6 +124,7 @@ export const aiOutfitSchema = z.object({
   accessories: z.array(z.object({
     kind: z.enum(["cap", "beanie", "hat", "helmet", "crown", "glasses", "mask", "wings", "backpack", "bag", "necklace", "scarf", "horns", "tail", "belt", "gloves", "unicorn_horn", "dragon_hood", "jetpack", "sword", "shoulder_guards", "shoulder_pet", "aura", "flame_aura", "pixel_aura"]),
     color: hexColorSchema,
+    size: z.enum(["small", "medium", "large"]).optional().default("medium"),
   }).strict()).max(6),
   customParts: z.array(z.object({
     name: z.string(),

@@ -7,6 +7,15 @@ export type OutfitFiles = {
   tshirt?: string; // square motif PNG (classic t-shirt)
 };
 
+export type AccessorySize = "small" | "medium" | "large";
+
+/** Semantic accessory size used consistently by generation, revisions and 3D preview. */
+export function accessoryPreviewScale(size: AccessorySize | undefined): number {
+  if (size === "large") return 1.35;
+  if (size === "small") return 0.75;
+  return 1;
+}
+
 function luminance(hex: string): number {
   const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
   if (!m) return 0.5;

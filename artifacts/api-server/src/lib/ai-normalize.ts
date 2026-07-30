@@ -148,6 +148,7 @@ export function normalizeDesignPayload(input: NormalizeInput, payload: unknown):
   const shoeOptions = ["none", "sneakers", "boots"] as const;
   const hairStyles = ["none", "short", "long", "ponytail", "twintails", "spiky", "curly", "braids", "wavy", "snakes"] as const;
   const accessoryKinds = ["cap", "beanie", "hat", "helmet", "crown", "glasses", "mask", "wings", "backpack", "bag", "necklace", "scarf", "horns", "tail", "belt", "gloves", "unicorn_horn", "dragon_hood", "jetpack", "sword", "shoulder_guards", "shoulder_pet", "aura", "flame_aura", "pixel_aura"] as const;
+  const accessorySizes = ["small", "medium", "large"] as const;
 
   const hairSource = (outfitSource.hair && typeof outfitSource.hair === "object") ? outfitSource.hair as Record<string, unknown> : {};
   const accessoriesSource = Array.isArray(outfitSource.accessories) ? outfitSource.accessories : null;
@@ -177,7 +178,12 @@ export function normalizeDesignPayload(input: NormalizeInput, payload: unknown):
     accessories: (accessoriesSource ?? prev?.accessories ?? []).slice(0, 6).flatMap((entry) => {
       const row = (entry && typeof entry === "object") ? entry as Record<string, unknown> : {};
       if (!accessoryKinds.includes(row.kind as typeof accessoryKinds[number])) return [];
-      return [{ kind: row.kind as typeof accessoryKinds[number], color: normalizeHex(row.color) ?? colorPalette[0] ?? "#334155" }];
+      const previous = prev?.accessories.find((accessory) => accessory.kind === row.kind);
+      return [{
+        kind: row.kind as typeof accessoryKinds[number],
+        color: normalizeHex(row.color) ?? previous?.color ?? colorPalette[0] ?? "#334155",
+        size: accessorySizes.includes(row.size as typeof accessorySizes[number]) ? row.size as typeof accessorySizes[number] : previous?.size ?? "medium",
+      }];
     }),
     customParts: (() => {
       const shapes = ["horn", "spike", "orb", "plate", "band", "snake", "fin", "blob", "headcover"] as const;

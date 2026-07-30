@@ -1,6 +1,7 @@
 {
   "name": "workspace",
   "version": "0.0.0",
+  "packageManager": "pnpm@10.28.1",
   "license": "MIT",
   "scripts": {
     "preinstall": "sh -c 'rm -f package-lock.json yarn.lock; case \"$npm_config_user_agent\" in pnpm/*) ;; *) echo \"Use pnpm instead\" >&2; exit 1 ;; esac'",
@@ -8,6 +9,9 @@
     "build:packages": "pnpm -r --if-present run build",
     "typecheck:libs": "tsc --build",
     "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck",
+    "test": "pnpm run test:unit && pnpm run test:integration",
+    "test:unit": "pnpm --filter @workspace/api-server test && pnpm --filter @workspace/my-skins test",
+    "test:integration": "pnpm --filter @workspace/api-server test:integration",
     "verify:api-server": "pnpm --filter @workspace/api-zod exec tsc -p tsconfig.json && pnpm --filter @workspace/db exec tsc -p tsconfig.json && pnpm --filter @workspace/api-server run typecheck && pnpm --filter @workspace/api-server run test",
     "test:visual": "playwright test"
   },

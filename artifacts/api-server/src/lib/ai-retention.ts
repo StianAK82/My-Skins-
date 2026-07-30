@@ -1,5 +1,4 @@
 import { and, isNull, lte, or } from "drizzle-orm";
-import { aiGenerationsTable, db } from "@workspace/db";
 
 /**
  * Data-minimization retention for ai_generations.
@@ -11,6 +10,23 @@ import { aiGenerationsTable, db } from "@workspace/db";
  */
 
 export const RETENTION_DAYS = 90;
+
+export interface AiRetentionRepository {
+  deleteExpired(now: Date, legacyCutoff: Date): Promise<number>;
+}
+
+export async function createProductionAiRetentionRepository(): Promise<AiRetentionRepository> {
+  const { aiGenerationsTable, db } = await import("@workspace/db");
+  return {
+    async deleteExpired(now, legacyCutoff) {
+      const deleted = await db.delete(aiGenerationsTable).where(or(
+        lte(aiGenerationsTable.retentionUntil, now),
+        and(isNull(aiGenerationsTable.retentionUntil), lte(aiGenerationsTable.createdAt, legacyCutoff)),
+      )).returning({ id: aiGenerationsTable.id });
+      return deleted.length;
+    },
+  };
+}
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -33,18 +49,10 @@ export function isGenerationExpired(
 }
 
 /** Delete all ai_generations rows past their retention deadline. Returns the deleted count. */
-export async function sweepExpiredAiGenerations(now: Date = new Date()): Promise<number> {
+export async function sweepExpiredAiGenerations(now: Date = new Date(), repository?: AiRetentionRepository): Promise<number> {
   const legacyCutoff = new Date(now.getTime() - RETENTION_DAYS * DAY_MS);
-  const deleted = await db
-    .delete(aiGenerationsTable)
-    .where(
-      or(
-        lte(aiGenerationsTable.retentionUntil, now),
-        and(isNull(aiGenerationsTable.retentionUntil), lte(aiGenerationsTable.createdAt, legacyCutoff)),
-      ),
-    )
-    .returning({ id: aiGenerationsTable.id });
-  return deleted.length;
+  const activeRepository = repository ?? await createProductionAiRetentionRepository();
+  return activeRepository.deleteExpired(now, legacyCutoff);
 }
 
 const SWEEP_INTERVAL_MS = 6 * 60 * 60 * 1000; // every 6 hours
