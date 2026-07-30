@@ -11,6 +11,7 @@ import {
   type aiGenerateRequestSchema,
 } from "../../lib/ai-contracts";
 import { normalizeDesignPayload } from "../../lib/ai-normalize";
+import { hashPrompt, lookupDecision } from "../../lib/safety-gateway";
 import { aiValidationService } from "./ai-validation.service";
 
 type GenerateInput = z.infer<typeof aiGenerateRequestSchema>;
@@ -245,10 +246,15 @@ export class AiGenerationService {
 
   private async saveGeneration(userId: string, prompt: string, type: string, result: unknown, style: string | null = null) {
     const generationId = randomUUID();
+    // `prompt` is already the SafetyGateway-normalized safe form (the gateway
+    // rewrites req.body in place). Store its hash + policy decision alongside.
+    const decision = lookupDecision(prompt);
     await db.insert(aiGenerationsTable).values({
       id: generationId,
       userId,
       prompt,
+      promptHash: decision?.promptHash ?? hashPrompt(prompt),
+      safetyDecision: decision?.decision ?? "allowed",
       result: JSON.stringify(result),
       type,
       style,

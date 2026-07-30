@@ -59,6 +59,10 @@ export type Dict = {
   errMotif: string;
   errBusy: string;
   errGeneric: string;
+  errTooLong: string;
+  errPii: string;
+  errBlocked: string;
+  errIp: string;
   errReviseTopDraw: string;
   errReviseGeneric: string;
   // Diff / item-list strings.
@@ -166,6 +170,10 @@ const no: Dict = {
   errMotif: "Designet er klart, men selve motivet kunne ikke tegnes. Prøv «Lag skin» igjen.",
   errBusy: "AI-en er opptatt eller grensen er nådd. Prøv igjen om litt.",
   errGeneric: "Noe gikk galt med AI-en. Prøv igjen, gjerne med en litt annen beskrivelse.",
+  errTooLong: "Oi, teksten ble litt for lang! Prøv å beskrive skinet ditt med færre ord. 😊",
+  errPii: "Ikke skriv navn, adresse eller telefonnummer her. Beskriv bare skinet du ønsker deg! 😊",
+  errBlocked: "Det der kan vi ikke lage. Prøv en annen idé – kanskje en kul drage eller en romhelt? 🐉",
+  errIp: "Vi kan ikke kopiere ekte merker og logoer, men vi kan lage din helt egen kule variant! Prøv å beskrive stilen i stedet.",
   errReviseTopDraw: "Endringen er lagret, men den nye overdelen kunne ikke tegnes. Prøv igjen.",
   errReviseGeneric: "Endringen gikk ikke gjennom. Prøv igjen, gjerne med litt andre ord.",
   fieldTop: "Overdel",
@@ -277,6 +285,10 @@ const en: Dict = {
   errMotif: "The design is ready, but the picture couldn't be drawn. Try “Make skin” again.",
   errBusy: "The AI is busy or the limit was reached. Try again in a bit.",
   errGeneric: "Something went wrong with the AI. Try again, maybe with a slightly different description.",
+  errTooLong: "Oops, that text got a bit long! Try describing your skin with fewer words. 😊",
+  errPii: "Don't write names, addresses or phone numbers here. Just describe the skin you want! 😊",
+  errBlocked: "We can't make that one. Try another idea – maybe a cool dragon or a space hero? 🐉",
+  errIp: "We can't copy real brands or logos, but we can make your very own cool version! Try describing the style instead.",
   errReviseTopDraw: "The change was saved, but the new top couldn't be drawn. Try again.",
   errReviseGeneric: "The change didn't go through. Try again, maybe with different words.",
   fieldTop: "Top",

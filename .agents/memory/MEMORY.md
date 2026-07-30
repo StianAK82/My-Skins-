@@ -5,4 +5,5 @@
 - [Roblox OAuth direct upload](my-skins-roblox-oauth.md) — login works via official OAuth; upload rides a LEGACY endpoint (Open Cloud lacks classic clothing); customer needs ID-verified konto + 10 Robux/plagg; always falls back to downloads.
 - [External Codex PRs can clobber the app](my-skins-external-codex-prs.md) — user merges GitHub Codex PRs that broke Create.tsx/pnpm; restore via gitsafe-backup/main, check git log on "white page".
 - [Headless WebGL screenshots](headless-webgl-screenshots.md) — Screenshot tool lacks WebGL; use playwright-core + nix chromium + swiftshader; one canvas per page (SoftShadows breaks multi-canvas); /fit-check QA route.
+- [my-skins SafetyGateway](my-skins-safety-gateway.md) — all /api/ai/* goes through one child-safety middleware; characters rewritten, brand logos blocked, only normalized prompt+hash+decision stored.
 - [AI design generation (gpt-5.2)](my-skins-ai-generation.md) — gpt-image-1 hero image makes prompts literal; token budget must be generous or JSON truncates (422).

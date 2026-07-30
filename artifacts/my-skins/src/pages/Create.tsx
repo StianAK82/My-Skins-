@@ -94,6 +94,24 @@ async function apiPost<T>(path: string, body?: unknown): Promise<{ status: numbe
   return { status: res.status, data };
 }
 
+// Maps a SafetyGateway error code (from the API) to the child-friendly message
+// in the active language. Returns null when the error isn't a safety error.
+function safetyErrorMessage(
+  error: unknown,
+  t: { errTooLong: string; errPii: string; errBlocked: string; errIp: string; errBusy: string },
+): string | null {
+  const anyErr = error as { code?: string; data?: { code?: string } } | null;
+  const code = anyErr?.code ?? anyErr?.data?.code;
+  switch (code) {
+    case "PROMPT_TOO_LONG": return t.errTooLong;
+    case "PII_DETECTED": return t.errPii;
+    case "SAFETY_BLOCKED": return t.errBlocked;
+    case "IP_RESTRICTED": return t.errIp;
+    case "RATE_LIMITED": return t.errBusy;
+    default: return null;
+  }
+}
+
 function openRobloxWithFiles(files: OutfitFiles) {
   const downloads: Array<[string, string | undefined]> = [
     ["roblox-overdel-shirt.png", files.shirt],
@@ -702,8 +720,11 @@ export default function Create() {
         if ((wantsTop && !topUrl) || (wantsBottom && !bottomUrl)) setAiError(t.errMotif);
       }
     } catch (error) {
+      const safety = safetyErrorMessage(error, t);
       const status = (error as { status?: number })?.status;
-      if (status === 401 || status === 429) {
+      if (safety) {
+        setAiError(safety);
+      } else if (status === 401 || status === 429) {
         setAiError(t.errBusy);
       } else {
         setAiError(t.errGeneric);
@@ -750,8 +771,9 @@ export default function Create() {
         previousOutfit: lastOutfit,
       });
       if (res.status !== 200) {
-        const err = new Error(`revise failed ${res.status}`) as Error & { status?: number };
+        const err = new Error(`revise failed ${res.status}`) as Error & { status?: number; code?: string };
         err.status = res.status;
+        err.code = (res.data as { code?: string } | null)?.code;
         throw err;
       }
       const response = normalizeAiResponse(res.data);
@@ -859,8 +881,11 @@ export default function Create() {
       // The revision succeeded – remember what it replaced so «Angre» can undo it.
       setUndoStack((stack) => [...stack.slice(-(UNDO_STACK_LIMIT - 1)), snapshot]);
     } catch (error) {
+      const safety = safetyErrorMessage(error, t);
       const status = (error as { status?: number })?.status;
-      if (status === 401 || status === 429) {
+      if (safety) {
+        setAiError(safety);
+      } else if (status === 401 || status === 429) {
         setAiError(t.errBusy);
       } else {
         setAiError(t.errReviseGeneric);

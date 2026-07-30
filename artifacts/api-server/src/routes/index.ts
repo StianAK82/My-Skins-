@@ -12,8 +12,14 @@ import robloxOAuthRouter from "./roblox-oauth";
 import shareRouter from "./share";
 import paymentsRouter from "./payments";
 import billingRouter from "./billing";
+import { safetyGatewayMiddleware } from "../middlewares/safety-gateway.middleware";
 
 const router: IRouter = Router();
+
+// SafetyGateway: every /api/ai/* request passes through the child-safety
+// pipeline (rate limit, length, PII, moderation, IP protection) BEFORE any
+// route handler and thus before any AI provider call.
+router.use("/ai", safetyGatewayMiddleware);
 
 router.use(healthRouter);
 router.use(authRouter);
