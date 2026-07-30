@@ -14,6 +14,7 @@ import {
   pickPantsColors,
   renderPantsTexture,
   renderTShirtTexture,
+  accessoryPreviewScale,
   type OutfitFiles,
 } from "@/lib/editor/outfit";
 import { resolveAvatarSlotAssets } from "@/lib/ai/asset-resolver";
@@ -253,7 +254,7 @@ function mapOutfitToSlots(outfit: OutfitPlan, t: Dict): { slots: Record<string, 
       continue;
     }
     for (const entry of mapped) {
-      slots[entry.slot] = { assetId: entry.assetId, color: acc.color, scale: acc.size === "large" ? 1.35 : acc.size === "small" ? 0.75 : 1 };
+      slots[entry.slot] = { assetId: entry.assetId, color: acc.color, scale: accessoryPreviewScale(acc.size) };
     }
   }
   return { slots, conflicts };

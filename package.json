@@ -8,6 +8,9 @@
     "build:packages": "pnpm -r --if-present run build",
     "typecheck:libs": "tsc --build",
     "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck",
+    "test": "pnpm run test:unit && pnpm run test:integration",
+    "test:unit": "pnpm --filter @workspace/api-server test && pnpm --filter @workspace/my-skins test",
+    "test:integration": "pnpm --filter @workspace/api-server test:integration",
     "verify:api-server": "pnpm --filter @workspace/api-zod exec tsc -p tsconfig.json && pnpm --filter @workspace/db exec tsc -p tsconfig.json && pnpm --filter @workspace/api-server run typecheck && pnpm --filter @workspace/api-server run test",
     "test:visual": "playwright test"
   },

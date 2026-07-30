@@ -1,13 +1,14 @@
 import { defineConfig } from "@playwright/test";
+import { existsSync } from "node:fs";
 
 /**
- * Runs against the already-running dev workflows (my-skins web on the
- * platform proxy at 127.0.0.1:80). Uses the Nix-provided Chromium with
- * SwiftShader so the Three.js WebGL canvas renders in headless mode.
+ * Runs against the already-running Vite preview. Playwright-managed Chromium
+ * is the portable default; PLAYWRIGHT_CHROMIUM_PATH is an explicit override.
  */
-const NIX_CHROMIUM =
-  process.env.PLAYWRIGHT_CHROMIUM_PATH ??
-  "/nix/store/m7qi78k6711fpwnrm4r2kn4p3ga3jal9-ungoogled-chromium-123.0.6312.105/bin/chromium";
+const chromiumOverride = process.env.PLAYWRIGHT_CHROMIUM_PATH?.trim();
+if (chromiumOverride && !existsSync(chromiumOverride)) {
+  throw new Error(`PLAYWRIGHT_CHROMIUM_PATH does not exist: ${chromiumOverride}`);
+}
 
 export default defineConfig({
   testDir: "./visual-tests",
@@ -17,12 +18,12 @@ export default defineConfig({
   reporter: [["list"]],
   outputDir: "test-results/playwright",
   use: {
-    baseURL: process.env.PLAYWRIGHT_BASE_URL ?? "http://127.0.0.1:80",
+    baseURL: process.env.PLAYWRIGHT_BASE_URL ?? "http://127.0.0.1:4173",
     viewport: { width: 1440, height: 900 },
     deviceScaleFactor: 1,
     colorScheme: "dark",
     launchOptions: {
-      executablePath: NIX_CHROMIUM,
+      ...(chromiumOverride ? { executablePath: chromiumOverride } : {}),
       args: [
         "--no-sandbox",
         "--use-gl=angle",

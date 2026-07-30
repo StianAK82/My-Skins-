@@ -4,8 +4,12 @@ import * as schema from "./schema";
 
 const { Pool } = pg;
 
+export class DatabaseConfigurationError extends Error {
+  override readonly name = "DatabaseConfigurationError";
+}
+
 if (!process.env.DATABASE_URL) {
-  throw new Error(
+  throw new DatabaseConfigurationError(
     "DATABASE_URL must be set. Did you forget to provision a database?",
   );
 }

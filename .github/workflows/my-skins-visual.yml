@@ -30,10 +30,12 @@ jobs:
         run: pnpm exec playwright install --with-deps chromium
       - name: Typecheck workspace once
         run: pnpm typecheck
+      - name: Run unit tests
+        run: pnpm test:unit
+      - name: Run integration tests
+        run: pnpm test:integration
       - name: Build workspace without repeating typecheck
         run: pnpm run build:packages
-      - name: Start API server
-        run: pnpm --filter @workspace/api-server start > /tmp/my-skins-api.log 2>&1 &
       - name: Start client
         run: pnpm --filter @workspace/my-skins serve > /tmp/my-skins-client.log 2>&1 &
       - name: Run rendering and screenshot tests
