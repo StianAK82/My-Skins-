@@ -51,7 +51,7 @@ test("asset browser filters avatar assets by slot and preview-only state", () =>
     exportFilter: "previewOnly",
     fantasyTag: "dragon",
   });
-  assert.deepEqual(filtered.map((asset) => asset.id), ["hat_cyber_horns"]);
+  assert.deepEqual(filtered.map((asset) => asset.id), ["hat_cyber_horns", "hat_dragon"]);
 });
 
 test("asset browser tag collection produces deterministic sorted options", () => {

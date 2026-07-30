@@ -1,0 +1,41 @@
+# Current System Audit — My Skins
+
+Date: 2026-07-30. Every claim below was verified directly against the repository (not prior reports).
+
+## Verified claims
+
+| # | Claim | Verified? | Evidence | Risk | Action |
+|---|-------|-----------|----------|------|--------|
+| 1 | Active AI endpoint is `/api/ai/generate` | YES | `artifacts/api-server/src/routes/ai-v2.ts` (`router.post("/ai/generate")`), frontend `Create.tsx` calls it | Single point of AI contract | Retain; future canonical planner (`/api/ai/outfit-plan`) will be added alongside, then migrate |
+| 2 | `/api/ai/generate-outfit` deprecated with HTTP 410 | YES | `artifacts/api-server/src/routes/ai.ts` returns 410 + `Deprecation` header | Low | Retain 410 stub until sunset (2026-06-01 already passed → candidate for removal) |
+| 3 | `/api/ai/outfit-spec` not implemented | YES | No route matches in `src/routes/*` | Docs vs code drift | Do not document until implemented |
+| 4 | `GarmentManifest` / `GARMENT_REGISTRY` documented but not implemented | YES | Only reference is `docs/ADDING_A_GARMENT.md`; no code symbol exists | Misleading docs | `docs/ADDING_A_GARMENT.md` describes a nonexistent system → rewrite or delete when AssetRegistry lands |
+| 5 | No avatar/garment GLB assets in `public/` | YES | `find artifacts/my-skins/public -name '*.glb'` → empty. `assets.ts` references `modelPath: "/avatar/**.glb"` that do not exist | Registry lies about files | Registry `modelPath`s are decorative today; real AssetRegistry must fail loudly on missing files |
+| 6 | Renderer falls back to block-based avatar | YES | `AvatarPreview.tsx` builds the avatar from primitives (RoundedBox etc.); no GLB mannequin exists | Block avatar must not imply Roblox compatibility | Keep as preview-only; label honestly |
+| 7 | Garments are Three.js primitives | YES | `assets.ts` `parts: [makePart(...)]` throughout | Preview ≠ production asset | Keep for preview; production pipeline separate |
+| 8 | Many assets `previewOnly`/`exportable:false` | YES | 35 `previewOnly: true` entries in `assets.ts` | Fine if labelled | UI already distinguishes ("Only visible here") |
+| 9 | AI contract centred on classic_shirt/classic_pants | YES | `ai-contracts.ts`, `ai-normalize.ts` (`itemType: classic_shirt` etc.) | Cannot represent multi-item outfits as separate artifacts | Future UniversalOutfitSpec |
+| 10 | Export uses `thumbnailUrl` instead of a canonical validated file | YES | `src/routes/exports.ts:49` `artifactUrl = project.thumbnailUrl ?? null` | No provenance/validation of downloaded artifact | Milestone 4: real server-side Classic compiler + storage |
+| 11 | Browser GLB export is preview-scene serialization, not Roblox-rigged | YES | `Create.tsx` `download3d()` uses GLTFExporter on the live scene | Must never be called Roblox-ready | UI labels it "3D-fil (gratis)" — add explicit "not validated for Roblox upload" copy |
+| 12 | Workspace typecheck fails | WAS TRUE — FIXED | `ai-normalize.test.ts` had 10 `customParts possibly undefined` errors | — | Fixed 2026-07-30; `pnpm run typecheck` green |
+| 13 | Frontend tests fail | WAS TRUE — FIXED | Test script used `--experimental-strip-types` (unsupported on Node 20) → switched to `tsx --test`; 13 failures: missing `setTransform` canvas mock + 2 outdated asset expectations | — | Fixed; 44/44 pass |
+| 14 | Canvas test mocks incomplete | WAS TRUE — FIXED | `FakeContext` lacked `setTransform`/`getTransform`/`resetTransform` | — | Added |
+| 15 | Asset tests out of sync | WAS TRUE — FIXED | Resolver now maps hint `dragon_wings` → `back_wings` (was `back_blade_rig`); `hat_dragon` added to registry | — | Expectations updated to current intended behaviour |
+| 16 | Visual tests reference missing modules | WAS TRUE — FIXED | `visual-tests/white-hoodie.spec.ts` imported `src/lib/hoodie/classic-shirt` and a `/visual-test` route — neither exists | — | Replaced with `create-page.spec.ts` smoke tests against the real app; Playwright runs green with Nix Chromium + SwiftShader |
+| 17 | Build succeeds, main bundle large | YES | `pnpm build` green; `index-*.js` 1,497.65 kB (417.46 kB gzip) | Mobile TTI | Milestone: code-splitting (lazy Three.js) |
+| 18 | Child safety / parental controls incomplete | YES | No age policy, consent, or parent models anywhere in `src/` or DB schema; login UI removed earlier by product decision | Children use the app unprotected | Milestone 2 |
+
+## Additional findings
+
+- Root-level one-off scripts (`fix_*.js`, `patch*.js`, `upgrade_*.js`) were dead code → removed 2026-07-30.
+- `routes/ai-v2.ts` contains many secondary AI routes (`hero-image`, `generate-idea`, `generate-modules`, …); callers should be mapped before any deprecation (see migration-map when created).
+- Payments: Stripe per-upload purchase (10 kr = 3 uploads) is live and server-verified; there is no parent-approval gate on purchase — Milestone 2 scope.
+- Roblox: OAuth login + legacy upload endpoint work; publication claims in UI are already conservative (downloads always offered as fallback).
+
+## Baseline status after Milestone 0/1 (2026-07-30)
+
+- `pnpm run typecheck` — PASS (all 4 workspaces)
+- `pnpm --filter @workspace/my-skins run test` — PASS (44/44)
+- `pnpm --filter @workspace/api-server run test` — PASS (48/48)
+- `pnpm build` — PASS; bundle sizes recorded above
+- `pnpm exec playwright test` — PASS (2/2, real Create page, desktop + mobile viewport)

@@ -41,7 +41,7 @@ test("asset resolver picks coherent fantasy hero/support assets", () => {
   const hat = resolved.find((entry) => entry.slot === "hat");
   const aura = resolved.find((entry) => entry.slot === "aura");
 
-  assert.equal(back?.assetId, "back_blade_rig");
+  assert.equal(back?.assetId, "back_wings");
   assert.equal(hat?.assetId, "hat_cyber_horns");
   assert.equal(aura?.assetId, "aura_flame_orbit");
   assert.equal(back?.role, "hero");

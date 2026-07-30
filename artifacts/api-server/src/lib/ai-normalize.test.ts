@@ -119,11 +119,11 @@ test("customParts: mixed-language names are preserved and trimmed to 40 chars", 
       { name: "", shape: "fin", attach: "hips", color: "#a855f7", size: "medium" },
     ] } },
   ));
-  assert.equal(outfit.customParts[0].name, "Pannehorn");
-  assert.equal(outfit.customParts[1].name, "ドラゴンの角");
-  assert.equal(outfit.customParts[2].name, longName.slice(0, 40));
+  assert.equal(outfit.customParts![0].name, "Pannehorn");
+  assert.equal(outfit.customParts![1].name, "ドラゴンの角");
+  assert.equal(outfit.customParts![2].name, longName.slice(0, 40));
   // empty name falls back to the shape keyword
-  assert.equal(outfit.customParts[3].name, "fin");
+  assert.equal(outfit.customParts![3].name, "fin");
 });
 
 test("customParts: more than 4 parts are truncated to the first 4", () => {
@@ -134,8 +134,8 @@ test("customParts: more than 4 parts are truncated to the first 4", () => {
     { prompt: "mange deler", itemType: "classic_shirt" },
     { outfit: { customParts: many } },
   ));
-  assert.equal(outfit.customParts.length, 4);
-  assert.deepEqual(outfit.customParts.map((p) => p.attach), ["forehead", "head_top", "chest", "back"]);
+  assert.equal(outfit.customParts!.length, 4);
+  assert.deepEqual(outfit.customParts!.map((p) => p.attach), ["forehead", "head_top", "chest", "back"]);
 });
 
 test("customParts: invalid shape/attach rows are dropped, valid rows survive", () => {
@@ -149,11 +149,11 @@ test("customParts: invalid shape/attach rows are dropped, valid rows survive", (
       null,
     ] } },
   ));
-  assert.equal(outfit.customParts.length, 1);
-  assert.equal(outfit.customParts[0].shape, "headcover");
+  assert.equal(outfit.customParts!.length, 1);
+  assert.equal(outfit.customParts![0].shape, "headcover");
   // invalid color/size fall back to safe defaults
-  assert.match(outfit.customParts[0].color, /^#[0-9a-fA-F]{6}$/);
-  assert.equal(outfit.customParts[0].size, "medium");
+  assert.match(outfit.customParts![0].color, /^#[0-9a-fA-F]{6}$/);
+  assert.equal(outfit.customParts![0].size, "medium");
 });
 
 test("customParts revision: fully malformed array does not erase previous parts", () => {
