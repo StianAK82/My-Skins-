@@ -1,0 +1,1503 @@
+You are the principal full-stack engineer, AI systems architect, Roblox avatar-production specialist, child-safety engineer, QA lead and product owner for My Skins.
+
+Your responsibility is to transform the existing repository into the simplest, safest and most reliable AI-powered Roblox skin creator possible.
+
+The customer experience must ultimately be:
+
+1. The customer describes an outfit using ordinary words.
+2. The system understands every requested item.
+3. The system creates the complete visual design.
+4. The system automatically checks and repairs the result.
+5. The customer previews the result.
+6. The customer downloads a genuinely usable Roblox artifact.
+7. A qualified parent or creator can later submit or publish it through a supported Roblox workflow.
+
+The customer must not be asked to:
+
+- choose templates
+- classify asset types
+- select attachments
+- understand UVs
+- understand meshes
+- understand cages
+- understand rigging
+- repair code
+- inspect logs
+- manually fix generated files
+- decide which internal pipeline should be used
+
+This is not a request for another planning document.
+
+You must inspect the repository, create an evidence-based implementation plan, implement the system in controlled stages, run all tests, inspect browser output, repair defects and continue until the defined completion gates are met.
+
+Do not claim success for anything you have not executed and verified.
+
+==================================================
+A. BEGIN WITH THE VERIFIED REPOSITORY REALITY
+==================================================
+
+Do not assume previous implementation reports are correct.
+
+The current audit indicates:
+
+- the active AI endpoint is /api/ai/generate
+- /api/ai/generate-outfit is deprecated with HTTP 410
+- /api/ai/outfit-spec is not currently implemented
+- GarmentManifest and GARMENT_REGISTRY are referenced in documentation but are not present as implemented production code
+- no actual avatar or hoodie GLB assets are present in public
+- the renderer falls back to a block-based avatar
+- hoodie, jacket, dress, hair and accessories are mainly represented with Three.js primitives
+- many preview assets are previewOnly and exportable:false
+- the AI contract remains centred around classic_shirt and classic_pants
+- backend export uses thumbnailUrl rather than creating and verifying a new canonical file
+- browser GLB export serializes the preview scene but does not create a Roblox-rigged, cagged or validated avatar item
+- workspace typecheck currently fails
+- frontend tests currently fail
+- canvas test mocks are incomplete
+- asset tests are out of sync
+- visual tests reference modules or assumptions that may no longer exist
+- production build succeeds but the main frontend bundle is large
+- child safety, parental controls and truthful production status are incomplete
+
+Verify every one of these statements directly in the repository.
+
+Create an internal audit file:
+
+docs/implementation/current-system-audit.md
+
+For every major claim include:
+
+- source file path
+- relevant symbols
+- current behaviour
+- risk
+- intended replacement
+- whether the old code should be removed, migrated or retained
+
+Do not stop after the audit.
+
+==================================================
+B. NON-NEGOTIABLE PRODUCT PRINCIPLES
+==================================================
+
+1. One simple prompt-first customer experience.
+2. Private by default.
+3. Child-safe by design.
+4. Parent-controlled sensitive actions.
+5. No false Roblox-ready claims.
+6. No silent substitution of unsupported items.
+7. No universal hoodie fallback.
+8. Preview and downloadable artifacts must have distinct truthful statuses.
+9. Every generated artifact must have provenance and validation evidence.
+10. Every production failure must be explicit, typed and recoverable where possible.
+11. AI creates structured intent and design specifications; it does not bypass technical validation.
+12. Customer-visible simplicity must not be achieved by hiding technical failures.
+13. Only validated output may be marked ready.
+14. The system must remain extensible to real Roblox 3D production.
+15. No unsafe handling of children’s prompts, images, identity or payments.
+
+==================================================
+C. CREATE ONE CANONICAL PRODUCT ARCHITECTURE
+==================================================
+
+The repository must have one production flow:
+
+Create page
+→ authenticated or safe guest session
+→ SafetyGateway
+→ AI Design Planner
+→ UniversalOutfitSpec
+→ ProductionGraph
+→ AssetRouter
+→ per-item preview pipeline
+→ per-item production pipeline
+→ technical validation
+→ visual validation
+→ automatic repair
+→ artifact storage
+→ readiness report
+→ download or qualified publication flow
+
+Do not retain multiple competing production contracts.
+
+Deprecate or migrate legacy routes intentionally.
+
+The final architecture must contain one canonical set of public contracts.
+
+Required layers:
+
+1. UserIntent
+2. UniversalOutfitSpec
+3. ProductionGraph
+4. ProducedAssetVersion
+5. ValidationReport
+6. AutomaticRepairReport
+7. ExportArtifact
+8. PublicationSubmission
+9. ModerationDecision
+10. RightsDecision
+
+==================================================
+D. FIX THE REPOSITORY BEFORE ADDING MAJOR FEATURES
+==================================================
+
+Before building new production systems, make the existing repository green.
+
+Required first tasks:
+
+1. Fix workspace typecheck.
+2. Fix optional customParts handling.
+3. Fix all current frontend unit tests.
+4. Update outdated asset expectations.
+5. Fix canvas mocks, including setTransform and any other missing CanvasRenderingContext2D methods.
+6. Remove or repair visual tests that reference missing modules.
+7. Ensure tests match the actual current architecture.
+8. Run clean installation from the repository root.
+9. Run every workspace’s direct typecheck.
+10. Run every workspace’s direct test suite.
+11. Run the production build.
+12. Run Playwright with Chromium.
+13. Record bundle sizes.
+14. Remove dead imports and unreachable legacy code.
+
+Required commands include, adapted to the actual package scripts:
+
+pnpm install --frozen-lockfile
+pnpm run typecheck
+pnpm test
+pnpm build
+pnpm exec playwright install --with-deps chromium
+pnpm test:e2e
+pnpm test:visual
+
+If the repository uses different script names, inspect package.json and use the correct equivalents.
+
+Do not proceed to claim product completion while the base repository is red.
+
+==================================================
+E. IMPLEMENT THE CHILD-SAFETY FOUNDATION
+==================================================
+
+Children are a first-class safety category, not a generic user type.
+
+Implement a server-enforced account policy model.
+
+Required policy states:
+
+UNKNOWN_AGE
+CHILD_RESTRICTED
+TEEN_RESTRICTED
+ADULT
+PARENT_MANAGED
+CONSENT_PENDING
+CONSENT_REVOKED
+
+Create versioned data models for:
+
+UserAgePolicy
+ParentAccount
+ParentChildRelationship
+ConsentRecord
+ConsentPurpose
+PrivacyPreference
+RetentionPolicy
+ModerationRecord
+SharingApproval
+PurchaseApproval
+RobloxConnectionApproval
+PublicationApproval
+
+Required parent permissions:
+
+- allow prompt storage
+- allow image uploads
+- allow Roblox account connection
+- allow downloads
+- allow purchases
+- allow public sharing
+- allow publication
+- allow generated data to be used for product improvement
+- select retention duration
+- export child data
+- delete child data
+- revoke consent
+
+Server-side authorization must enforce all restrictions.
+
+Frontend hiding alone is not acceptable.
+
+Default rules for children:
+
+- projects private by default
+- no public profile free text
+- no comments
+- no direct messaging
+- no public sharing without moderation and parent approval
+- no Roblox linking without approval
+- no payment without approval
+- no publication without approval
+- minimum necessary prompt retention
+- no training use without explicit permission
+
+==================================================
+F. IMPLEMENT A SAFETY GATEWAY
+==================================================
+
+All prompt requests must pass through one server-side SafetyGateway before an AI provider call.
+
+Required stages:
+
+1. authentication/session validation
+2. age-policy evaluation
+3. rate limiting
+4. abuse detection
+5. prompt length validation
+6. PII detection
+7. child-safety moderation
+8. sexual-content moderation
+9. violence and self-harm moderation
+10. hateful-content moderation
+11. real-person and child-image restrictions
+12. IP, logo, brand and character detection
+13. safe prompt normalization
+14. provider request
+15. structured output validation
+16. output moderation
+17. product-specific validation
+18. audit logging with data minimization
+
+Set explicit prompt length limits.
+
+Do not store raw child prompts indefinitely.
+
+Store:
+
+- normalized safe form where possible
+- policy decision
+- moderation categories
+- model/provider identifiers
+- prompt hash
+- retention deadline
+- parent policy applied
+- output hashes
+
+When a customer requests protected content, create an original safe alternative based only on broad attributes.
+
+Example:
+
+Request:
+“Make me exactly Spider-Man.”
+
+Safe transformation:
+“Create an original red-and-blue web-inspired hero outfit without copying the protected character, logo or exact design.”
+
+==================================================
+G. CREATE UNIVERSAL OUTFIT CONTRACTS
+==================================================
+
+Replace the current top/bottom-centred production contract with strict versioned contracts.
+
+Use explicit TypeScript interfaces and matching strict Zod schemas.
+
+Do not rely on extremely deep inferred Zod types that can cause TypeScript memory problems.
+
+Required primary types:
+
+UserIntent
+UniversalOutfitSpec
+AvatarItemSpec
+MaterialSpec
+TextureSpec
+FitSpec
+AttachmentSpec
+LayeringSpec
+ProductionRequirement
+ProductionGraph
+ProductionNode
+ProducedAssetVersion
+ExportArtifact
+ValidationReport
+AutomaticRepairReport
+RevisionPatch
+ModerationDecision
+RightsDecision
+
+Required asset classes:
+
+CLASSIC_TSHIRT
+CLASSIC_SHIRT
+CLASSIC_PANTS
+LAYERED_CLOTHING
+RIGID_ACCESSORY
+HAIR_ACCESSORY
+FOOTWEAR_LEFT
+FOOTWEAR_RIGHT
+BODY_CUSTOMIZATION
+PREVIEW_EFFECT
+
+Every AvatarItemSpec must have:
+
+- itemId
+- stable semantic identity
+- requestedName
+- normalizedName
+- assetClass
+- Roblox target type
+- bodyRegion
+- layer
+- promptFragment
+- colors
+- materials
+- texture instructions
+- geometry description
+- dimensions
+- fit
+- attachment
+- left/right identity where relevant
+- dependencies
+- conflictsWith
+- production pipeline
+- preview representation
+- export requirements
+- moderation status
+- rights status
+- preview status
+- production status
+- validation status
+- seed
+- source
+- revision lineage
+
+The contract must support:
+
+- multiple upper-body layers
+- multiple accessories
+- multiple jewellery items
+- separate left and right footwear
+- inner garment under jacket
+- socks
+- hair plus cap
+- wings plus backpack conflicts
+- dress plus footwear
+- armour over clothing
+- multiple material maps
+- individual item regeneration
+
+No item may disappear because the old contract only supports one top and one bottom.
+
+==================================================
+H. IMPLEMENT ONE AI DESIGN PLANNER
+==================================================
+
+Create one canonical AI planner endpoint.
+
+Recommended route:
+
+POST /api/ai/outfit-plan
+
+Migrate the frontend from /api/ai/generate only after the new route is implemented, tested and stable.
+
+Do not remove the old route until callers are migrated.
+
+The planner must:
+
+1. understand Norwegian and English
+2. handle spelling mistakes
+3. understand child-like language
+4. identify every requested visible item
+5. create stable item IDs
+6. classify each item correctly
+7. define layer order
+8. define dependencies and conflicts
+9. define preview requirements
+10. define production requirements
+11. define safe original substitutions when protected content is requested
+12. return strict UniversalOutfitSpec
+13. never silently replace unknown requests with a hoodie
+
+Examples that must parse correctly:
+
+“rød caps og langt svart hår”
+“hvit jakke svarte bukser og hvite sko”
+“store englevinger og en ryggsekk”
+“rosa kjole krone og sølvsko”
+“svart ninja antrekk med maske og belte”
+“fotballdrakt nummer 10 med shorts sokker og sko”
+“lag meg et kult skin med hår caps jakke bag og vinger”
+“make my wings bigger but keep everything else”
+
+The planner must return an explicit unsupported item when no production route exists.
+
+==================================================
+I. CREATE A BACKEND ASSET ROUTER
+==================================================
+
+Implement one backend-owned AssetRouter.
+
+React components must never decide the production class from keywords.
+
+Input:
+
+UniversalOutfitSpec
+
+Output:
+
+ProductionGraph
+
+Each item must route to one or more pipelines:
+
+ClassicCompiler
+CuratedLayeredClothingPipeline
+CuratedRigidAccessoryPipeline
+HairPreviewPipeline
+FootwearPreviewPipeline
+BodyCustomizationPipeline
+PreviewEffectsPipeline
+FutureGenerative3DPipeline
+
+Each ProductionNode must define:
+
+- nodeId
+- itemId
+- pipeline
+- dependencies
+- required inputs
+- expected outputs
+- status
+- retry strategy
+- validation strategy
+- repair strategy
+- artifact type
+- truthful customer-facing status
+
+Do not confuse intent routing with production routing.
+
+==================================================
+J. SEPARATE FOUR DIFFERENT OBJECT CONCEPTS
+==================================================
+
+The system must explicitly distinguish:
+
+1. Requested item
+What the customer asked for.
+
+2. Planned item
+The structured AI interpretation.
+
+3. Preview representation
+What the browser renders for rapid feedback.
+
+4. Production asset
+The actual downloadable Roblox artifact.
+
+Also distinguish:
+
+5. Published Roblox asset
+An asset that has been submitted, moderated and assigned a Roblox asset ID.
+
+Never use one status for all five concepts.
+
+==================================================
+K. IMPLEMENT A TRUTHFUL STATUS MODEL
+==================================================
+
+Create a canonical status model.
+
+Suggested statuses:
+
+REQUESTED
+PLANNED
+PREVIEW_GENERATING
+PREVIEW_READY
+PREVIEW_FAILED
+PRODUCTION_NOT_SUPPORTED
+PRODUCTION_QUEUED
+PRODUCTION_GENERATING
+PRODUCTION_VALIDATING
+PRODUCTION_REPAIRING
+PRODUCTION_FAILED
+CLASSIC_DRAFT
+CLASSIC_VALIDATED
+DOWNLOAD_READY
+THREE_D_PREVIEW_ONLY
+ROBLOX_3D_VALIDATED
+ROBLOX_SUBMISSION_PENDING
+ROBLOX_SUBMITTED
+ROBLOX_MODERATION_PENDING
+ROBLOX_APPROVED
+ROBLOX_REJECTED
+
+The UI must show precise labels.
+
+Use:
+
+“3D preview”
+
+“Classic clothing draft”
+
+“Validated Classic PNG”
+
+“Requires Roblox Studio”
+
+“Roblox submission pending”
+
+Do not use:
+
+“Roblox ready”
+
+“Marketplace ready”
+
+unless the exact asset class and validation level have been proven.
+
+==================================================
+L. BUILD A REAL CLASSIC CLOTHING MVP
+==================================================
+
+This is the first production-quality deliverable.
+
+Implement a server-side Classic Clothing compiler.
+
+It must generate actual new artifacts.
+
+Do not reuse thumbnailUrl as the generated file.
+
+Required outputs:
+
+- canonical 585 × 559 PNG
+- valid MIME type
+- deterministic hash
+- object-storage URL
+- signed time-limited download URL
+- artifact provenance
+- validation report
+- generation ID
+- source spec ID
+
+Required validation:
+
+- actual PNG decoding
+- actual dimensions
+- alpha-channel validation
+- template mask validation
+- front-region coverage
+- back-region coverage
+- arm-region coverage for Shirt
+- leg-region coverage for Pants
+- safe-area validation
+- seam continuity checks
+- transparent-area checks
+- empty output rejection
+- duplicate output detection
+- content hash
+- output size limits
+- moderation status
+- rights status
+
+Preview and download must use the same generated pixel source.
+
+Different validated outfit specifications must produce different PNG bytes unless intentionally identical.
+
+Implement clear artifact classes:
+
+ClassicTShirtArtifact
+ClassicShirtArtifact
+ClassicPantsArtifact
+
+Support:
+
+- shirt only
+- pants only where valid
+- shirt and pants
+- full outfit with multiple classic artifacts
+
+Do not enforce global assumptions such as:
+
+bottom must be null
+exactly one Shirt export
+all outfits require Shirt and Pants
+
+Derive required artifacts from the validated export plan.
+
+==================================================
+M. IMPLEMENT OBJECT STORAGE AND PROVENANCE
+==================================================
+
+Use a production-grade object-storage abstraction.
+
+Required functions:
+
+putArtifact
+getArtifactMetadata
+createSignedDownloadUrl
+deleteArtifact
+verifyArtifactHash
+quarantineArtifact
+
+Store:
+
+- artifact ID
+- generation ID
+- project ID
+- user ID
+- parent consent state
+- item ID
+- pipeline version
+- compiler version
+- model version
+- seed
+- SHA-256 hash
+- MIME type
+- byte size
+- width/height where relevant
+- moderation decision
+- rights decision
+- created time
+- retention deadline
+- deleted time
+- publication references
+
+No artifact should rely on an unverified arbitrary URL supplied by the client.
+
+==================================================
+N. KEEP THE FAST 3D PREVIEW, BUT LABEL IT HONESTLY
+==================================================
+
+The current Three.js procedural preview can be retained as a rapid design-preview layer.
+
+Improve it, but do not present it as a Roblox production asset.
+
+Requirements:
+
+- use stable avatar coordinates
+- represent all requested items
+- clearly show unsupported production items
+- no hidden hoodie fallback
+- no missing requested accessories
+- item isolation mode
+- front/back/side views
+- per-item visibility controls
+- correct layer ordering
+- simple collision detection
+- child-friendly status language
+- mobile performance
+
+For each procedural preview item, include:
+
+previewRepresentation
+productionCapability
+productionStatus
+exportCapability
+
+A browser-exported GLB from the Three.js preview must be labelled:
+
+“3D preview download”
+
+and:
+
+“Not validated for Roblox upload”
+
+until it has passed a real Roblox production pipeline.
+
+==================================================
+O. BUILD A REAL ASSET REGISTRY
+==================================================
+
+Create a versioned repository-owned AssetRegistry.
+
+This registry must not merely map words to Three.js primitives.
+
+Each curated production asset family must define:
+
+- assetFamilyId
+- semantic aliases
+- version
+- Roblox asset class
+- base mesh path
+- preview mesh path
+- rig path
+- skin weights
+- inner cage path
+- outer cage path
+- UV layout
+- material slots
+- bounds
+- attachment type
+- deformation tests
+- supported fit parameters
+- supported style parameters
+- supported texture parameters
+- target triangle budget
+- production readiness
+- validation evidence
+- license/provenance
+- fallback behaviour
+
+Initial curated families:
+
+- T-shirt
+- hoodie
+- sweater
+- jacket
+- pants
+- shorts
+- skirt
+- dress
+- sneakers
+- boots
+- cap
+- backpack
+
+Do not mark a family production-ready unless the required files exist and tests pass.
+
+The registry must fail loudly when referenced files are absent.
+
+==================================================
+P. CREATE A REAL AVATAR BASELINE
+==================================================
+
+Add and version one repository-owned Roblox-compatible avatar reference.
+
+Do not rely on a missing file with a block-avatar fallback for production validation.
+
+Required baseline resources:
+
+- calibrated R15-compatible mannequin
+- skeleton
+- body measurements
+- attachment reference transforms
+- body-region metadata
+- fit-clearance metadata
+- pose set for validation
+- license/provenance file
+
+The block avatar may remain as a lightweight fallback preview only.
+
+It must never be used as proof of Roblox compatibility.
+
+==================================================
+Q. CREATE PREVIEW FIT SOLVERS
+==================================================
+
+Implement deterministic fit solvers for:
+
+- hair and cap
+- hair and shoulders
+- jacket over shirt
+- trousers and shoes
+- dress and legs
+- wings and backpack
+- tail and coat
+- helmet and hair
+- shoulder bag and jacket
+
+Each solver must return:
+
+- conflict type
+- severity
+- measured overlap
+- recommended correction
+- applied correction
+- preserved design attributes
+- whether regeneration is required
+
+The system must show all requested items, then resolve conflicts automatically where possible.
+
+==================================================
+R. IMPLEMENT STRUCTURED REVISION
+==================================================
+
+Revisions must patch the current UniversalOutfitSpec.
+
+Examples:
+
+“Make only the wings bigger.”
+“Change the cap to blue.”
+“Remove the bag.”
+“Keep everything else but make the jacket oversized.”
+“Make the outfit less scary.”
+
+Return:
+
+- changedPaths
+- preservedPaths
+- addedItemIds
+- removedItemIds
+- regeneratedItemIds
+- unchangedItemIds
+- validation results
+- moderation results
+
+Do not treat every revision as a completely new unrelated generation.
+
+==================================================
+S. ADD VISUAL AI QUALITY CONTROL
+==================================================
+
+After preview generation, render:
+
+- front
+- back
+- left
+- right
+- 45-degree front
+- 45-degree back
+- item-isolated views
+- collision overlay
+- wireframe where useful
+
+Use a multimodal evaluation contract that checks:
+
+- every requested item appears
+- no unrequested item appears
+- colours match
+- layer order is sensible
+- left/right pairs exist
+- caps sit on heads
+- bags attach to the correct area
+- wings attach to the back
+- shoes align with feet
+- hair resembles hair rather than a helmet
+- no severe clipping
+- requested style is recognisable
+- preview matches UniversalOutfitSpec
+
+Return a strict VisualValidationReport.
+
+Do not approve the first render automatically.
+
+When the report fails:
+
+- identify the failing item
+- apply a structured correction
+- regenerate only the affected representation
+- rerender
+- revalidate
+
+Use bounded retry limits.
+
+==================================================
+T. CREATE THE 3D PRODUCTION FOUNDATION
+==================================================
+
+Do not pretend that free generative 3D is ready before the production foundation exists.
+
+Implement provider-neutral interfaces for:
+
+ThreeDWorker
+BlenderWorker
+MeshGenerationProvider
+TextureGenerationProvider
+MeshValidator
+RobloxAssetValidator
+VisualValidator
+RepairPlanner
+
+Create a queue-backed asynchronous job system.
+
+Required job properties:
+
+- idempotency key
+- generation ID
+- item ID
+- pipeline version
+- attempt count
+- maximum attempts
+- timeout
+- cancellation
+- status
+- progress
+- structured error
+- artifacts
+- validation reports
+
+Implement a Blender worker contract that can later run:
+
+blender --background --python build_asset.py
+
+The initial implementation may use deterministic fixtures in test mode, but production must reject fixtures.
+
+Required planned Blender stages:
+
+- import calibrated mannequin
+- import or create item mesh
+- apply scale and orientation
+- mesh cleanup
+- normals validation
+- triangulation
+- UV validation
+- material assignment
+- triangle reduction
+- rig/weight transfer
+- cage transfer for layered clothing
+- attachment placement for rigid accessories
+- pose validation
+- collision tests
+- GLB/FBX export
+- multi-angle render
+- validation report
+
+Keep this behind a provider interface.
+
+==================================================
+U. BUILD CURATED 3D BEFORE FREE GENERATIVE 3D
+==================================================
+
+Do not begin with unrestricted text-to-arbitrary-mesh generation.
+
+First establish production-controlled 3D families.
+
+For every curated family, prove:
+
+- valid base mesh
+- valid UV
+- valid rig where required
+- valid skin weights where required
+- valid cages where required
+- valid attachment where required
+- valid material slots
+- target bounds
+- target triangle count
+- pose deformation
+- import path
+- deterministic transformation
+- validation
+- provenance
+
+AI should initially control:
+
+- dimensions within safe limits
+- fit
+- colour
+- materials
+- graphics
+- seams
+- pockets
+- collar
+- cuffs
+- hem
+- hood parameters
+- accessory dimensions
+- texture generation
+
+AI should not initially create uncontrolled production topology for layered clothing.
+
+==================================================
+V. CREATE A FUTURE GENERATIVE 3D ADAPTER
+==================================================
+
+Create a provider-neutral adapter for future open-source or hosted 3D generation.
+
+Possible future providers include:
+
+- Hunyuan3D
+- TRELLIS
+- TripoSR
+- InstantMesh
+- another approved provider
+
+Do not hardwire the app to any one provider.
+
+Generated output must always be treated as a raw draft.
+
+Required downstream stages:
+
+raw mesh
+→ file sanitation
+→ mesh inspection
+→ cleanup
+→ retopology
+→ UV repair
+→ texture baking
+→ scale and bounds
+→ rig/attachment/cage
+→ Roblox-specific validation
+→ visual validation
+→ automatic repair
+
+No generation provider may directly set:
+
+ROBLOX_3D_VALIDATED
+DOWNLOAD_READY
+MARKETPLACE_READY
+
+Only the validation system may do so.
+
+==================================================
+W. IMPLEMENT ROBLOX READINESS, NOT FALSE PUBLICATION CLAIMS
+==================================================
+
+Create a versioned Roblox readiness system.
+
+For Classic Clothing:
+
+- exact artifact type
+- technical validation
+- moderation status
+- rights status
+- download readiness
+- current upload instructions
+
+For 3D:
+
+- preview only
+- curated production asset
+- Studio import required
+- Roblox technical validation pending
+- submission pending
+- moderation pending
+- approved
+- rejected
+
+Create parent/creator readiness checks:
+
+- eligible age/account status
+- parent approval when required
+- Roblox account linked where supported
+- rights confirmed
+- moderation passed
+- artifact technically validated
+- fee information acknowledged
+- membership requirements acknowledged
+- correct ownership selected
+
+Do not automate direct publication unless an official supported integration is implemented and verified for the exact asset type.
+
+==================================================
+X. BUILD A CHILD-FRIENDLY USER EXPERIENCE
+==================================================
+
+The child-facing interface must remain extremely simple.
+
+Main screen:
+
+- one large prompt field
+- example suggestions
+- Create button
+- preview
+- revision field
+- Save
+- Show parent
+
+Suggested categories may be offered as inspiration:
+
+- Create a top
+- Create trousers
+- Create a full outfit
+- Create a fantasy outfit
+- Change my outfit
+
+Do not require the child to understand technical categories.
+
+Generation progress text should use friendly language:
+
+- “I understand your idea.”
+- “I am creating the outfit.”
+- “I am checking that everything fits.”
+- “I am making the files ready.”
+
+The parent/creator interface may show:
+
+- validation details
+- download readiness
+- rights status
+- Roblox instructions
+- fees
+- publication permissions
+- account connection
+- artifact history
+
+Do not mix technical creator controls into the child’s main experience.
+
+==================================================
+Y. PERFORMANCE AND MOBILE REQUIREMENTS
+==================================================
+
+The current large bundle must be reduced.
+
+Implement:
+
+- route-based code splitting
+- lazy loading of Three.js
+- lazy loading of heavy preview components
+- progressive loading
+- lower-quality mobile preview where necessary
+- shared geometry and materials
+- proper asset disposal
+- no unnecessary rerender loops
+- cancellation of obsolete generation requests
+- compressed assets
+- performance budget tests
+
+Set explicit budgets for:
+
+- initial JS
+- preview route JS
+- image sizes
+- texture sizes
+- time to interactive
+- generation progress updates
+
+Test on narrow mobile viewports.
+
+==================================================
+Z. ERROR HANDLING
+==================================================
+
+Use typed errors.
+
+Required error codes include:
+
+AUTH_REQUIRED
+AGE_POLICY_REQUIRED
+PARENT_CONSENT_REQUIRED
+RATE_LIMITED
+PROMPT_TOO_LONG
+PII_DETECTED
+SAFETY_BLOCKED
+IP_RESTRICTED
+MODEL_CONFIGURATION_ERROR
+MODEL_REQUEST_FAILED
+MODEL_TIMEOUT
+INVALID_OUTFIT_SPEC
+UNSUPPORTED_ITEM
+PREVIEW_GENERATION_FAILED
+CLASSIC_COMPILATION_FAILED
+ARTIFACT_STORAGE_FAILED
+ARTIFACT_VALIDATION_FAILED
+MESH_GENERATION_FAILED
+MESH_VALIDATION_FAILED
+ATTACHMENT_VALIDATION_FAILED
+RIG_VALIDATION_FAILED
+CAGE_VALIDATION_FAILED
+VISUAL_VALIDATION_FAILED
+AUTOMATIC_REPAIR_EXHAUSTED
+ROBLOX_SUBMISSION_FAILED
+CLIENT_RESPONSE_INVALID
+
+Every error must include:
+
+- request ID
+- generation ID
+- item ID where relevant
+- stage
+- retryability
+- safe customer message
+- internal diagnostic code
+
+Do not hide every problem behind:
+
+“We couldn't finish this skin.”
+
+==================================================
+AA. TEST REQUIREMENTS
+==================================================
+
+Unit tests:
+
+- all Zod contracts
+- age and parent policy
+- authorization
+- SafetyGateway
+- PII handling
+- moderation routing
+- UniversalOutfitSpec validation
+- AssetRouter
+- ProductionGraph
+- Classic compiler
+- PNG validation
+- artifact hashing
+- object storage abstraction
+- revision patches
+- fit solvers
+- status transitions
+- error mapping
+
+Integration tests:
+
+- safe guest preview
+- restricted child behaviour
+- parent-managed download
+- blocked public sharing
+- blocked purchase
+- safe prompt generation
+- IP-safe transformation
+- Classic Shirt only
+- Classic Pants only
+- Shirt plus Pants
+- multiple accessories
+- hair plus cap
+- wings plus backpack conflict
+- structured revision
+- object storage
+- signed download
+- fixture rejection in production
+- provider acceptance in production
+
+Browser tests:
+
+1.
+“White hoodie”
+
+2.
+“Long black hair and a red cap”
+
+3.
+“White jacket, blue jeans and black shoes”
+
+4.
+“A backpack and large white angel wings”
+
+5.
+“Pink princess dress, long blonde hair, crown and silver shoes”
+
+6.
+“Black ninja outfit with mask, belt and boots”
+
+7.
+“Red football kit number 10 with shorts, socks and shoes”
+
+8.
+“Oversized winter coat, wool hat, shoulder bag and boots”
+
+9.
+“Lag en blå hettegenser, svart caps, ryggsekk og hvite sko”
+
+10.
+“Langt svart hår, lilla vinger og en rosa kjole”
+
+Verify:
+
+- every requested item is listed
+- every requested item appears in preview
+- no hidden hoodie fallback
+- unsupported production is labelled honestly
+- revision preserves unchanged items
+- child-safe errors are understandable
+- parent restrictions work
+- download is unavailable until validation passes
+- generated PNG actually exists
+- preview and downloaded Classic artifact match
+
+Capture:
+
+- front
+- back
+- left
+- right
+- mobile view
+- parent view
+- item isolation
+- validation state
+- error state
+
+==================================================
+AB. MIGRATION RULES
+==================================================
+
+Do not delete working functionality blindly.
+
+For every legacy component choose one:
+
+- retain
+- migrate
+- redirect
+- isolate
+- remove
+
+Create:
+
+docs/implementation/migration-map.md
+
+Include:
+
+- old route
+- new route
+- old caller
+- new caller
+- compatibility period
+- test coverage
+- removal condition
+
+Remove documentation claims that are not backed by code.
+
+Remove references to nonexistent GLB files unless those files are added properly.
+
+Do not keep placeholder files marked production-ready.
+
+==================================================
+AC. AUTONOMOUS EXECUTION LOOP
+==================================================
+
+Work in this loop:
+
+1. inspect
+2. document evidence
+3. implement
+4. typecheck
+5. run unit tests
+6. run integration tests
+7. build
+8. run browser tests
+9. inspect screenshots
+10. identify defects
+11. repair defects
+12. rerun
+13. commit a coherent milestone
+14. continue to the next milestone
+
+Do not stop after producing a plan.
+
+Do not ask the user to fix code.
+
+Do not declare completion when only fixtures work.
+
+Do not fabricate:
+
+- provider calls
+- screenshots
+- CI results
+- Roblox validation
+- moderation approval
+- asset publication
+- performance results
+
+When an external key or service is missing:
+
+- finish everything that can be implemented without it
+- create explicit configuration validation
+- create test-mode fixtures
+- ensure fixtures are impossible in production
+- report the exact missing secret or permission
+- continue with all unrelated work
+
+==================================================
+AD. IMPLEMENTATION MILESTONES
+==================================================
+
+Milestone 0:
+Repository audit and truthful status corrections.
+
+Milestone 1:
+Green typecheck, tests, build and browser test foundation.
+
+Milestone 2:
+Child safety, parental controls, privacy and authorization.
+
+Milestone 3:
+UniversalOutfitSpec, canonical AI planner and AssetRouter.
+
+Milestone 4:
+Real server-side Classic compiler, object storage and validation.
+
+Milestone 5:
+Improved complete outfit preview, fit solvers and visual validation.
+
+Milestone 6:
+Curated asset registry and calibrated avatar baseline.
+
+Milestone 7:
+Queue-backed 3D worker interfaces and Blender worker foundation.
+
+Milestone 8:
+First validated rigid accessory pipeline, beginning with cap.
+
+Milestone 9:
+First validated curated layered clothing pipeline, beginning with hoodie.
+
+Milestone 10:
+Hair, footwear, backpack and wings pipelines.
+
+Milestone 11:
+Roblox readiness, parent/creator workflow and submission tracking.
+
+Do not attempt all milestones in one unstable implementation commit.
+
+Each milestone must be independently tested and committed.
+
+==================================================
+AE. DEFINITION OF DONE FOR THE CURRENT EXECUTION
+==================================================
+
+This execution is complete only when at minimum:
+
+- the repository audit is committed
+- false UI claims are removed
+- workspace typecheck passes
+- all current unit tests pass
+- all current frontend tests pass
+- production build passes
+- Playwright runs successfully
+- child account policy exists
+- parent consent foundation exists
+- private-by-default is enforced
+- SafetyGateway exists
+- prompt length and PII controls exist
+- canonical UniversalOutfitSpec exists
+- canonical AI planner endpoint exists
+- frontend uses the canonical endpoint
+- AssetRouter exists
+- truthful per-item statuses exist
+- Classic compiler creates real server-side PNG files
+- object storage abstraction exists
+- actual PNG validation exists
+- signed download URLs exist
+- Classic integration tests pass
+- existing Three.js preview is labelled honestly
+- no browser-preview GLB is labelled Roblox-ready
+- no unsupported item becomes a hoodie
+- browser tests cover Norwegian and English prompts
+- screenshot evidence exists
+- CI is green
+
+The complete world-leading 3D platform is a multi-milestone product.
+
+Do not falsely claim that all 3D production is complete unless actual Roblox-compatible rigging, cages, attachments, imports and validation are proven.
+
+==================================================
+AF. REQUIRED FINAL REPORT
+==================================================
+
+Return a detailed final report containing:
+
+1. Verified original system status
+2. Root causes
+3. Files inspected
+4. False assumptions corrected
+5. Routes retained
+6. Routes migrated
+7. Routes removed
+8. Child-safety implementation
+9. Parent-control implementation
+10. SafetyGateway implementation
+11. UniversalOutfitSpec
+12. AI planner implementation
+13. AssetRouter implementation
+14. ProductionGraph implementation
+15. Status model
+16. Classic compiler implementation
+17. PNG validation implementation
+18. Object storage implementation
+19. Artifact provenance
+20. Preview changes
+21. Visual validation
+22. Fit solvers
+23. 3D worker foundation
+24. Roblox readiness model
+25. Unit test results
+26. Integration test results
+27. Browser test results
+28. Screenshot paths
+29. Typecheck result
+30. Build result
+31. Bundle sizes
+32. CI run ID and URL if available
+33. Commits created
+34. External configuration still required
+35. Honest remaining limitations
+36. Exact recommended next milestone
+
+For every failed or unverified item say so explicitly.
+
+Do not return only a summary.
+
+Implement, test, inspect, repair and report.
