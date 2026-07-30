@@ -12,9 +12,9 @@ const previousOutfit: Outfit = {
   shoes: "sneakers",
   hair: { style: "ponytail", color: "#AA3355" },
   accessories: [
-    { kind: "cap", color: "#112233" },
-    { kind: "wings", color: "#FFFFFF" },
-    { kind: "backpack", color: "#00FF00" },
+    { kind: "cap", color: "#112233", size: "medium" },
+    { kind: "wings", color: "#FFFFFF", size: "medium" },
+    { kind: "backpack", color: "#00FF00", size: "medium" },
   ],
   customParts: [],
   unsupported: [],
@@ -83,12 +83,29 @@ test("revision mode: valid changed field is applied while missing fields keep pr
     },
   }));
   // cap recolored per the change request
-  assert.deepEqual(outfit.accessories[0], { kind: "cap", color: "#0000FF" });
+  assert.deepEqual(outfit.accessories[0], { kind: "cap", color: "#0000FF", size: "medium" });
   // wings/backpack untouched, garments preserved from previousOutfit
   assert.deepEqual(outfit.accessories.slice(1), previousOutfit.accessories.slice(1));
   assert.equal(outfit.top, "hoodie");
   assert.equal(outfit.bottom, "pants");
   assert.equal(outfit.shoes, "sneakers");
+});
+
+test("revision mode: making only the wings larger preserves every other item", () => {
+  const outfit = outfitOf(normalizeDesignPayload(
+    { ...revisionInput, prompt: "Gjør bare vingene større og behold alt annet" },
+    { outfit: { accessories: [
+      { kind: "cap", color: "#112233", size: "medium" },
+      { kind: "wings", color: "#FFFFFF", size: "large" },
+      { kind: "backpack", color: "#00FF00", size: "medium" },
+    ] } },
+  ));
+  assert.equal(outfit.accessories.find((accessory) => accessory.kind === "wings")?.size, "large");
+  assert.deepEqual(outfit.accessories.filter((accessory) => accessory.kind !== "wings"), previousOutfit.accessories.filter((accessory) => accessory.kind !== "wings"));
+  assert.equal(outfit.top, previousOutfit.top);
+  assert.equal(outfit.bottom, previousOutfit.bottom);
+  assert.equal(outfit.shoes, previousOutfit.shoes);
+  assert.deepEqual(outfit.hair, previousOutfit.hair);
 });
 
 test("revision mode: explicitly provided empty accessories array is respected (removal)", () => {
