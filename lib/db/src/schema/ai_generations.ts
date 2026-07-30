@@ -14,6 +14,9 @@ export const aiGenerationsTable = pgTable("ai_generations", {
   style: text("style"),
   type: text("type"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  // Data minimization: rows past this deadline are deleted by the periodic
+  // retention sweeper (see api-server ai-retention).
+  retentionUntil: timestamp("retention_until", { withTimezone: true }),
 });
 
 export const insertAiGenerationSchema = createInsertSchema(aiGenerationsTable).omit({ createdAt: true });

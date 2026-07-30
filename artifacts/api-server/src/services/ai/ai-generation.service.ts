@@ -11,6 +11,7 @@ import {
   type aiGenerateRequestSchema,
 } from "../../lib/ai-contracts";
 import { normalizeDesignPayload } from "../../lib/ai-normalize";
+import { computeRetentionUntil } from "../../lib/ai-retention";
 import { hashPrompt, lookupDecision } from "../../lib/safety-gateway";
 import { aiValidationService } from "./ai-validation.service";
 
@@ -258,6 +259,7 @@ export class AiGenerationService {
       result: JSON.stringify(result),
       type,
       style,
+      retentionUntil: computeRetentionUntil(),
     });
     return generationId;
   }
