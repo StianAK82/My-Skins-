@@ -20,7 +20,8 @@ export type SafetyStage =
   | "length_validation"
   | "pii_detection"
   | "moderation"
-  | "ip_protection";
+  | "ip_protection"
+  | "output_moderation";
 
 /** Child-friendly Norwegian messages, sent to the client alongside the code. */
 export const SAFETY_MESSAGES_NO: Record<SafetyErrorCode, string> = {
@@ -317,6 +318,65 @@ export function evaluatePrompt(rawPrompt: string): SafetyDecision {
     categories: ipResult.categories,
     safePrompt,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Stage: output moderation — the GENERATED image is checked before it is
+// returned to the child. The AI proxy has no /moderations endpoint, so the
+// caller runs a cheap vision safety check (the model looks at the image and
+// answers with a strict JSON verdict) and passes the model's answer here.
+// We parse it and throw SAFETY_BLOCKED when flagged. The image itself is
+// never logged or stored — only a hash + the flagged categories.
+// ---------------------------------------------------------------------------
+export type ImageModerationOutcome = {
+  flagged: boolean;
+  categories: string[];
+};
+
+/** System prompt for the vision safety check of generated images. */
+export const IMAGE_SAFETY_CHECK_PROMPT = [
+  "You are a strict child-safety reviewer for images shown to children aged 6-13.",
+  "Look at the image and decide if it is appropriate for young children.",
+  "Flag it as unsafe if it contains ANY of: sexual or suggestive content or nudity (category \"sexual\");",
+  "graphic violence, gore, blood, weapons pointed at people, or frightening horror imagery (category \"violence\");",
+  "self-harm depictions (category \"self_harm\"); hate symbols such as swastikas or KKK imagery (category \"hate\");",
+  "drugs, smoking or alcohol (category \"drugs\"); or anything else clearly inappropriate for children (category \"other\").",
+  "Cartoonish fantasy action (friendly dragons, superheroes, toy swords) is SAFE.",
+  'Answer with ONLY this JSON, nothing else: {"safe": true|false, "categories": ["..."]}',
+  "categories must be empty when safe is true.",
+].join(" ");
+
+const IMAGE_SAFETY_CATEGORIES = new Set(["sexual", "violence", "self_harm", "hate", "drugs", "other"]);
+
+/**
+ * Parses the vision model's JSON verdict. Fail-closed: anything that is not a
+ * clear `{"safe": true}` answer counts as flagged/invalid.
+ * @throws SyntaxError when the verdict is not parseable — the caller must then
+ *         treat the safety check as failed (and NOT serve the image).
+ */
+export function parseImageSafetyVerdict(content: string): ImageModerationOutcome {
+  const jsonMatch = content.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) throw new SyntaxError("Image safety verdict is not JSON");
+  const parsed = JSON.parse(jsonMatch[0]) as { safe?: unknown; categories?: unknown };
+  if (typeof parsed.safe !== "boolean") throw new SyntaxError("Image safety verdict missing 'safe' boolean");
+  const categories = Array.isArray(parsed.categories)
+    ? parsed.categories.filter((c): c is string => typeof c === "string" && IMAGE_SAFETY_CATEGORIES.has(c))
+    : [];
+  return { flagged: parsed.safe !== true, categories };
+}
+
+/** Hashes a generated image (base64 payload) for data-minimized audit logging. */
+export function hashImage(b64: string): string {
+  return createHash("sha256").update(b64).digest("hex");
+}
+
+/** Throws SAFETY_BLOCKED (stage output_moderation) when the outcome is flagged. */
+export function assertImageAllowed(outcome: ImageModerationOutcome): void {
+  if (outcome.flagged) {
+    throw new SafetyError("SAFETY_BLOCKED", "output_moderation", {
+      categories: outcome.categories.length > 0 ? outcome.categories : ["flagged"],
+    });
+  }
 }
 
 // Small LRU-ish registry so the persistence layer can attach the gateway

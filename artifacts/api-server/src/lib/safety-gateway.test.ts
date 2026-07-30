@@ -4,6 +4,9 @@ import {
   MAX_PROMPT_LENGTH,
   RateLimiter,
   SafetyError,
+  assertImageAllowed,
+  hashImage,
+  parseImageSafetyVerdict,
   applyIpProtection,
   checkPromptLength,
   detectPii,
@@ -187,5 +190,52 @@ describe("decision registry & hashing", () => {
   test("evaluatePrompt never returns the raw prompt when rewritten", () => {
     const decision = evaluatePrompt("Pikachu på brystet");
     assert.doesNotMatch(decision.safePrompt, /pikachu/i);
+  });
+});
+
+describe("output moderation (generated images)", () => {
+  test("safe verdict is allowed", () => {
+    const outcome = parseImageSafetyVerdict('{"safe": true, "categories": []}');
+    assert.equal(outcome.flagged, false);
+    assert.deepEqual(outcome.categories, []);
+    assertImageAllowed(outcome); // does not throw
+  });
+
+  test("unsafe verdict throws SAFETY_BLOCKED at output_moderation with categories", () => {
+    const outcome = parseImageSafetyVerdict('{"safe": false, "categories": ["violence", "hate"]}');
+    assert.equal(outcome.flagged, true);
+    const err = expectSafetyError(() => assertImageAllowed(outcome), "SAFETY_BLOCKED");
+    assert.equal(err.stage, "output_moderation");
+    assert.deepEqual(err.categories.sort(), ["hate", "violence"]);
+    assert.match(err.message, /Prøv en annen idé/);
+  });
+
+  test("unsafe verdict with no categories still blocks (categories: [flagged])", () => {
+    const outcome = parseImageSafetyVerdict('{"safe": false, "categories": []}');
+    const err = expectSafetyError(() => assertImageAllowed(outcome), "SAFETY_BLOCKED");
+    assert.deepEqual(err.categories, ["flagged"]);
+  });
+
+  test("unknown category names are dropped, verdict still applies", () => {
+    const outcome = parseImageSafetyVerdict('{"safe": false, "categories": ["violence", "weird-stuff"]}');
+    assert.deepEqual(outcome.categories, ["violence"]);
+  });
+
+  test("verdict wrapped in prose/markdown is still parsed", () => {
+    const outcome = parseImageSafetyVerdict('Here you go:\n```json\n{"safe": true, "categories": []}\n```');
+    assert.equal(outcome.flagged, false);
+  });
+
+  test("unparseable verdicts throw (caller fails closed, image is not served)", () => {
+    assert.throws(() => parseImageSafetyVerdict(""), SyntaxError);
+    assert.throws(() => parseImageSafetyVerdict("the image looks fine"), SyntaxError);
+    assert.throws(() => parseImageSafetyVerdict('{"categories": []}'), SyntaxError);
+    assert.throws(() => parseImageSafetyVerdict('{"safe": "yes"}'), SyntaxError);
+  });
+
+  test("hashImage is stable sha256 of the base64 payload", () => {
+    assert.equal(hashImage("abc"), hashImage("abc"));
+    assert.notEqual(hashImage("abc"), hashImage("abd"));
+    assert.equal(hashImage("abc").length, 64);
   });
 });

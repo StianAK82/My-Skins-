@@ -4,6 +4,14 @@ import { openai } from "@workspace/integrations-openai-ai-server";
 import { aiGenerateRequestSchema, aiImproveRequestSchema, stylizedOutfitGenerateRequestSchema } from "../lib/ai-contracts";
 import { aiGenerationService } from "../services/ai/ai-generation.service";
 import { aiHistoryService } from "../services/ai/ai-history.service";
+import {
+  IMAGE_SAFETY_CHECK_PROMPT,
+  SafetyError,
+  assertImageAllowed,
+  hashImage,
+  hashPrompt,
+  parseImageSafetyVerdict,
+} from "../lib/safety-gateway";
 
 const router: IRouter = Router();
 
@@ -119,8 +127,66 @@ router.post("/ai/hero-image", async (req, res): Promise<void> => {
       res.status(502).json({ error: "Image generation returned no image" });
       return;
     }
-    res.json({ imageUrl: `data:image/png;base64,${b64}` });
+
+    // Output moderation: the generated image is checked BEFORE it is returned
+    // (vision safety check — the AI proxy has no /moderations endpoint).
+    // Fail-closed: if the check itself fails, the image is not served.
+    const dataUrl = `data:image/png;base64,${b64}`;
+    let outcome;
+    try {
+      const moderationResponse = await openai.chat.completions.create({
+        model: "gpt-5-mini",
+        max_completion_tokens: 8192,
+        messages: [
+          { role: "system", content: IMAGE_SAFETY_CHECK_PROMPT },
+          {
+            role: "user",
+            content: [
+              { type: "text", text: "Review this generated image for child safety." },
+              { type: "image_url", image_url: { url: dataUrl } },
+            ],
+          },
+        ],
+      });
+      outcome = parseImageSafetyVerdict(moderationResponse.choices[0]?.message?.content ?? "");
+    } catch (moderationErr) {
+      req.log.error(
+        { err: moderationErr, imageHash: hashImage(b64) },
+        "ai.v2.hero_image.output_moderation_unavailable",
+      );
+      res.status(502).json({ error: "Image safety check failed" });
+      return;
+    }
+
+    // Data-minimized audit log: hash + categories, never the image or prompt text.
+    req.log.info(
+      {
+        stage: "output_moderation",
+        decision: outcome.flagged ? "blocked" : "allowed",
+        categories: outcome.categories,
+        imageHash: hashImage(b64),
+        promptHash: hashPrompt(parsed.data.prompt),
+      },
+      "safety_gateway.output_moderation",
+    );
+    assertImageAllowed(outcome);
+
+    res.json({ imageUrl: dataUrl });
   } catch (err) {
+    if (err instanceof SafetyError) {
+      req.log.warn(
+        { code: err.code, stage: err.stage, categories: err.categories },
+        "safety_gateway.blocked",
+      );
+      res.status(err.httpStatus).json({
+        error: err.code,
+        code: err.code,
+        message: err.message,
+        stage: err.stage,
+        retryable: err.retryable,
+      });
+      return;
+    }
     req.log.error({ err }, "ai.v2.hero_image.failed");
     res.status(500).json({ error: "Image generation failed" });
   }
