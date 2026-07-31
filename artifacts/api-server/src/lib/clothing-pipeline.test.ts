@@ -248,3 +248,11 @@ test("quarantine and delete lifecycle", async () => {
   await store.deleteArtifact(stored.objectPath);
   assert.equal(await store.getArtifactBytes(stored.objectPath), null);
 });
+
+test("UniversalOutfitSpec compiles only eligible items and records canonical provenance", async () => {
+  const { legacyToUniversalOutfitSpec } = await import("./universal-outfit"); const { compileUniversalOutfitSpec } = await import("./clothing-compiler");
+  const outfit = legacyToUniversalOutfitSpec({ generationId: "00000000-0000-4000-8000-000000000777", prompt: "blue hoodie and pants", style: "sporty", palette: ["#2563EB", "#111827"], outfit: { top: "hoodie", bottom: "pants", shoes: "none", hair: { style: "none", color: "#111111" }, accessories: [], unsupported: [], reason: "fixture" } });
+  const artifacts = await compileUniversalOutfitSpec(outfit, { classic_shirt: shirtDesign(), classic_pants: pantsDesign() }); assert.equal(artifacts.length, 2);
+  for (const artifact of artifacts) { assert.equal(artifact.generationId, outfit.generationId); assert.ok(artifact.itemIds?.length); assert.equal(validateClassicClothing({ png: artifact.png, sha256: artifact.sha256, templateType: artifact.templateType }).ok, true); }
+  const rejected = structuredClone(outfit); rejected.quality.accepted = false; await assert.rejects(() => compileUniversalOutfitSpec(rejected, { classic_shirt: shirtDesign() }), /QUALITY_GATE_REJECTED/);
+});

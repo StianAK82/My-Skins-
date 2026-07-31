@@ -16,3 +16,6 @@ test("revision preserves stable IDs and unrelated garments", () => {
   assert.equal(revised.items[1].id, spec.items[1].id);
   assert.equal(revised.items[1].size, "large");
 });
+test("canonical adapter drives garment and accessory renderer props", async () => {
+  const { toAvatarPreviewOutfit } = await import("../ai/universal-outfit"); const candidate = structuredClone(spec); candidate.items[0].kind = "zip_hoodie"; candidate.items.push({ id: "accessory-backpack-01", category: "accessory", kind: "backpack", label: "backpack", colors: ["#333333"], size: "small", previewCapability: "supported", exportCapability: "none", fallback: { state: "none", message: null }, unsupported: { state: false, reason: null } }); const preview = toAvatarPreviewOutfit(candidate); assert.equal(preview.top, "hoodie"); assert.equal(preview.accessories[1].kind, "backpack");
+});

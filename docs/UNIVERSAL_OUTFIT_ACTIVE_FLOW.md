@@ -2,17 +2,17 @@
 
 ## Replaced flow
 
-`Create.tsx` previously called the generated `aiGenerateDesign` client, normalized the response into `OutfitPlan`, independently inferred garment presence from prompt strings, mapped accessory strings through local maps, built item/status lists, and retained `OutfitPlan` as revision authority. Browser-created shirt/pants textures were exported without consulting outfit capabilities.
+`Create.tsx` previously normalized AI output into `OutfitPlan`, inferred garments from prompt strings, mapped legacy accessory strings, built capability lists, revised the legacy plan, and exported browser textures without consulting canonical capabilities.
 
 ## Active flow
 
-1. `POST /api/ai/generate` validates the request and obtains the model's transitional structured output.
-2. The single deprecated `legacyToUniversalOutfitSpec` boundary deterministically assigns stable IDs, enforces one-piece semantics, routes every item through `ASSET_REGISTRY`, records validation evidence and quality dimensions, and strictly parses the result.
-3. The endpoint returns `outfitSpec` and an exact canonical lifecycle. The old design fields remain presentation/texture inputs only while retained generations expire.
-4. `Create.tsx` strictly parses and stores `UniversalOutfitSpec`. Child-facing item/capability messages use only `toCreatePresentation`; renderer input uses only `toPreviewSceneSpec`.
-5. Revisions reconcile changed candidates by stable category/item identity, record changed paths, preserve unrelated items and rerun the server canonical pipeline.
-6. Classic rendering is fail-closed on the canonical quality gate and emits only capabilities explicitly marked `classic_shirt` or `classic_pants`.
+1. `POST /api/ai/generate` asks the model for strict `universalItems` alongside non-authoritative artwork metadata.
+2. `modelItemsToUniversalOutfitSpec` strictly validates model item IDs/categories/colors, rejects duplicates and one-piece conflicts, routes every item through `ASSET_REGISTRY`, evaluates faithfulness and quality, and records bounded repair evidence.
+3. The endpoint returns `outfitSpec` and a canonical lifecycle. Older design fields contain artwork descriptions only and make no preview, revision, support, lifecycle, or export decision.
+4. `Create.tsx` strictly parses and stores `UniversalOutfitSpec`. Child-facing lists use `toCreatePresentation`; renderer props use read-only `toAvatarPreviewOutfit`; rendering data uses `toPreviewSceneSpec`.
+5. Revisions reconcile candidates by stable identity, record changed paths, preserve unrelated items, and rerun validation, routing, and quality.
+6. Classic compilation and browser delivery fail closed on canonical quality and compile only item IDs carrying `classic_shirt` or `classic_pants` capability.
 
-## Temporary boundary and removal condition
+## Legacy fixture boundary
 
-`LegacyOutfitPlan` and `legacyToUniversalOutfitSpec` exist only because the current model prompt and retained generation rows use `aiOutfitSchema`. Remove both after the prompt emits `UniversalOutfitSpec` directly and the last legacy row has passed `retentionUntil`. No preview, item-list, lifecycle, revision-identity, or export-eligibility decision may be added to the legacy representation.
+`LegacyOutfitPlan` and deprecated `legacyToUniversalOutfitSpec` are not called by active generation or Create. They exist only for retained pre-migration rows and deterministic historical/browser fixtures. Remove them after the final legacy row passes `retentionUntil` and fixtures are stored as canonical specs.

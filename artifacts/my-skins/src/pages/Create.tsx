@@ -9,7 +9,7 @@ import { classicTextureAiSchema, parseClassicTextureAiPlan } from "@/lib/editor/
 import { preloadOverlayImages, renderDesignToCanvas } from "@/lib/editor/renderer";
 import { buildAiAvatarLook } from "@/lib/editor/avatar-look";
 import { normalizeAiResponse } from "@/lib/ai/normalize-ai-response";
-import { universalOutfitSpecSchema, toCreatePresentation, toPreviewSceneSpec, reconcileCanonicalRevision, type UniversalOutfitSpec, type CanonicalLifecycle } from "@/lib/ai/universal-outfit";
+import { universalOutfitSpecSchema, toCreatePresentation, toPreviewSceneSpec, toAvatarPreviewOutfit, reconcileCanonicalRevision, type UniversalOutfitSpec, type CanonicalLifecycle } from "@/lib/ai/universal-outfit";
 import {
   parsePendingOutfit,
   pickPantsColors,
@@ -534,7 +534,7 @@ export default function Create() {
       }
 
       // Use outfit plan if available, otherwise fall back to garment detection
-      const outfit = response.result.outfit;
+      const outfit = toAvatarPreviewOutfit(spec) as OutfitPlan;
       if (outfit) {
         // AI gave us a full structured outfit plan
         setGarmentConfig({
@@ -689,8 +689,8 @@ export default function Create() {
       setAiPhase(t.phaseDrawing);
       const skipped = { status: 0, data: {} as { imageUrl?: string } };
       const [top, bottom, hero] = await Promise.all([
-        wantsTop ? apiPost<{ imageUrl?: string }>("/ai/hero-image", { prompt: (response.result.outfit?.topDescription ?? usedPrompt).slice(0, 600), kind: "garment-top" }) : Promise.resolve(skipped),
-        wantsBottom ? apiPost<{ imageUrl?: string }>("/ai/hero-image", { prompt: (response.result.outfit?.bottomDescription ?? usedPrompt).slice(0, 600), kind: "garment-bottom" }) : Promise.resolve(skipped),
+        wantsTop ? apiPost<{ imageUrl?: string }>("/ai/hero-image", { prompt: (outfit.topDescription ?? usedPrompt).slice(0, 600), kind: "garment-top" }) : Promise.resolve(skipped),
+        wantsBottom ? apiPost<{ imageUrl?: string }>("/ai/hero-image", { prompt: (outfit.bottomDescription ?? usedPrompt).slice(0, 600), kind: "garment-bottom" }) : Promise.resolve(skipped),
         wantsMotif ? apiPost<{ imageUrl?: string }>("/ai/hero-image", { prompt: usedPrompt }) : Promise.resolve(skipped),
       ]);
 
@@ -802,8 +802,7 @@ export default function Create() {
       toPreviewSceneSpec(revisedSpec);
       setCanonicalSpec(revisedSpec);
       const response = normalizeAiResponse(res.data);
-      const outfit = response.result.outfit;
-      if (!outfit) throw new Error("AI returned no outfit plan");
+      const outfit = toAvatarPreviewOutfit(revisedSpec) as OutfitPlan;
 
       const changed = diffOutfits(lastOutfit, outfit, t);
 
