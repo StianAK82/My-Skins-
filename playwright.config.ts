@@ -24,7 +24,7 @@ export function createPlaywrightConfig(
     timeout: 60_000,
     fullyParallel: false,
     retries: 0,
-    reporter: [["list"]],
+    reporter: [["list"], ["html", { outputFolder: "playwright-report", open: "never" }]],
     outputDir: "test-results/playwright",
     webServer: {
       command: PLAYWRIGHT_PREVIEW_COMMAND,
@@ -37,6 +37,8 @@ export function createPlaywrightConfig(
       viewport: { width: 1440, height: 900 },
       deviceScaleFactor: 1,
       colorScheme: "dark",
+      trace: "retain-on-failure",
+      screenshot: "only-on-failure",
       launchOptions: {
         ...(chromiumOverride ? { executablePath: chromiumOverride } : {}),
         args: [

@@ -93,7 +93,17 @@ const workflowFixtures = [
     },
     ["hoodie", "cap", "backpack", "sneakers"],
   ],
+  ["Black zip hoodie and jeans", { ...baseOutfit, top: "hoodie", bottom: "pants" }, ["hoodie", "pants"]],
+  ["Black cargo outfit with large angel wings", { ...baseOutfit, bottom: "pants", accessories: [{ kind: "wings", color: "#FFFFFF", size: "large" }] }, ["pants", "wings"]],
+  ["Winter coat, beanie and boots", { ...baseOutfit, top: "jacket", shoes: "boots", accessories: [{ kind: "beanie", color: "#222222", size: "medium" }] }, ["jacket", "beanie", "boots"]],
+  ["Formal suit with black shoes", { ...baseOutfit, top: "jacket", bottom: "pants", shoes: "sneakers" }, ["jacket", "pants", "sneakers"]],
 ] as const;
+
+const evidenceCases = [
+  ...workflowFixtures.map(([prompt]) => prompt),
+  "Wings-only revision",
+] as const;
+const evidenceViews = ["front", "front-45", "right", "back", "back-45", "left"] as const;
 
 type ApiFixtureState = {
   requested: string[];
@@ -272,4 +282,40 @@ test("deterministic child workflows keep every requested item", async ({
   );
   assertApiIsolation(api);
   expect(consoleErrors).toEqual([]);
+});
+
+test("representative outfits produce six-view desktop and core mobile evidence", async ({ page }) => {
+  test.setTimeout(240_000);
+  const consoleErrors: string[] = [];
+  const pageErrors: string[] = [];
+  page.on("console", (message) => { if (message.type() === "error") consoleErrors.push(message.text()); });
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+  const api = await installApiFixtures(page, true);
+
+  for (const [caseIndex, requestedPrompt] of evidenceCases.entries()) {
+    const prompt = requestedPrompt === "Wings-only revision" ? "Backpack and large white angel wings" : requestedPrompt;
+    await page.goto("/");
+    await page.locator("details").last().click();
+    await page.locator("details input").fill(prompt);
+    await page.locator("details button[type=submit]").click();
+    await expect(page.getByTestId("outfit-result")).toBeVisible();
+    const slug = requestedPrompt.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+    const preview = page.getByTestId("avatar-preview");
+    await expect(preview.locator("canvas")).toBeVisible({ timeout: 20_000 });
+    for (const view of evidenceViews) {
+      await page.getByTestId(`camera-${view}`).click();
+      await page.waitForTimeout(250);
+      await preview.screenshot({ path: `test-results/screenshots/representative/${slug}/desktop-${view}.png` });
+    }
+    if (caseIndex < 4) {
+      await page.setViewportSize({ width: 390, height: 844 });
+      await page.getByTestId("camera-front").click();
+      await preview.screenshot({ path: `test-results/screenshots/representative/${slug}/mobile-front.png` });
+      await page.setViewportSize({ width: 1440, height: 900 });
+    }
+  }
+
+  assertApiIsolation(api);
+  expect(pageErrors, `Page errors: ${pageErrors.join("\n")}`).toEqual([]);
+  expect(consoleErrors, `Console errors: ${consoleErrors.join("\n")}`).toEqual([]);
 });

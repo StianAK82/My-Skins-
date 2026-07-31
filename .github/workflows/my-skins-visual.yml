@@ -37,6 +37,11 @@ jobs:
           node -e "console.log(require('v8').getHeapStatistics().heap_size_limit)"
       - name: Install Chromium
         run: pnpm exec playwright install --with-deps chromium
+      - name: Verify browser availability
+        run: |
+          pnpm exec playwright --version
+          test -x "$(pnpm exec playwright install --dry-run chromium | sed -n 's/^  Install location: //p' | head -1)/chrome-linux/chrome" || \
+            node -e "const { chromium } = require('@playwright/test'); chromium.launch().then(async b => { console.log('Chromium', b.version()); await b.close(); }).catch(e => { console.error(e); process.exit(1); })"
       - name: Typecheck workspace once
         run: pnpm typecheck
       - name: Run unit tests
@@ -71,6 +76,8 @@ jobs:
         with:
           {
             name: my-skins-playwright-report,
-            path: "test-results/playwright-report/**",
+            path: |
+              playwright-report/**
+              test-results/playwright/**
             if-no-files-found: warn,
           }
