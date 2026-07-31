@@ -1,6 +1,11 @@
 name: My Skins visual evidence
 on:
   workflow_dispatch:
+    inputs:
+      target_sha:
+        description: "Commit SHA, branch, or tag to render (defaults to the selected workflow ref)"
+        required: false
+        type: string
   pull_request:
     paths:
       [
@@ -19,7 +24,18 @@ jobs:
       NPM_CONFIG_REGISTRY: https://registry.npmjs.org
       VITE_ENABLE_VISUAL_TESTS: "true"
     steps:
-      - uses: actions/checkout@v4
+      - name: Check out requested source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.target_sha || github.sha }}
+      - name: Report rendered source
+        env:
+          TARGET_REF: ${{ inputs.target_sha }}
+        run: |
+          echo "Rendering commit $(git rev-parse HEAD)"
+          if [ -n "$TARGET_REF" ]; then
+            test "$(git rev-parse HEAD)" = "$(git rev-parse "$TARGET_REF^{commit}")"
+          fi
       - uses: pnpm/action-setup@v4
         with:
           version: 10.28.1
