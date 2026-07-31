@@ -1,5 +1,9 @@
 import { createHash, randomUUID } from "node:crypto";
 import { z } from "zod";
+import {
+  constructionDetailsFor,
+  validateFashionConstruction,
+} from "./fashion-construction-validator";
 
 const hex = z.string().regex(/^#[0-9A-F]{6}$/);
 const capability = z.enum(["supported", "preview_only", "unsupported"]);
@@ -434,7 +438,7 @@ export function legacyToUniversalOutfitSpec(input: {
       fit: "regular",
       silhouette: kind,
       material: category === "footwear" ? "synthetic" : "fabric",
-      constructionDetails: [],
+      constructionDetails: constructionDetailsFor(kind),
       decorativeDetails: [],
       size,
       placement:
@@ -485,7 +489,12 @@ export function legacyToUniversalOutfitSpec(input: {
     .filter((i) => i.unsupported.state)
     .map((i) => i.unsupported.reason ?? `${i.label} is unsupported`);
   const faithfulnessFailures = input.faithfulness?.issues ?? [];
-  const failures = [...routeFailures, ...faithfulnessFailures];
+  const construction = validateFashionConstruction(items);
+  const failures = [
+    ...routeFailures,
+    ...faithfulnessFailures,
+    ...construction.reasons,
+  ];
   const resolved = items.filter((i) => !i.unsupported.state);
   const base = routeFailures.length ? 70 : 94;
   const dimensions = Object.fromEntries(
@@ -494,6 +503,7 @@ export function legacyToUniversalOutfitSpec(input: {
   dimensions.promptFaithfulness = input.faithfulness?.score ?? base;
   dimensions.itemCompleteness = input.faithfulness?.score ?? base;
   dimensions.colorCorrectness = input.faithfulness?.score ?? base;
+  dimensions.constructionDetail = construction.score;
   if (!resolved.length) dimensions.previewStability = 0;
   const quality = scoreOutfitQuality(dimensions, failures);
   return universalOutfitSpecSchema.parse({
@@ -524,6 +534,11 @@ export function legacyToUniversalOutfitSpec(input: {
         validator: "prompt-faithfulness",
         passed: faithfulnessFailures.length === 0,
         reasons: faithfulnessFailures,
+      },
+      {
+        validator: "fashion-construction",
+        passed: construction.passed,
+        reasons: construction.reasons,
       },
       {
         validator: "quality-gate",
@@ -710,7 +725,7 @@ export function modelItemsToUniversalOutfitSpec(input: {
       fit: m.fit,
       silhouette: m.kind,
       material: m.material,
-      constructionDetails: [],
+      constructionDetails: constructionDetailsFor(m.kind),
       decorativeDetails: [],
       size: m.size,
       placement: m.placement,
@@ -745,7 +760,12 @@ export function modelItemsToUniversalOutfitSpec(input: {
     ...input.faithfulness.issues,
     ...canonicalFaithfulness.issues,
   ];
-  const failures = [...routeFailures, ...faithfulnessIssues];
+  const construction = validateFashionConstruction(items);
+  const failures = [
+    ...routeFailures,
+    ...faithfulnessIssues,
+    ...construction.reasons,
+  ];
   const dimensions = Object.fromEntries(
     qualityDimensions.map((k) => [k, routeFailures.length ? 70 : 94]),
   ) as QualityDimensions;
@@ -754,6 +774,7 @@ export function modelItemsToUniversalOutfitSpec(input: {
     canonicalFaithfulness.score,
   );
   dimensions.colorCorrectness = faithfulnessScore;
+  dimensions.constructionDetail = construction.score;
   if (!items.some((i) => !i.unsupported.state)) dimensions.previewStability = 0;
   const quality = scoreOutfitQuality(dimensions, failures);
   return universalOutfitSpecSchema.parse({
@@ -789,6 +810,11 @@ export function modelItemsToUniversalOutfitSpec(input: {
         validator: "asset-router",
         passed: !routeFailures.length,
         reasons: routeFailures,
+      },
+      {
+        validator: "fashion-construction",
+        passed: construction.passed,
+        reasons: construction.reasons,
       },
       {
         validator: "quality-gate",
