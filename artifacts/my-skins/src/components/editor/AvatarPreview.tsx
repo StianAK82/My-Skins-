@@ -12,7 +12,7 @@ import { defaultAvatarState } from "@/lib/editor/design-state";
 import { getAvatarAssetById, getAvatarBaseModel, type AvatarRenderPart } from "@/lib/editor/assets";
 import { getSlotFit, resolveSlotPosition } from "@/lib/editor/avatar-slots";
 import type { PreviewSceneSpec } from "@/lib/ai/universal-outfit";
-import { disposeConstruction, materializeConstruction, verifyRenderedConstruction, type RenderedGeometryVerificationReport } from "@/lib/ai/rendered-construction";
+import { disposeConstruction, materializeConstruction, repairRenderedConstruction, type RenderedGeometryVerificationReport } from "@/lib/ai/rendered-construction";
 
 type ThreeTexture = ReturnType<typeof makeTextureFromZone>;
 type PreviewMode = "clothing" | "avatar";
@@ -1111,7 +1111,7 @@ function CameraRig({ zoom, mode }: { zoom: number; mode: PreviewMode }) {
 
 function CanonicalConstruction({scene,onVerification}:{scene:PreviewSceneSpec;onVerification?:AvatarPreviewProps["onGeometryVerification"]}) {
   const root=useMemo(()=>{const group=new THREE.Group(); group.name="canonical-construction"; scene.items.forEach(item=>group.add(materializeConstruction(item.construction))); return group;},[scene]);
-  useEffect(()=>{onVerification?.(verifyRenderedConstruction(scene.generationId,scene.items.map(i=>i.construction),root)); return()=>disposeConstruction(root);},[root,scene,onVerification]);
+  useEffect(()=>{const {report}=repairRenderedConstruction(scene.generationId,scene.items.map(i=>i.construction),root);onVerification?.(report);return()=>disposeConstruction(root);},[root,scene,onVerification]);
   return <primitive object={root} data-testid="canonical-construction" />;
 }
 
