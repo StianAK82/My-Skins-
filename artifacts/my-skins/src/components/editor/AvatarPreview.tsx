@@ -1056,6 +1056,13 @@ function Stage() {
         <cylinderGeometry args={[1.9, 1.9, 0.1, 64]} />
         <meshPhysicalMaterial color="#1e293b" roughness={0.6} metalness={0.2} />
       </mesh>
+
+      {/* A restrained light ring separates dark shoes from the pedestal and
+          gives the preview a deliberate product-photography focal point. */}
+      <mesh position={[0, 0.061, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <ringGeometry args={[1.34, 1.38, 96]} />
+        <meshBasicMaterial color="#60a5fa" transparent opacity={0.34} toneMapped={false} />
+      </mesh>
       
       <ContactShadows position={[0, 0.056, 0]} scale={5} far={2} blur={2.5} opacity={0.85} color="#000000" />
     </group>
@@ -1071,18 +1078,33 @@ function IdleGroup({ children, enabled }: { children: ReactNode; enabled: boolea
   useFrame(({ clock }) => {
     if (!enabled || !groupRef.current) return;
     const t = clock.getElapsedTime();
-    groupRef.current.position.y = Math.abs(Math.sin(t * 3)) * 0.08;
-    groupRef.current.rotation.y = Math.sin(t * 1.5) * 0.2;
-    groupRef.current.rotation.z = Math.sin(t * 3) * 0.06;
-    groupRef.current.rotation.x = Math.sin(t * 1.5) * 0.05;
-    const stretch = 1 + Math.sin(t * 3) * 0.03;
-    const squash = 1 - Math.sin(t * 3) * 0.015;
+    // Keep the outfit readable: a subtle showroom turn and breathing motion
+    // feels premium without distorting the generated garment or its graphics.
+    groupRef.current.position.y = Math.sin(t * 1.4) * 0.018;
+    groupRef.current.rotation.y = Math.sin(t * 0.55) * 0.09;
+    groupRef.current.rotation.z = Math.sin(t * 0.7) * 0.008;
+    groupRef.current.rotation.x = 0;
+    const stretch = 1 + Math.sin(t * 1.4) * 0.004;
+    const squash = 1 - Math.sin(t * 1.4) * 0.002;
     groupRef.current.scale.set(squash, stretch, squash);
   });
   return <group ref={groupRef}>{children}</group>;
 }
 
-function SceneContent({ maps, view, itemType, rotation, avatar, mode, animated = false, garment, customParts }: { maps: ClothingMaps | null; view: "front" | "back"; itemType: "shirt" | "pants"; rotation: number; avatar: AvatarState; mode: PreviewMode; animated?: boolean; garment?: GarmentConfig; customParts?: AvatarPreviewProps["customParts"] }) {
+function CameraRig({ zoom, mode }: { zoom: number; mode: PreviewMode }) {
+  const camera = useThree((state) => state.camera);
+  useFrame((_, delta) => {
+    // Canvas camera props only establish the initial position. Drive later
+    // zoom-button changes here and ease them so framing never snaps.
+    const responsiveness = 1 - Math.exp(-delta * 9);
+    camera.position.z = THREE.MathUtils.lerp(camera.position.z, zoom, responsiveness);
+    camera.position.y = THREE.MathUtils.lerp(camera.position.y, mode === "clothing" ? 1.4 : 1.3, responsiveness);
+    camera.updateProjectionMatrix();
+  });
+  return null;
+}
+
+function SceneContent({ maps, view, itemType, rotation, zoom, avatar, mode, animated = false, garment, customParts }: { maps: ClothingMaps | null; view: "front" | "back"; itemType: "shirt" | "pants"; rotation: number; zoom: number; avatar: AvatarState; mode: PreviewMode; animated?: boolean; garment?: GarmentConfig; customParts?: AvatarPreviewProps["customParts"] }) {
   const cameraTarget: [number, number, number] = mode === "clothing" ? [0, 1.2, 0] : [0, 1.15, 0];
   return (
     <>
@@ -1090,6 +1112,7 @@ function SceneContent({ maps, view, itemType, rotation, avatar, mode, animated =
       <fog attach="fog" args={["#050811", 5, 14]} />
       <SoftShadows size={15} samples={LOW_END_DEVICE ? 6 : 16} focus={0.5} />
       <StudioEnvironment />
+      <CameraRig zoom={zoom} mode={mode} />
       
       <Stage />
 
@@ -1209,14 +1232,14 @@ export function AvatarPreview({ textureUrl, className, avatarType = "neutral", v
         camera={{ position: [0, 1.3, zoom], fov: resolvedMode === "clothing" ? 34 : 38 }}
         className="w-full h-full"
       >
-        <SceneContent maps={maps} view={view} itemType={itemType} rotation={rotation} avatar={effectiveAvatar} mode={resolvedMode} animated={animated} garment={garment} customParts={customParts} />
+        <SceneContent maps={maps} view={view} itemType={itemType} rotation={rotation} zoom={zoom} avatar={effectiveAvatar} mode={resolvedMode} animated={animated} garment={garment} customParts={customParts} />
         {exportRef ? <ExportBridge exportRef={exportRef} /> : null}
       </Canvas>
     </WebGLBoundary>
   );
 
   if (studioMode) {
-    return <div className="relative w-full h-full">{scene}<div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-2 bg-black/60 backdrop-blur rounded-full px-4 py-2 border border-white/10"><button onClick={() => setView("front")} className={`text-xs px-3 py-1 rounded-full ${view === "front" ? "bg-white/20 text-white" : "text-white/50 hover:text-white"}`}>Front</button><button onClick={() => setView("back")} className={`text-xs px-3 py-1 rounded-full ${view === "back" ? "bg-white/20 text-white" : "text-white/50 hover:text-white"}`}>Back</button><button onClick={() => setRotation((p) => p + 0.3)} className="text-white/60 hover:text-white p-1" title="Rotate"><RotateCw className="w-3.5 h-3.5" /></button><button onClick={() => setZoom((p) => Math.min(6, p + 0.4))} className="text-white/60 hover:text-white p-1" title="Zoom out"><ZoomOut className="w-3.5 h-3.5" /></button><button onClick={() => setZoom((p) => Math.max(2.2, p - 0.4))} className="text-white/60 hover:text-white p-1" title="Zoom in"><ZoomIn className="w-3.5 h-3.5" /></button></div><div className="absolute top-4 left-4 text-[10px] uppercase tracking-widest text-white/35 font-medium">{avatarType} · {subtitle}</div></div>;
+    return <div className="relative w-full h-full bg-[radial-gradient(circle_at_50%_34%,#182743_0%,#080d19_48%,#03050b_100%)]">{scene}<div className="pointer-events-none absolute inset-x-0 top-0 h-28 bg-gradient-to-b from-sky-400/[0.06] to-transparent" /><div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-2 bg-slate-950/75 shadow-2xl shadow-black/50 backdrop-blur-xl rounded-full px-4 py-2 border border-white/15"><button onClick={() => setView("front")} className={`text-xs px-3 py-1 rounded-full ${view === "front" ? "bg-white/20 text-white" : "text-white/50 hover:text-white"}`}>Front</button><button onClick={() => setView("back")} className={`text-xs px-3 py-1 rounded-full ${view === "back" ? "bg-white/20 text-white" : "text-white/50 hover:text-white"}`}>Back</button><button onClick={() => setRotation((p) => p + 0.3)} className="text-white/60 hover:text-white p-1" title="Rotate"><RotateCw className="w-3.5 h-3.5" /></button><button onClick={() => setZoom((p) => Math.min(6, p + 0.4))} className="text-white/60 hover:text-white p-1" title="Zoom out"><ZoomOut className="w-3.5 h-3.5" /></button><button onClick={() => setZoom((p) => Math.max(2.2, p - 0.4))} className="text-white/60 hover:text-white p-1" title="Zoom in"><ZoomIn className="w-3.5 h-3.5" /></button></div><div className="absolute top-4 left-4 rounded-full border border-white/10 bg-black/20 px-3 py-1.5 text-[10px] uppercase tracking-[0.18em] text-white/45 font-medium backdrop-blur-md">{avatarType} · {subtitle}</div></div>;
   }
 
   return (
