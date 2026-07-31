@@ -9,6 +9,7 @@ import { classicTextureAiSchema, parseClassicTextureAiPlan } from "@/lib/editor/
 import { preloadOverlayImages, renderDesignToCanvas } from "@/lib/editor/renderer";
 import { buildAiAvatarLook } from "@/lib/editor/avatar-look";
 import { normalizeAiResponse } from "@/lib/ai/normalize-ai-response";
+import { universalOutfitSpecSchema, toCreatePresentation, toPreviewSceneSpec, reconcileCanonicalRevision, type UniversalOutfitSpec, type CanonicalLifecycle } from "@/lib/ai/universal-outfit";
 import {
   parsePendingOutfit,
   pickPantsColors,
@@ -149,6 +150,7 @@ type UndoSnapshot = {
   designState: ReturnType<typeof useDesignStore.getState>["state"];
   garmentConfig: GarmentConfig;
   outfit: OutfitPlan;
+  canonicalSpec: UniversalOutfitSpec | null;
   prompt: string;
   outfitItems: { uploadable: string[]; previewOnly: string[]; unsupported: string[]; changed?: string[] } | null;
   outfitRefValue: { pantsBase: string; pantsAccent: string; heroUrl?: string; fabricUrl?: string } | null;
@@ -301,6 +303,8 @@ export default function Create() {
   const [prompt, setPrompt] = useState("");
   const [aiError, setAiError] = useState<string>("");
   const [aiLoading, setAiLoading] = useState(false);
+  const [canonicalSpec, setCanonicalSpec] = useState<UniversalOutfitSpec | null>(null);
+  const [lifecycle, setLifecycle] = useState<CanonicalLifecycle>("idle");
   const [aiPhase, setAiPhase] = useState<string>("");
   const [uploadStatus, setUploadStatus] = useState<string>("");
   const [uploadBusy, setUploadBusy] = useState(false);
@@ -463,13 +467,21 @@ export default function Create() {
     if (generateLockRef.current || aiLoading || !usedPrompt) return;
     generateLockRef.current = true;
     setAiLoading(true);
+    setLifecycle("generating");
     setAiError("");
     setUploadStatus("");
     setAiPhase(t.phaseCreating);
     setOutfitItems(null);
     setUndoStack([]); // a brand-new skin starts a fresh history
     try {
-      const response = normalizeAiResponse(await aiGenerateDesign({ prompt: usedPrompt, itemType: "classic_shirt", style: "AI velger", theme: usedPrompt }));
+      const rawResponse = await aiGenerateDesign({ prompt: usedPrompt, itemType: "classic_shirt", style: "AI velger", theme: usedPrompt }) as unknown as { result: unknown; outfitSpec?: unknown; lifecycle?: CanonicalLifecycle };
+      setLifecycle("validating");
+      const spec = universalOutfitSpecSchema.parse(rawResponse.outfitSpec);
+      setLifecycle("routing");
+      const previewScene = toPreviewSceneSpec(spec);
+      if (previewScene.items.length === 0 && spec.items.length > 0) setLifecycle("unsupported");
+      const response = normalizeAiResponse(rawResponse);
+      setCanonicalSpec(spec);
 
       // Detect which garments were asked for. Kids misspell ("t-sjhortet"), so we
       // combine the raw prompt with the AI's own interpretation (title/style/placement) —
@@ -632,7 +644,9 @@ export default function Create() {
         if (wantsShoes) previewOnlyItems.push(t.fieldShoes);
         setOutfitItems({ uploadable, previewOnly: previewOnlyItems, unsupported: [] });
       }
-      // Remember the plan so the child can revise it («gjør vingene større») without starting over.
+      // The child-facing lists are a read-only projection of the canonical source.
+      setOutfitItems({ ...toCreatePresentation(spec) });
+      // Legacy plan is retained only as texture-rendering input during the server adapter retention window.
       setLastOutfit(outfit ?? null);
       setSelectedHeadcover(null);
       lastPromptRef.current = usedPrompt;
@@ -720,7 +734,9 @@ export default function Create() {
         outfitRef.current = { pantsBase: pantsColors.base, pantsAccent: pantsColors.accent, fabricUrl: bottomUrl };
         if ((wantsTop && !topUrl) || (wantsBottom && !bottomUrl)) setAiError(t.errMotif);
       }
+      setLifecycle(spec.items.every(item => item.unsupported.state) ? "unsupported" : spec.quality.accepted ? "complete" : "external_verification_required");
     } catch (error) {
+      setLifecycle("error");
       const safety = safetyErrorMessage(error, t);
       const status = (error as { status?: number })?.status;
       if (safety) {
@@ -759,6 +775,7 @@ export default function Create() {
       designState: structuredClone(useDesignStore.getState().state),
       garmentConfig: { ...garmentConfig },
       outfit: lastOutfit,
+      canonicalSpec,
       prompt: lastPromptRef.current,
       outfitItems: outfitItems ? { ...outfitItems } : null,
       outfitRefValue: outfitRef.current ? { ...outfitRef.current } : null,
@@ -777,6 +794,13 @@ export default function Create() {
         err.code = (res.data as { code?: string } | null)?.code;
         throw err;
       }
+      setLifecycle("validating");
+      const rawRevision = res.data as { outfitSpec?: unknown };
+      const candidateSpec = universalOutfitSpecSchema.parse(rawRevision.outfitSpec);
+      const revisedSpec = canonicalSpec ? reconcileCanonicalRevision(canonicalSpec, candidateSpec, text) : candidateSpec;
+      setLifecycle("routing");
+      toPreviewSceneSpec(revisedSpec);
+      setCanonicalSpec(revisedSpec);
       const response = normalizeAiResponse(res.data);
       const outfit = response.result.outfit;
       if (!outfit) throw new Error("AI returned no outfit plan");
@@ -821,9 +845,7 @@ export default function Create() {
       }
 
       // Item list: what the skin contains now + what was just changed.
-      const unsupportedItems = [...(outfit.unsupported ?? []), ...conflicts];
-      const { uploadable, previewOnly } = buildOutfitItemLists(outfit, conflicts, t);
-      setOutfitItems({ uploadable, previewOnly, unsupported: unsupportedItems, changed });
+      setOutfitItems({ ...toCreatePresentation(revisedSpec), changed });
 
       // Textures: only regenerate garment art for pieces that changed; keep the rest.
       const topChanged = lastOutfit.top !== outfit.top || lastOutfit.topDescription !== outfit.topDescription;
@@ -881,7 +903,9 @@ export default function Create() {
       setReviseText("");
       // The revision succeeded – remember what it replaced so «Angre» can undo it.
       setUndoStack((stack) => [...stack.slice(-(UNDO_STACK_LIMIT - 1)), snapshot]);
+      setLifecycle(revisedSpec.quality.accepted ? "complete" : "external_verification_required");
     } catch (error) {
+      setLifecycle("error");
       const safety = safetyErrorMessage(error, t);
       const status = (error as { status?: number })?.status;
       if (safety) {
@@ -907,6 +931,8 @@ export default function Create() {
     loadSnapshot(structuredClone(snapshot.designState));
     setGarmentConfig(snapshot.garmentConfig);
     setLastOutfit(snapshot.outfit);
+    setCanonicalSpec(snapshot.canonicalSpec);
+    setLifecycle(snapshot.canonicalSpec?.quality.accepted ? "complete" : snapshot.canonicalSpec ? "external_verification_required" : "idle");
     setSelectedHeadcover(null);
     lastPromptRef.current = snapshot.prompt;
     setOutfitItems(snapshot.outfitItems);
@@ -918,7 +944,9 @@ export default function Create() {
   const renderExportFiles = async (): Promise<OutfitFiles | null> => {
     if (!offscreenCanvasRef.current) offscreenCanvasRef.current = document.createElement("canvas");
     const canvas = offscreenCanvasRef.current;
-    if (!canvas || !hasDesign) return null;
+    if (!canvas || !hasDesign || !canonicalSpec?.quality.accepted) return null;
+    const eligible = new Set(canonicalSpec.items.filter(item => !item.unsupported.state).map(item => item.exportCapability));
+    if (!eligible.has("classic_shirt") && !eligible.has("classic_pants")) return null;
     await preloadOverlayImages(state);
     const shirt = renderDesignToCanvas(state, canvas, { onOverlayImageReady: handleOverlayImageReady, target: "export" });
     const outfit = outfitRef.current;
@@ -926,7 +954,11 @@ export default function Create() {
     const pantsAccent = outfit?.pantsAccent ?? state.paintSwatch;
     const pants = await renderPantsTexture({ base: pantsBase, accent: pantsAccent, motifUrl: outfit?.heroUrl, fabricUrl: outfit?.fabricUrl });
     const tshirt = outfit?.heroUrl ? await renderTShirtTexture(outfit.heroUrl) : undefined;
-    return { shirt, pants: pants || undefined, tshirt };
+    return {
+      shirt: eligible.has("classic_shirt") ? shirt : "",
+      pants: eligible.has("classic_pants") ? (pants || undefined) : undefined,
+      tshirt: eligible.has("classic_shirt") ? tshirt : undefined,
+    };
   };
 
   // «3D-veien»: export the live 3D preview (avatar + outfit) as a .glb file
@@ -1104,11 +1136,12 @@ export default function Create() {
             </div>
           )}
           
+          {canonicalSpec && <div data-testid="canonical-result" data-generation-id={canonicalSpec.generationId} data-lifecycle={lifecycle} className="text-center text-sm font-semibold text-slate-600">{lifecycle === "complete" ? "✨ Klar!" : lifecycle === "unsupported" ? "Denne ideen kan vi ikke vise ennå." : lifecycle === "external_verification_required" ? "Vi må sjekke denne litt ekstra." : aiPhase}</div>}
           {outfitItems && (outfitItems.uploadable.length > 0 || outfitItems.previewOnly.length > 0 || outfitItems.unsupported.length > 0 || (outfitItems.changed?.length ?? 0) > 0) && (
             <div
               className="mt-4 rounded-xl border border-slate-700 bg-slate-900/60 p-4 space-y-3 text-sm"
               data-testid="outfit-result"
-              data-generation-state={aiLoading ? "loading" : "complete"}
+              data-generation-state={lifecycle}
               aria-label="Generated outfit result"
             >
               {(outfitItems.changed?.length ?? 0) > 0 && (

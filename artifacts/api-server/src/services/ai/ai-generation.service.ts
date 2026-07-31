@@ -15,6 +15,7 @@ import { computeRetentionUntil } from "../../lib/ai-retention";
 import { hashPrompt, lookupDecision } from "../../lib/safety-gateway";
 import { aiValidationService } from "./ai-validation.service";
 import { buildFaithfulnessCorrection, evaluateOutfitFaithfulness } from "../../lib/outfit-faithfulness";
+import { legacyToUniversalOutfitSpec, universalOutfitSpecSchema } from "../../lib/universal-outfit";
 
 type GenerateInput = z.infer<typeof aiGenerateRequestSchema>;
 type StylizedInput = { prompt: string; avatarType?: string; bodyType?: string; style?: string };
@@ -314,10 +315,18 @@ export class AiGenerationService {
       ? await this.saveGeneration(userId, input.prompt, "generate", design, input.style ?? null)
       : randomUUID();
 
-    return aiDesignResponseSchema.parse({
-      meta: { generationId, status: "completed", warnings: [] },
+    const legacyOutfit = design.outfit;
+    if (!legacyOutfit) throw new Error("Canonical generation requires an outfit plan");
+    const outfitSpec = universalOutfitSpecSchema.parse(legacyToUniversalOutfitSpec({
+      generationId, prompt: input.prompt, style: design.style,
+      palette: design.colorPalette, outfit: legacyOutfit,
+    }));
+    return {
+      meta: { generationId, status: outfitSpec.quality.accepted ? "completed" : "degraded", warnings: outfitSpec.quality.failureReasons },
       result: design,
-    });
+      outfitSpec,
+      lifecycle: outfitSpec.items.every(item => item.unsupported.state) ? "unsupported" : outfitSpec.quality.accepted ? "complete" : "external_verification_required",
+    } as const;
   }
 
   async improveDesign(userId: string, instruction: string, source: unknown, mode: "improve" | "remix") {
