@@ -650,26 +650,34 @@ export default function Create() {
       setLastOutfit(outfit ?? null);
       setSelectedHeadcover(null);
       lastPromptRef.current = usedPrompt;
-      const payload = {
-        model: "ClassicTextureAI.v3",
-        garmentType: "shirt",
-        style: response.result.style,
-        palette: response.result.colorPalette,
-        zones: response.result.placement,
-        avatarLook: previewAvatar,
-        layers: response.result.modules.map((module) => mapAiModuleToLayer(module)),
-      };
-      const parsed = classicTextureAiSchema.parse(payload);
-      const plan = parseClassicTextureAiPlan(parsed);
       const currentLayers = useDesignStore.getState().state.layers;
       for (const layer of currentLayers) deleteLayer(layer.id);
-      setAiPlanPreview(plan.layers);
-      setAiAvatarPreview(plan.avatarLook ?? null);
+      const moduleLayers = response.result.modules.map((module) => mapAiModuleToLayer(module));
+      if (moduleLayers.length > 0) {
+        const parsed = classicTextureAiSchema.parse({
+          model: "ClassicTextureAI.v3",
+          garmentType: "shirt",
+          style: response.result.style,
+          palette: response.result.colorPalette,
+          zones: response.result.placement,
+          avatarLook: previewAvatar,
+          layers: moduleLayers,
+        });
+        const plan = parseClassicTextureAiPlan(parsed);
+        setAiPlanPreview(plan.layers);
+        setAiAvatarPreview(plan.avatarLook ?? null);
+      } else {
+        // A canonical outfit can be complete without optional 2D texture modules.
+        // Keep its garment geometry instead of rejecting the whole generation with
+        // ClassicTextureAI's intentionally stricter, non-empty layer constraint.
+        setAiPlanPreview([]);
+        setAiAvatarPreview(previewAvatar);
+      }
       applyAiPlan();
-      if (parsed.palette[0]) setPaintSwatch(parsed.palette[0]);
+      if (response.result.colorPalette[0]) setPaintSwatch(response.result.colorPalette[0]);
 
       // Color the leg zones only when the outfit actually includes a bottom.
-      const pantsColors = pickPantsColors(parsed.palette);
+      const pantsColors = pickPantsColors(response.result.colorPalette);
       outfitRef.current = { pantsBase: pantsColors.base, pantsAccent: pantsColors.accent };
       if (wantsBottom) {
         for (const legZone of ["left_leg_front", "right_leg_front", "left_leg_back", "right_leg_back"]) {
