@@ -18,9 +18,9 @@ export type UniversalOutfitSpec = z.infer<typeof universalOutfitSpecSchema>;
 export type CanonicalLifecycle = "idle" | "generating" | "validating" | "repairing" | "routing" | "rendering" | "complete" | "error" | "unsupported" | "external_verification_required";
 
 /** Rendering-only projection. It deliberately contains no product decisions. */
-export type PreviewSceneSpec = { generationId: string; items: Array<{ itemId: string; kind: string; color: string; size: string }> };
+export type PreviewSceneSpec = { generationId: string; items: Array<{ itemId: string; kind: string; category: string; color: string; material: string; size: string; placement: string; layeringOrder: number }> };
 export function toPreviewSceneSpec(spec: UniversalOutfitSpec): PreviewSceneSpec {
-  return { generationId: spec.generationId, items: spec.items.filter(i => !i.unsupported.state && i.previewCapability !== "unsupported").map(i => ({ itemId: i.id, kind: i.kind, color: i.colors[0], size: i.size })) };
+  return { generationId: spec.generationId, items: spec.items.filter(i => !i.unsupported.state && i.previewCapability !== "unsupported").map((i, index) => ({ itemId: i.id, kind: i.kind, category: i.category, color: i.colors[0], material: String(i.material ?? "cotton"), size: i.size, placement: String(i.placement ?? i.category), layeringOrder: Number(i.layeringOrder ?? index) })) };
 }
 
 export function toCreatePresentation(spec: UniversalOutfitSpec) {
@@ -55,6 +55,6 @@ export function reconcileCanonicalRevision(previous: UniversalOutfitSpec, candid
 /** Read-only projection for existing AvatarPreview props; no capability decisions live here. */
 export function toAvatarPreviewOutfit(spec: UniversalOutfitSpec) {
   const active = spec.items.filter(item => !item.unsupported.state); const find = (category: string) => active.find(item => item.category === category); const topItem = find("one_piece") ?? find("top"); const bottomItem = find("bottom"); const footwear = find("footwear"); const hair = find("hair");
-  const tops: Record<string,string> = { hoodie:"hoodie", zip_hoodie:"hoodie", tshirt:"tshirt", formal_shirt:"tshirt", football_jersey:"tshirt", dress:"dress", jacket:"jacket", varsity_jacket:"jacket", winter_coat:"jacket", suit_jacket:"jacket" }; const bottoms: Record<string,string> = { jeans:"pants", joggers:"pants", cargo_pants:"pants", formal_trousers:"pants", shorts:"shorts" };
+  const tops: Record<string,string> = { hoodie:"hoodie", zip_hoodie:"zip_hoodie", tshirt:"tshirt", formal_shirt:"formal_jacket", football_jersey:"jersey", dress:"dress", jacket:"jacket", varsity_jacket:"jacket", winter_coat:"winter_coat", suit_jacket:"formal_jacket" }; const bottoms: Record<string,string> = { jeans:"jeans", joggers:"joggers", cargo_pants:"cargo_pants", formal_trousers:"pants", shorts:"shorts" };
   return { top: topItem ? (tops[topItem.kind] ?? "sweater") : "none", bottom: bottomItem ? (bottoms[bottomItem.kind] ?? "pants") : "none", shoes: footwear ? (footwear.kind === "boots" ? "boots" : "sneakers") : "none", shoesColor: footwear?.colors[0], topDescription: topItem?.label, bottomDescription: bottomItem?.label, hair: { style: hair ? (hair.kind === "long_hair" ? "long" : "short") : "none", color: hair?.colors[0] ?? "#111111" }, accessories: active.filter(item => item.category === "accessory").map(item => ({ kind: item.kind === "shoulder_bag" ? "bag" : item.kind, color: item.colors[0], size: item.size })), customParts: [], unsupported: spec.items.filter(item => item.unsupported.state).map(item => item.unsupported.reason ?? item.label), reason: spec.normalizedUserIntent };
 }
