@@ -1,5 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
-import { mkdir } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { normalizeDesignPayload } from "../artifacts/api-server/src/lib/ai-normalize";
 import { legacyToUniversalOutfitSpec } from "../artifacts/api-server/src/lib/universal-outfit";
 
@@ -93,17 +93,50 @@ const workflowFixtures = [
     },
     ["hoodie", "cap", "backpack", "sneakers"],
   ],
-  ["Black zip hoodie and jeans", { ...baseOutfit, top: "hoodie", bottom: "pants" }, ["hoodie", "pants"]],
-  ["Black cargo outfit with large angel wings", { ...baseOutfit, bottom: "pants", accessories: [{ kind: "wings", color: "#FFFFFF", size: "large" }] }, ["pants", "wings"]],
-  ["Winter coat, beanie and boots", { ...baseOutfit, top: "jacket", shoes: "boots", accessories: [{ kind: "beanie", color: "#222222", size: "medium" }] }, ["jacket", "beanie", "boots"]],
-  ["Formal suit with black shoes", { ...baseOutfit, top: "jacket", bottom: "pants", shoes: "sneakers" }, ["jacket", "pants", "sneakers"]],
+  [
+    "Black zip hoodie and jeans",
+    { ...baseOutfit, top: "hoodie", bottom: "pants" },
+    ["hoodie", "pants"],
+  ],
+  [
+    "Black cargo outfit with large angel wings",
+    {
+      ...baseOutfit,
+      bottom: "pants",
+      accessories: [{ kind: "wings", color: "#FFFFFF", size: "large" }],
+    },
+    ["pants", "wings"],
+  ],
+  [
+    "Winter coat, beanie and boots",
+    {
+      ...baseOutfit,
+      top: "jacket",
+      shoes: "boots",
+      accessories: [{ kind: "beanie", color: "#222222", size: "medium" }],
+    },
+    ["jacket", "beanie", "boots"],
+  ],
+  [
+    "Formal suit with black shoes",
+    { ...baseOutfit, top: "jacket", bottom: "pants", shoes: "sneakers" },
+    ["jacket", "pants", "sneakers"],
+  ],
 ] as const;
 
 const evidenceCases = [
   ...workflowFixtures.map(([prompt]) => prompt),
   "Wings-only revision",
 ] as const;
-const evidenceViews = ["front", "front-45", "right", "back", "back-45", "left"] as const;
+const evidenceViews = [
+  "front",
+  "front-45",
+  "right",
+  "back",
+  "back-45",
+  "left",
+] as const;
+const evidenceRoot = "test-results/screenshots/representative";
 
 type ApiFixtureState = {
   requested: string[];
@@ -171,7 +204,13 @@ async function installApiFixtures(
             deprecated: false,
           },
           result,
-          outfitSpec: legacyToUniversalOutfitSpec({ generationId: "00000000-0000-4000-8000-000000000099", prompt: body.prompt, style: result.style, palette: result.colorPalette, outfit }),
+          outfitSpec: legacyToUniversalOutfitSpec({
+            generationId: "00000000-0000-4000-8000-000000000099",
+            prompt: body.prompt,
+            style: result.style,
+            palette: result.colorPalette,
+            outfit,
+          }),
           lifecycle: "complete",
         },
       });
@@ -249,7 +288,12 @@ test("deterministic child workflows keep every requested item", async ({
     await page.locator("details input").fill(prompt);
     await page.locator("details button[type=submit]").click();
     const result = page.getByTestId("outfit-result");
-    await expect(result).toHaveAttribute("data-generation-state", prompt.startsWith("Football") ? "external_verification_required" : "complete");
+    await expect(result).toHaveAttribute(
+      "data-generation-state",
+      prompt.startsWith("Football")
+        ? "external_verification_required"
+        : "complete",
+    );
     const text = (await result.innerText()).toLowerCase();
     for (const item of expected) expect(text).toContain(item);
   }
@@ -284,38 +328,85 @@ test("deterministic child workflows keep every requested item", async ({
   expect(consoleErrors).toEqual([]);
 });
 
-test("representative outfits produce six-view desktop and core mobile evidence", async ({ page }) => {
+test("representative outfits produce six-view desktop and core mobile evidence", async ({
+  page,
+}) => {
   test.setTimeout(240_000);
   const consoleErrors: string[] = [];
   const pageErrors: string[] = [];
-  page.on("console", (message) => { if (message.type() === "error") consoleErrors.push(message.text()); });
+  page.on("console", (message) => {
+    if (message.type() === "error") consoleErrors.push(message.text());
+  });
   page.on("pageerror", (error) => pageErrors.push(error.message));
   const api = await installApiFixtures(page, true);
+  const capturedEvidence: Array<{
+    prompt: string;
+    view: string;
+    viewport: "desktop" | "mobile";
+    path: string;
+  }> = [];
 
   for (const [caseIndex, requestedPrompt] of evidenceCases.entries()) {
-    const prompt = requestedPrompt === "Wings-only revision" ? "Backpack and large white angel wings" : requestedPrompt;
+    const prompt =
+      requestedPrompt === "Wings-only revision"
+        ? "Backpack and large white angel wings"
+        : requestedPrompt;
     await page.goto("/");
     await page.locator("details").last().click();
     await page.locator("details input").fill(prompt);
     await page.locator("details button[type=submit]").click();
     await expect(page.getByTestId("outfit-result")).toBeVisible();
-    const slug = requestedPrompt.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+    const slug = requestedPrompt
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-|-$/g, "");
     const preview = page.getByTestId("avatar-preview");
     await expect(preview.locator("canvas")).toBeVisible({ timeout: 20_000 });
     for (const view of evidenceViews) {
       await page.getByTestId(`camera-${view}`).click();
       await page.waitForTimeout(250);
-      await preview.screenshot({ path: `test-results/screenshots/representative/${slug}/desktop-${view}.png` });
+      const path = `${evidenceRoot}/${slug}/desktop-${view}.png`;
+      await preview.screenshot({ path });
+      capturedEvidence.push({
+        prompt: requestedPrompt,
+        view,
+        viewport: "desktop",
+        path,
+      });
     }
     if (caseIndex < 4) {
       await page.setViewportSize({ width: 390, height: 844 });
       await page.getByTestId("camera-front").click();
-      await preview.screenshot({ path: `test-results/screenshots/representative/${slug}/mobile-front.png` });
+      const path = `${evidenceRoot}/${slug}/mobile-front.png`;
+      await preview.screenshot({ path });
+      capturedEvidence.push({
+        prompt: requestedPrompt,
+        view: "front",
+        viewport: "mobile",
+        path,
+      });
       await page.setViewportSize({ width: 1440, height: 900 });
     }
   }
 
+  const expectedEvidenceCount = evidenceCases.length * evidenceViews.length + 4;
+  expect(capturedEvidence).toHaveLength(expectedEvidenceCount);
+  await writeFile(
+    "test-results/visual-evidence.json",
+    `${JSON.stringify(
+      {
+        generatedAt: new Date().toISOString(),
+        expectedCount: expectedEvidenceCount,
+        screenshots: capturedEvidence,
+      },
+      null,
+      2,
+    )}\n`,
+  );
+
   assertApiIsolation(api);
   expect(pageErrors, `Page errors: ${pageErrors.join("\n")}`).toEqual([]);
-  expect(consoleErrors, `Console errors: ${consoleErrors.join("\n")}`).toEqual([]);
+  expect(consoleErrors, `Console errors: ${consoleErrors.join("\n")}`).toEqual(
+    [],
+  );
 });
