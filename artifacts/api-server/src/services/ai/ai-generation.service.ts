@@ -14,11 +14,22 @@ import { normalizeDesignPayload } from "../../lib/ai-normalize";
 import { computeRetentionUntil } from "../../lib/ai-retention";
 import { hashPrompt, lookupDecision } from "../../lib/safety-gateway";
 import { aiValidationService } from "./ai-validation.service";
-import { buildFaithfulnessCorrection, evaluateOutfitFaithfulness } from "../../lib/outfit-faithfulness";
-import { modelItemsToUniversalOutfitSpec, universalOutfitSpecSchema } from "../../lib/universal-outfit";
+import {
+  buildFaithfulnessCorrection,
+  evaluateOutfitFaithfulness,
+} from "../../lib/outfit-faithfulness";
+import {
+  modelItemsToUniversalOutfitSpec,
+  universalOutfitSpecSchema,
+} from "../../lib/universal-outfit";
 
 type GenerateInput = z.infer<typeof aiGenerateRequestSchema>;
-type StylizedInput = { prompt: string; avatarType?: string; bodyType?: string; style?: string };
+type StylizedInput = {
+  prompt: string;
+  avatarType?: string;
+  bodyType?: string;
+  style?: string;
+};
 
 function closeTruncatedJson(input: string): string {
   let inStr = false;
@@ -86,9 +97,10 @@ function parseStrictJson(content: string): unknown {
 
 export class AiGenerationService {
   private buildPrompt(input: GenerateInput, mode: string): string {
-    const placementRule = input.itemType === "classic_shirt"
-      ? "For classic_shirt: leftSleeve/rightSleeve must be descriptive strings and leftLeg/rightLeg must be exactly \"not_used\"."
-      : "For classic_pants: leftLeg/rightLeg must be descriptive strings and leftSleeve/rightSleeve must be exactly \"not_used\".";
+    const placementRule =
+      input.itemType === "classic_shirt"
+        ? 'For classic_shirt: leftSleeve/rightSleeve must be descriptive strings and leftLeg/rightLeg must be exactly "not_used".'
+        : 'For classic_pants: leftLeg/rightLeg must be descriptive strings and leftSleeve/rightSleeve must be exactly "not_used".';
     return [
       "Return only valid JSON. No markdown. No comments. Do not wrap in backticks.",
       `mode=${mode}`,
@@ -149,7 +161,7 @@ export class AiGenerationService {
       '  "universalItems": [{"id":"top-hoodie-01","category":"top|bottom|one_piece|footwear|hair|accessory","kind":"registry_kind","label":"child friendly label","color":"#RRGGBB","fit":"slim|regular|relaxed|oversized","size":"small|medium|large","material":"string","placement":"string"}]',
       "}",
       "",
-      "CANONICAL ITEM RULE (strict): universalItems is REQUIRED and is the authoritative outfit. Emit one row per requested item using only registry kinds: tshirt, hoodie, zip_hoodie, jacket, varsity_jacket, winter_coat, football_jersey, formal_shirt, suit_jacket, jeans, joggers, cargo_pants, formal_trousers, shorts, dress, shoes, boots, cap, beanie, long_hair, short_hair, backpack, shoulder_bag, wings, crown, mask, belt. Stable IDs use lowercase hyphenated category-kind-number and must be unique. A dress is category one_piece with id prefix one-piece and replaces top and bottom. Unknown items remain explicit accessory rows so routing marks them unsupported; never substitute a hoodie.",
+      "CANONICAL ITEM RULE (strict): universalItems is REQUIRED and is the authoritative outfit. Emit one row per requested item using only registry kinds: tshirt, hoodie, oversized_hoodie, zip_hoodie, sweatshirt, jacket, bomber_jacket, varsity_jacket, blazer, trench_coat, puffer_jacket, winter_coat, football_jersey, formal_shirt, suit_jacket, kimono, armor, jeans, joggers, cargo_pants, formal_trousers, shorts, dress, shoes, boots, cap, beanie, long_hair, short_hair, curly_hair, afro_hair, dreadlocks, ponytail_hair, anime_hair, roblox_hair, backpack, shoulder_bag, wings, crown, mask, belt, helmet, scarf, tail, horns, headphones, necklace, sword, cape. Stable IDs use lowercase hyphenated category-kind-number and must be unique. A dress is category one_piece with id prefix one-piece and replaces top and bottom. Unknown items remain explicit accessory rows so routing marks them unsupported; never substitute a hoodie.",
       "Outfit rule (strict): `outfit` is non-authoritative artwork metadata and must describe the same items as universalItems.",
       "PLACEMENT rule (strict): every wish has a correct BODY LOCATION — head things (marshmallow head, pumpkin head, helmets, hair) belong in customParts/accessories/hair, NEVER painted on the clothes; wings/tails/backpacks are accessories on the body. topDescription/bottomDescription describe ONLY what the garment fabric itself looks like — plain colors, material, maybe ONE small tasteful chest motif. NEVER put a theme's face, eyes, mouth, melted/dripping parts, or the creature itself into the garment descriptions. Example: «marshmallow head» → customParts headcover white; topDescription: 'plain soft white sweater fabric' (NO drips, NO face). If the child did not describe the clothes, choose simple fabric colors that match the theme.",
       "The outfit plan is what the child SEES on the 3D avatar — when the child names ANY garment (skjorte, shirt, jakke, bukse, genser …) the matching outfit field MUST be set to that garment. skjorte/shirt WITHOUT 't-' still means top=tshirt (a shirt IS a top). Never answer with an all-none outfit while the reason says the child asked for a garment.",
@@ -159,7 +171,7 @@ export class AiGenerationService {
       "Full-outfit words mean top AND bottom: treningsdress/joggedress/tracksuit=jacket+pants+sneakers, dress/suit=jacket+pants, smoking/tuxedo=BLACK jacket+pants with white shirt-front motif and bow tie, fotballdrakt/football kit=tshirt+shorts+sneakers, ninja/kostyme/antrekk/outfit=top+bottom, skiklær/skidress=jacket+pants+boots, kjeledress/vinterdress/parkdress/heldress/overall/onesie=jacket+pants in the SAME color (one-piece look), pysjamas/pajamas/nattøy=tshirt+pants in soft colors. The word 'skin' alone means a complete look (top+bottom).",
       "Norwegian 'dress' and 'smoking' are SUITS (jacket+pants) — NEVER the gown garment top=dress. Only kjole/gown/ballkjole/prinsessekjole means top=dress. Vest=jacket (slim, sleeveless look), singlet/tanktop=tshirt (sleeveless look), tights/leggings/strømpebukse=pants (slim legging look, use bottom=pants) — these ARE supported, never put common garments in `unsupported`.",
       "HOOD RULE (strict): top=hoodie ONLY when the child explicitly asks for hettegenser/hoodie/hette/hood/luvtröja. For every other wish — including themed looks — use jacket, sweater, tshirt or dress. Never give a garment a hood the child did not ask for.",
-      "hair.style is \"none\" unless the user asks for hair. accessories only contains requested items (max 6).",
+      'hair.style is "none" unless the user asks for hair. accessories only contains requested items (max 6).',
       "Everything in the outfit schema (shoes, hair, all listed accessory kinds) IS supported in the 3D preview — never list those in `unsupported`. Only put something in `unsupported` when it truly cannot be represented (e.g. a specific brand logo, an animal companion).",
       "If the user only asks for one piece (e.g. only a t-shirt), set every other field to none/empty. This applies even WITHOUT the words «bare/kun»: «røde snikkers» = ONLY shoes=sneakers (top/bottom none), «rød caps» = ONLY {kind:'cap'}. NEVER add a t-shirt or other garments the child did not name. Words like «bare», «kun», 'only', 'just' make this strict too.",
       "",
@@ -179,27 +191,32 @@ export class AiGenerationService {
       "- ninja: BLACK #1F2937 fitted top+bottom, accessories MUST include {kind:'mask', color:'#111827'} and {kind:'sword', color:'#64748B'} (blades on the back), may include {kind:'belt', color:'#C0392B'}.",
       "- astronaut/romfarer: a real NASA-style space suit — top=jacket AND bottom=pants in WHITE #F5F7FA with dark navy #1E2A44 panel lines and small orange #E8862E accents, shoes=boots (chunky moon boots, white/grey). accessories MUST include {kind:'helmet', color:'#FFFFFF'} (round space helmet with visor) and {kind:'backpack', color:'#D8DEE8'} (life-support pack). Motif: ONE round mission patch on the chest plus a small flag — the suit fabric itself stays plain white with panel seams, NEVER an all-over print of astronauts/rockets/stars. NEVER leave the outfit empty for an astronaut.",
       "For ANY themed request (animal, fantasy figure, profession), pick the real-world iconic costume colors and include the matching head accessory, wings/tail when the creature has them, and a motif that makes the texture read as that theme at a glance.",
-      ...(input.previousOutfit ? [
-        "",
-        "REVISION MODE (strict): This is an EDIT of an existing outfit, NOT a new design.",
-        `previousOutfit=${JSON.stringify(input.previousOutfit)}`,
-        "The prompt is a change request from a child (e.g. «gjør vingene større», «bare capsen blå», «fjern sekken»).",
-        "Return the FULL outfit object: copy every field from previousOutfit EXACTLY as-is, and change ONLY what the change request explicitly mentions.",
-        "Do not add, remove, restyle or recolor anything that is not mentioned. Keep the accessories array identical except for the mentioned items (removals only when asked to remove).",
-        "In revision mode the single-piece rule above does NOT apply — never reset unmentioned fields to none/empty.",
-      ] : []),
+      ...(input.previousOutfit
+        ? [
+            "",
+            "REVISION MODE (strict): This is an EDIT of an existing outfit, NOT a new design.",
+            `previousOutfit=${JSON.stringify(input.previousOutfit)}`,
+            "The prompt is a change request from a child (e.g. «gjør vingene større», «bare capsen blå», «fjern sekken»).",
+            "Return the FULL outfit object: copy every field from previousOutfit EXACTLY as-is, and change ONLY what the change request explicitly mentions.",
+            "Do not add, remove, restyle or recolor anything that is not mentioned. Keep the accessories array identical except for the mentioned items (removals only when asked to remove).",
+            "In revision mode the single-piece rule above does NOT apply — never reset unmentioned fields to none/empty.",
+          ]
+        : []),
       "",
       "Placement rule (strict):",
       placementRule,
       "Every module must include a valid `type` enum value and a six-char hex color.",
       "Keep the response compact so it is never truncated: at most 8 modules, at most 3 short notes, and concise one-sentence strings. Output the complete JSON object only.",
-    ].filter(Boolean).join("\n");
+    ]
+      .filter(Boolean)
+      .join("\n");
   }
 
   private logRawSchemaDiff(rawPayload: unknown, request: GenerateInput) {
-    const source = (rawPayload && typeof rawPayload === "object" && "result" in rawPayload)
-      ? (rawPayload as { result?: unknown }).result
-      : rawPayload;
+    const source =
+      rawPayload && typeof rawPayload === "object" && "result" in rawPayload
+        ? (rawPayload as { result?: unknown }).result
+        : rawPayload;
     const parsed = aiDesignSchema.safeParse(source);
     if (parsed.success) {
       console.info("ai.model.raw_schema_valid", { itemType: request.itemType });
@@ -227,7 +244,11 @@ export class AiGenerationService {
         max_completion_tokens: 6000,
         response_format: { type: "json_object" },
         messages: [
-          { role: "system", content: "You are the My Skins structured Roblox design engine. Always return JSON only." },
+          {
+            role: "system",
+            content:
+              "You are the My Skins structured Roblox design engine. Always return JSON only.",
+          },
           { role: "user", content: prompt },
         ],
       });
@@ -240,7 +261,10 @@ export class AiGenerationService {
       try {
         return parseStrictJson(content);
       } catch (error) {
-        lastError = error instanceof Error ? error : new SyntaxError("AI returned non-JSON content");
+        lastError =
+          error instanceof Error
+            ? error
+            : new SyntaxError("AI returned non-JSON content");
         console.error("ai.model.invalid_json", { attempt, error: lastError });
       }
     }
@@ -248,7 +272,13 @@ export class AiGenerationService {
     throw lastError ?? new SyntaxError("AI returned non-JSON content");
   }
 
-  private async saveGeneration(userId: string, prompt: string, type: string, result: unknown, style: string | null = null) {
+  private async saveGeneration(
+    userId: string,
+    prompt: string,
+    type: string,
+    result: unknown,
+    style: string | null = null,
+  ) {
     const generationId = randomUUID();
     // `prompt` is already the SafetyGateway-normalized safe form (the gateway
     // rewrites req.body in place). Store its hash + policy decision alongside.
@@ -268,88 +298,181 @@ export class AiGenerationService {
   }
 
   async generateDesign(userId: string | null, input: GenerateInput) {
-    const modelResult = await this.askModel(this.buildPrompt(input, "generate"));
+    const modelResult = await this.askModel(
+      this.buildPrompt(input, "generate"),
+    );
     this.logRawSchemaDiff(modelResult, input);
     const normalized = normalizeDesignPayload(input, modelResult);
     let design = aiValidationService.ensureDesign(normalized);
-    let modelItems = (modelResult as { universalItems?: unknown }).universalItems;
+    let modelItems = (modelResult as { universalItems?: unknown })
+      .universalItems;
 
     // Safety net: a request must never come back with a COMPLETELY empty 3D
     // outfit (no top, no bottom, no accessories, no custom parts, no hair) —
     // that is wrong for every prompt. Retry once with a corrective instruction.
-    type OutfitLike = { top?: string; bottom?: string; shoes?: string; accessories?: unknown[]; customParts?: unknown[]; hair?: { style?: string } };
+    type OutfitLike = {
+      top?: string;
+      bottom?: string;
+      shoes?: string;
+      accessories?: unknown[];
+      customParts?: unknown[];
+      hair?: { style?: string };
+    };
     const isOutfitEmpty = (o: OutfitLike | undefined) =>
-      !o || (
-        (o.top ?? "none") === "none" &&
+      !o ||
+      ((o.top ?? "none") === "none" &&
         (o.bottom ?? "none") === "none" &&
         (o.shoes ?? "none") === "none" &&
         (o.accessories ?? []).length === 0 &&
         (o.customParts ?? []).length === 0 &&
-        (o.hair?.style ?? "none") === "none"
-      );
+        (o.hair?.style ?? "none") === "none");
     const outfit = (design as { outfit?: OutfitLike }).outfit;
     if (!input.previousOutfit && isOutfitEmpty(outfit)) {
       console.warn("ai.outfit_empty_retry", { prompt: input.prompt });
       const correctivePrompt = `${this.buildPrompt(input, "generate")}\n\nIMPORTANT CORRECTION: your previous answer left the 3D outfit COMPLETELY empty (no top, no bottom, no accessories). That is always wrong — the child asked for a look. If the prompt names any figure, creature, profession or theme, fill outfit.top, outfit.bottom, outfit.shoes and the theme's iconic accessories per the rules above. If it names specific garments, set exactly those. Never return an all-none outfit.`;
       const retryResult = await this.askModel(correctivePrompt);
       this.logRawSchemaDiff(retryResult, input);
-      const retryDesign = aiValidationService.ensureDesign(normalizeDesignPayload(input, retryResult));
+      const retryDesign = aiValidationService.ensureDesign(
+        normalizeDesignPayload(input, retryResult),
+      );
       const retryOutfit = (retryDesign as { outfit?: OutfitLike }).outfit;
-      if (!isOutfitEmpty(retryOutfit)) { design = retryDesign; modelItems = (retryResult as { universalItems?: unknown }).universalItems; }
+      if (!isOutfitEmpty(retryOutfit)) {
+        design = retryDesign;
+        modelItems = (retryResult as { universalItems?: unknown })
+          .universalItems;
+      }
     }
     // Schema-valid model output may still omit requested pieces. Validate the
     // normalized plan against deterministic multilingual requirements, retry
     // once with exact corrections, and retain only a better-scoring result.
     const candidateOutfit = (design as { outfit?: OutfitLike }).outfit;
-    let faithfulness = candidateOutfit && !isOutfitEmpty(candidateOutfit) ? evaluateOutfitFaithfulness(input.prompt, candidateOutfit as Parameters<typeof evaluateOutfitFaithfulness>[1]) : null;
-    const repairHistory: Array<{ attempt: number; changedPaths: string[]; previousScore: number; resultingScore: number }> = [];
-    if (!input.previousOutfit && candidateOutfit && !isOutfitEmpty(candidateOutfit)) {
+    let faithfulness =
+      candidateOutfit && !isOutfitEmpty(candidateOutfit)
+        ? evaluateOutfitFaithfulness(
+            input.prompt,
+            candidateOutfit as Parameters<typeof evaluateOutfitFaithfulness>[1],
+          )
+        : null;
+    const repairHistory: Array<{
+      attempt: number;
+      changedPaths: string[];
+      previousScore: number;
+      resultingScore: number;
+    }> = [];
+    if (
+      !input.previousOutfit &&
+      candidateOutfit &&
+      !isOutfitEmpty(candidateOutfit)
+    ) {
       const report = faithfulness!;
       if (!report.ok) {
-        console.warn("ai.outfit_faithfulness_retry", { requirements: report.requirements, issueCount: report.issues.length, score: report.score });
-        const retryResult = await this.askModel(`${this.buildPrompt(input, "generate")}\n\n${buildFaithfulnessCorrection(report)}`);
-        const retryDesign = aiValidationService.ensureDesign(normalizeDesignPayload(input, retryResult));
+        console.warn("ai.outfit_faithfulness_retry", {
+          requirements: report.requirements,
+          issueCount: report.issues.length,
+          score: report.score,
+        });
+        const retryResult = await this.askModel(
+          `${this.buildPrompt(input, "generate")}\n\n${buildFaithfulnessCorrection(report)}`,
+        );
+        const retryDesign = aiValidationService.ensureDesign(
+          normalizeDesignPayload(input, retryResult),
+        );
         const retryOutfit = (retryDesign as { outfit?: OutfitLike }).outfit;
         if (retryOutfit && !isOutfitEmpty(retryOutfit)) {
-          const retryReport = evaluateOutfitFaithfulness(input.prompt, retryOutfit as Parameters<typeof evaluateOutfitFaithfulness>[1]);
-          repairHistory.push({ attempt: 1, changedPaths: retryReport.score > report.score ? ["items"] : [], previousScore: report.score, resultingScore: retryReport.score });
-          if (retryReport.score > report.score) { design = retryDesign; modelItems = (retryResult as { universalItems?: unknown }).universalItems; faithfulness = retryReport; }
+          const retryReport = evaluateOutfitFaithfulness(
+            input.prompt,
+            retryOutfit as Parameters<typeof evaluateOutfitFaithfulness>[1],
+          );
+          repairHistory.push({
+            attempt: 1,
+            changedPaths: retryReport.score > report.score ? ["items"] : [],
+            previousScore: report.score,
+            resultingScore: retryReport.score,
+          });
+          if (retryReport.score > report.score) {
+            design = retryDesign;
+            modelItems = (retryResult as { universalItems?: unknown })
+              .universalItems;
+            faithfulness = retryReport;
+          }
         }
       }
     }
     const generationId = userId
-      ? await this.saveGeneration(userId, input.prompt, "generate", design, input.style ?? null)
+      ? await this.saveGeneration(
+          userId,
+          input.prompt,
+          "generate",
+          design,
+          input.style ?? null,
+        )
       : randomUUID();
 
-    if (!modelItems) throw new Error("AI response omitted canonical universalItems");
-    const outfitSpec = universalOutfitSpecSchema.parse(modelItemsToUniversalOutfitSpec({ generationId, prompt: input.prompt, style: design.style, palette: design.colorPalette, items: modelItems, faithfulness: faithfulness ? { score: faithfulness.score, issues: faithfulness.issues } : { score: 0, issues: ["No faithful outfit was produced"] }, repairHistory }));
+    if (!modelItems)
+      throw new Error("AI response omitted canonical universalItems");
+    const outfitSpec = universalOutfitSpecSchema.parse(
+      modelItemsToUniversalOutfitSpec({
+        generationId,
+        prompt: input.prompt,
+        style: design.style,
+        palette: design.colorPalette,
+        items: modelItems,
+        faithfulness: faithfulness
+          ? { score: faithfulness.score, issues: faithfulness.issues }
+          : { score: 0, issues: ["No faithful outfit was produced"] },
+        repairHistory,
+      }),
+    );
     return {
-      meta: { generationId, status: outfitSpec.quality.accepted ? "completed" : "degraded", warnings: outfitSpec.quality.failureReasons },
+      meta: {
+        generationId,
+        status: outfitSpec.quality.accepted ? "completed" : "degraded",
+        warnings: outfitSpec.quality.failureReasons,
+      },
       result: design,
       outfitSpec,
-      lifecycle: outfitSpec.items.every(item => item.unsupported.state) ? "unsupported" : outfitSpec.quality.accepted ? "complete" : "external_verification_required",
+      lifecycle: outfitSpec.items.every((item) => item.unsupported.state)
+        ? "unsupported"
+        : outfitSpec.quality.accepted
+          ? "complete"
+          : "external_verification_required",
     } as const;
   }
 
-  async improveDesign(userId: string, instruction: string, source: unknown, mode: "improve" | "remix") {
+  async improveDesign(
+    userId: string,
+    instruction: string,
+    source: unknown,
+    mode: "improve" | "remix",
+  ) {
     const designSource = aiValidationService.ensureDesign(source);
-    const modelResult = await this.askModel(`${mode} this design with instruction: ${instruction}\nsource:${JSON.stringify(designSource)}`);
+    const modelResult = await this.askModel(
+      `${mode} this design with instruction: ${instruction}\nsource:${JSON.stringify(designSource)}`,
+    );
     this.logRawSchemaDiff(modelResult, {
       prompt: instruction,
       itemType: designSource.itemType,
       style: designSource.style,
       theme: designSource.theme,
     });
-    const design = aiValidationService.ensureDesign(normalizeDesignPayload(
-      {
-        prompt: instruction,
-        itemType: designSource.itemType,
-        style: designSource.style,
-        theme: designSource.theme,
-      },
-      modelResult,
-    ));
-    const generationId = await this.saveGeneration(userId, instruction, mode, design, null);
+    const design = aiValidationService.ensureDesign(
+      normalizeDesignPayload(
+        {
+          prompt: instruction,
+          itemType: designSource.itemType,
+          style: designSource.style,
+          theme: designSource.theme,
+        },
+        modelResult,
+      ),
+    );
+    const generationId = await this.saveGeneration(
+      userId,
+      instruction,
+      mode,
+      design,
+      null,
+    );
     return aiDesignResponseSchema.parse({
       meta: { generationId, status: "completed", warnings: [] },
       result: design,
@@ -357,19 +480,27 @@ export class AiGenerationService {
   }
 
   async generateIdea(input: GenerateInput) {
-    return aiIdeaSchema.parse(await this.askModel(this.buildPrompt(input, "idea")));
+    return aiIdeaSchema.parse(
+      await this.askModel(this.buildPrompt(input, "idea")),
+    );
   }
 
   async generateModules(input: GenerateInput) {
-    return aiValidationService.ensureModules(await this.askModel(this.buildPrompt(input, "modules")));
+    return aiValidationService.ensureModules(
+      await this.askModel(this.buildPrompt(input, "modules")),
+    );
   }
 
   async generatePalette(input: GenerateInput) {
-    return aiValidationService.ensurePalette(await this.askModel(this.buildPrompt(input, "palette")));
+    return aiValidationService.ensurePalette(
+      await this.askModel(this.buildPrompt(input, "palette")),
+    );
   }
 
   async generateLayout(input: GenerateInput) {
-    return aiValidationService.ensureLayout(await this.askModel(this.buildPrompt(input, "layout")));
+    return aiValidationService.ensureLayout(
+      await this.askModel(this.buildPrompt(input, "layout")),
+    );
   }
 
   async generateStylizedOutfit(userId: string, input: StylizedInput) {
@@ -398,7 +529,13 @@ export class AiGenerationService {
 
     const raw = await this.askModel(prompt);
     const concept = stylizedOutfitConceptSchema.parse(raw);
-    const generationId = await this.saveGeneration(userId, input.prompt, "stylized_outfit", concept, input.style ?? null);
+    const generationId = await this.saveGeneration(
+      userId,
+      input.prompt,
+      "stylized_outfit",
+      concept,
+      input.style ?? null,
+    );
     return stylizedOutfitResponseSchema.parse({
       meta: { generationId, status: "completed", warnings: [] },
       result: concept,
