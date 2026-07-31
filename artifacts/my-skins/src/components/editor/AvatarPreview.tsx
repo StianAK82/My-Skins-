@@ -1221,6 +1221,18 @@ export function AvatarPreview({ textureUrl, className, avatarType = "neutral", v
   const setView = (next: "front" | "back") => { if (!controlledView) setInternalView(next); onViewChange?.(next); };
   const subtitle = resolvedMode === "clothing" ? "Clothing Preview" : "Avatar Look Preview";
   const webglAvailable = useWebGLAvailable();
+  const cameraPresets = [
+    { id: "front", label: "Front", rotation: 0, textureView: "front" },
+    { id: "front-45", label: "Front 45°", rotation: -Math.PI / 4, textureView: "front" },
+    { id: "right", label: "Right", rotation: -Math.PI / 2, textureView: "front" },
+    { id: "back", label: "Back", rotation: Math.PI, textureView: "back" },
+    { id: "back-45", label: "Back 45°", rotation: (Math.PI * 3) / 4, textureView: "back" },
+    { id: "left", label: "Left", rotation: Math.PI / 2, textureView: "front" },
+  ] as const;
+  const selectCameraPreset = (preset: (typeof cameraPresets)[number]) => {
+    setRotation(preset.rotation);
+    setView(preset.textureView);
+  };
 
   const scene = !webglAvailable ? (
     <PreviewFallback textureUrl={textureUrl} />
@@ -1240,7 +1252,7 @@ export function AvatarPreview({ textureUrl, className, avatarType = "neutral", v
   );
 
   if (studioMode) {
-    return <div className="relative w-full h-full bg-[radial-gradient(circle_at_50%_34%,#182743_0%,#080d19_48%,#03050b_100%)]">{scene}<div className="pointer-events-none absolute inset-x-0 top-0 h-28 bg-gradient-to-b from-sky-400/[0.06] to-transparent" /><div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-2 bg-slate-950/75 shadow-2xl shadow-black/50 backdrop-blur-xl rounded-full px-4 py-2 border border-white/15"><button onClick={() => setView("front")} className={`text-xs px-3 py-1 rounded-full ${view === "front" ? "bg-white/20 text-white" : "text-white/50 hover:text-white"}`}>Front</button><button onClick={() => setView("back")} className={`text-xs px-3 py-1 rounded-full ${view === "back" ? "bg-white/20 text-white" : "text-white/50 hover:text-white"}`}>Back</button><button onClick={() => setRotation((p) => p + 0.3)} className="text-white/60 hover:text-white p-1" title="Rotate"><RotateCw className="w-3.5 h-3.5" /></button><button onClick={() => setZoom((p) => Math.min(6, p + 0.4))} className="text-white/60 hover:text-white p-1" title="Zoom out"><ZoomOut className="w-3.5 h-3.5" /></button><button onClick={() => setZoom((p) => Math.max(2.2, p - 0.4))} className="text-white/60 hover:text-white p-1" title="Zoom in"><ZoomIn className="w-3.5 h-3.5" /></button></div><div className="absolute top-4 left-4 rounded-full border border-white/10 bg-black/20 px-3 py-1.5 text-[10px] uppercase tracking-[0.18em] text-white/45 font-medium backdrop-blur-md">{avatarType} · {subtitle}</div></div>;
+    return <div data-testid="avatar-preview" className="relative w-full h-full bg-[radial-gradient(circle_at_50%_34%,#182743_0%,#080d19_48%,#03050b_100%)]">{scene}<div className="pointer-events-none absolute inset-x-0 top-0 h-28 bg-gradient-to-b from-sky-400/[0.06] to-transparent" /><div aria-label="Camera views" className="absolute bottom-6 left-1/2 -translate-x-1/2 flex max-w-[92%] items-center gap-1 overflow-x-auto bg-slate-950/75 shadow-2xl shadow-black/50 backdrop-blur-xl rounded-full px-3 py-2 border border-white/15">{cameraPresets.map((preset) => <button key={preset.id} data-testid={`camera-${preset.id}`} onClick={() => selectCameraPreset(preset)} className="whitespace-nowrap text-[11px] px-2 py-1 rounded-full text-white/65 hover:bg-white/15 hover:text-white">{preset.label}</button>)}<button onClick={() => setRotation((p) => p + 0.3)} className="text-white/60 hover:text-white p-1" title="Rotate"><RotateCw className="w-3.5 h-3.5" /></button><button onClick={() => setZoom((p) => Math.min(6, p + 0.4))} className="text-white/60 hover:text-white p-1" title="Zoom out"><ZoomOut className="w-3.5 h-3.5" /></button><button onClick={() => setZoom((p) => Math.max(2.2, p - 0.4))} className="text-white/60 hover:text-white p-1" title="Zoom in"><ZoomIn className="w-3.5 h-3.5" /></button></div><div className="absolute top-4 left-4 rounded-full border border-white/10 bg-black/20 px-3 py-1.5 text-[10px] uppercase tracking-[0.18em] text-white/45 font-medium backdrop-blur-md">{avatarType} · {subtitle}</div></div>;
   }
 
   return (
