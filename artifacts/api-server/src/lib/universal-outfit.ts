@@ -4,6 +4,12 @@ import {
   constructionDetailsFor,
   validateFashionConstruction,
 } from "./fashion-construction-validator";
+import {
+  compileConstructionGeometry,
+  verifyConstructionGeometry,
+  type ConstructionGeometry,
+  type GeometryVerification,
+} from "./construction-geometry";
 
 const hex = z.string().regex(/^#[0-9A-F]{6}$/);
 const capability = z.enum(["supported", "preview_only", "unsupported"]);
@@ -561,6 +567,8 @@ export type PreviewSceneSpec = {
     color: string;
     size: OutfitItem["size"];
     implementation: string;
+    construction: ConstructionGeometry;
+    geometryVerification: GeometryVerification;
   }>;
 };
 export function toPreviewSceneSpec(
@@ -582,6 +590,11 @@ export function toPreviewSceneSpec(
               color: item.colors[0],
               size: item.size,
               implementation: routed.manifest.previewImplementation,
+              construction: compileConstructionGeometry(item),
+              geometryVerification: verifyConstructionGeometry(
+                item,
+                compileConstructionGeometry(item),
+              ),
             },
           ]
         : [];
