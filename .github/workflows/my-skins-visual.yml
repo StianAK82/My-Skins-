@@ -52,32 +52,50 @@ jobs:
         run: pnpm run build:packages
       - name: Run rendering and screenshot tests
         run: pnpm exec playwright test
+      - name: Verify visual evidence set
+        run: |
+          test -f test-results/visual-evidence.json
+          node - <<'NODE'
+          const { readFileSync } = require("node:fs");
+          const evidence = JSON.parse(readFileSync("test-results/visual-evidence.json", "utf8"));
+          if (evidence.screenshots.length !== evidence.expectedCount) {
+            throw new Error(`Expected ${evidence.expectedCount} screenshots, found ${evidence.screenshots.length}`);
+          }
+          console.log(`Verified ${evidence.screenshots.length} representative screenshots`);
+          NODE
+          missing=0
+          while IFS= read -r screenshot; do
+            if [ ! -s "$screenshot" ]; then
+              echo "Missing or empty screenshot: $screenshot" >&2
+              missing=1
+            fi
+          done < <(node -e 'const e=require("./test-results/visual-evidence.json"); for (const s of e.screenshots) console.log(s.path)')
+          test "$missing" -eq 0
       - name: Upload screenshots
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          {
-            name: my-skins-screenshots,
-            path: "test-results/screenshots/**",
-            if-no-files-found: warn,
-          }
+          name: my-skins-screenshots
+          path: |
+            test-results/screenshots/**
+            test-results/visual-evidence.json
+          if-no-files-found: error
+          retention-days: 30
       - name: Upload screenshot diffs
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          {
-            name: my-skins-diffs,
-            path: "test-results/**/*diff.png",
-            if-no-files-found: ignore,
-          }
+          name: my-skins-diffs
+          path: "test-results/**/*diff.png"
+          if-no-files-found: ignore
+          retention-days: 30
       - name: Upload Playwright report
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          {
-            name: my-skins-playwright-report,
-            path: |
-              playwright-report/**
-              test-results/playwright/**
-            if-no-files-found: warn,
-          }
+          name: my-skins-playwright-report
+          path: |
+            playwright-report/**
+            test-results/playwright/**
+          if-no-files-found: error
+          retention-days: 30
