@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { aiGenerateDesign } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -304,6 +304,8 @@ export default function Create() {
   const [aiError, setAiError] = useState<string>("");
   const [aiLoading, setAiLoading] = useState(false);
   const [canonicalSpec, setCanonicalSpec] = useState<UniversalOutfitSpec | null>(null);
+  const [geometryState, setGeometryState] = useState<"compiling_geometry"|"verifying_geometry"|"geometry_accepted"|"geometry_limited"|"geometry_rejected">("compiling_geometry");
+  const activePreviewScene = useMemo(() => canonicalSpec ? toPreviewSceneSpec(canonicalSpec) : null, [canonicalSpec]);
   const [lifecycle, setLifecycle] = useState<CanonicalLifecycle>("idle");
   const [aiPhase, setAiPhase] = useState<string>("");
   const [uploadStatus, setUploadStatus] = useState<string>("");
@@ -1104,6 +1106,8 @@ export default function Create() {
               studioMode
               animated
               garment={garmentConfig}
+              previewScene={activePreviewScene}
+              onGeometryVerification={(report) => setGeometryState(report.passed ? "geometry_accepted" : report.measurements.length ? "geometry_limited" : "geometry_rejected")}
               customParts={displayedCustomParts}
               exportRef={glbExportRef}
             />
@@ -1144,6 +1148,7 @@ export default function Create() {
           )}
           
           {canonicalSpec && <div data-testid="canonical-result" data-generation-id={canonicalSpec.generationId} data-lifecycle={lifecycle} className="text-center text-sm font-semibold text-slate-600">{lifecycle === "complete" ? "✨ Klar!" : lifecycle === "unsupported" ? "Denne ideen kan vi ikke vise ennå." : lifecycle === "external_verification_required" ? "Vi må sjekke denne litt ekstra." : aiPhase}</div>}
+          {canonicalSpec && <div data-testid="geometry-acceptance" data-state={geometryState} className="sr-only">{geometryState === "geometry_accepted" ? "Your outfit is ready." : geometryState === "geometry_limited" || geometryState === "geometry_rejected" ? "This part could not be shown correctly." : "I’m checking the outfit."}</div>}
           {outfitItems && (outfitItems.uploadable.length > 0 || outfitItems.previewOnly.length > 0 || outfitItems.unsupported.length > 0 || (outfitItems.changed?.length ?? 0) > 0) && (
             <div
               className="mt-4 rounded-xl border border-slate-700 bg-slate-900/60 p-4 space-y-3 text-sm"

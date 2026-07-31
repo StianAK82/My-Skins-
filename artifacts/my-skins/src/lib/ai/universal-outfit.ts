@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { compileRenderedConstruction, type ConstructionItem } from "./rendered-construction";
 
 const itemSchema = z.object({
   id: z.string(), category: z.enum(["top", "bottom", "one_piece", "footwear", "hair", "accessory"]),
@@ -18,9 +19,9 @@ export type UniversalOutfitSpec = z.infer<typeof universalOutfitSpecSchema>;
 export type CanonicalLifecycle = "idle" | "generating" | "validating" | "repairing" | "routing" | "rendering" | "complete" | "error" | "unsupported" | "external_verification_required";
 
 /** Rendering-only projection. It deliberately contains no product decisions. */
-export type PreviewSceneSpec = { generationId: string; items: Array<{ itemId: string; kind: string; category: string; color: string; material: string; size: string; placement: string; layeringOrder: number }> };
+export type PreviewSceneSpec = { generationId: string; items: Array<{ itemId: string; kind: string; category: string; color: string; material: string; size: string; placement: string; layeringOrder: number; construction: ConstructionItem }> };
 export function toPreviewSceneSpec(spec: UniversalOutfitSpec): PreviewSceneSpec {
-  return { generationId: spec.generationId, items: spec.items.filter(i => !i.unsupported.state && i.previewCapability !== "unsupported").map((i, index) => ({ itemId: i.id, kind: i.kind, category: i.category, color: i.colors[0], material: String(i.material ?? "cotton"), size: i.size, placement: String(i.placement ?? i.category), layeringOrder: Number(i.layeringOrder ?? index) })) };
+  return { generationId: spec.generationId, items: spec.items.filter(i => !i.unsupported.state && i.previewCapability !== "unsupported").map((i, index) => ({ itemId: i.id, kind: i.kind, category: i.category, color: i.colors[0], material: String(i.material ?? "cotton"), size: i.size, placement: String(i.placement ?? i.category), layeringOrder: Number(i.layeringOrder ?? index), construction: compileRenderedConstruction(i) })) };
 }
 
 export function toCreatePresentation(spec: UniversalOutfitSpec) {
