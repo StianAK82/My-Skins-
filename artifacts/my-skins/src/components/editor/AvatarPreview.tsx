@@ -16,8 +16,8 @@ type ThreeTexture = ReturnType<typeof makeTextureFromZone>;
 type PreviewMode = "clothing" | "avatar";
 
 export type GarmentConfig = {
-  top?: "hoodie" | "sweater" | "tshirt" | "jacket" | "dress" | null;
-  bottom?: "pants" | "shorts" | "skirt" | null;
+  top?: "hoodie" | "zip_hoodie" | "sweater" | "tshirt" | "jersey" | "jacket" | "formal_jacket" | "winter_coat" | "dress" | null;
+  bottom?: "pants" | "jeans" | "joggers" | "cargo_pants" | "shorts" | "skirt" | null;
   shoes?: "sneakers" | "boots" | null;
   shoesColor?: string | null;
 };
@@ -303,7 +303,7 @@ function GarmentOverlay({
       {top && (
         <>
           {/* HOOD - resting behind neck on main torso */}
-          {top === "hoodie" && isMainTorso && (
+          {(top === "hoodie" || top === "zip_hoodie") && isMainTorso && (
             <group position={[0, args[1]/2 - 0.05, -args[2]/2 - 0.05]}>
               <RoundedBox args={[args[0] * 0.8, 0.25, 0.3]} radius={0.08} smoothness={12} castShadow receiveShadow rotation={[-0.2, 0, 0]}>
                 <meshPhysicalMaterial map={shirtMapBack} color={shirtColor} roughness={0.75} metalness={0.02} sheen={0.4} sheenRoughness={0.5} />
@@ -312,7 +312,7 @@ function GarmentOverlay({
           )}
 
           {/* HOOD FOLDS - draped over shoulders */}
-          {top === "hoodie" && isMainTorso && (
+          {(top === "hoodie" || top === "zip_hoodie") && isMainTorso && (
             <group position={[0, args[1]/2 - 0.02, 0]}>
               <RoundedBox args={[args[0] * 0.9, 0.15, args[2] * 1.05]} radius={0.05} smoothness={12} castShadow receiveShadow>
                 <meshPhysicalMaterial map={shirtMapFront} color={shirtColor} roughness={0.75} metalness={0.02} sheen={0.4} sheenRoughness={0.5} />
@@ -321,7 +321,7 @@ function GarmentOverlay({
           )}
 
           {/* DRAWSTRINGS */}
-          {top === "hoodie" && isMainTorso && (
+          {(top === "hoodie" || top === "zip_hoodie") && isMainTorso && (
             <group position={[0, args[1]/2 - 0.1, args[2]/2 + 0.02]}>
               <mesh position={[-0.15, -0.15, 0]} castShadow rotation={[0, 0, 0.05]}>
                 <cylinderGeometry args={[0.012, 0.012, 0.3, 8]} />
@@ -362,7 +362,7 @@ function GarmentOverlay({
           )}
 
           {/* COLLAR (SWEATER & TSHIRT) */}
-          {(top === "sweater" || top === "tshirt") && isMainTorso && (
+          {(top === "sweater" || top === "tshirt" || top === "jersey") && isMainTorso && (
             <group position={[0, args[1]/2, 0]}>
               <RoundedBox args={[args[0] * 0.45, 0.06, args[2] * 0.5]} radius={0.02} smoothness={12} castShadow receiveShadow>
                 <meshPhysicalMaterial map={shirtMapFront} color={shirtColor} roughness={0.75} metalness={0.02} sheen={0.4} sheenRoughness={0.5} />
@@ -371,7 +371,7 @@ function GarmentOverlay({
           )}
 
           {/* JACKET COLLAR - fold-over style */}
-          {top === "jacket" && isMainTorso && (
+          {(top === "jacket" || top === "formal_jacket" || top === "winter_coat") && isMainTorso && (
             <group position={[0, args[1]/2 - 0.03, args[2]/2 + 0.01]}>
               <RoundedBox args={[args[0] * 0.5, 0.14, 0.08]} radius={0.03} smoothness={12} castShadow receiveShadow rotation={[0.3, 0, 0]}>
                 <meshPhysicalMaterial map={shirtMapFront} color={shirtColor} roughness={0.75} metalness={0.02} sheen={0.4} sheenRoughness={0.5} />
@@ -380,7 +380,7 @@ function GarmentOverlay({
           )}
 
           {/* JACKET FRONT PLACKET (vertical opening) */}
-          {top === "jacket" && isMainTorso && (
+          {(top === "jacket" || top === "formal_jacket" || top === "winter_coat" || top === "zip_hoodie") && isMainTorso && (
             <>
               <group position={[0.08, 0, args[2]/2 + 0.015]}>
                 <RoundedBox args={[0.06, args[1] * 0.9, 0.02]} radius={0.01} smoothness={12} castShadow receiveShadow>
@@ -442,7 +442,7 @@ function GarmentOverlay({
           )}
 
           {/* RIBBED HEM (TORSO) */}
-          {(top === "hoodie" || top === "sweater" || top === "jacket") && isBottomTorso && (
+          {(top === "hoodie" || top === "zip_hoodie" || top === "sweater" || top === "jacket" || top === "formal_jacket" || top === "winter_coat") && isBottomTorso && (
             <group position={[0, -args[1]/2 + 0.06, 0]}>
               <RoundedBox args={[args[0] * 1.05, 0.12, args[2] * 1.05]} radius={0.02} smoothness={12} castShadow receiveShadow>
                 <meshPhysicalMaterial map={shirtMapFront} color={shirtColor} roughness={0.75} metalness={0.02} sheen={0.4} sheenRoughness={0.5} />
@@ -456,7 +456,7 @@ function GarmentOverlay({
           )}
 
           {/* ARM CUFFS (HOODIE, SWEATER, JACKET) */}
-          {(top === "hoodie" || top === "sweater" || top === "jacket") && (isBlockyArm || isR15BottomArm) && (
+          {(top === "hoodie" || top === "zip_hoodie" || top === "sweater" || top === "jacket" || top === "formal_jacket" || top === "winter_coat") && (isBlockyArm || isR15BottomArm) && (
             <group position={[0, -args[1]/2 + 0.05, 0]}>
               <RoundedBox args={[args[0] * 1.1, 0.12, args[2] * 1.1]} radius={0.02} smoothness={12} castShadow receiveShadow>
                 <meshPhysicalMaterial map={shirtMapSide} color={shirtColor} roughness={0.75} metalness={0.02} sheen={0.4} sheenRoughness={0.5} />
@@ -465,7 +465,7 @@ function GarmentOverlay({
           )}
 
           {/* TSHIRT SLEEVE HEM */}
-          {top === "tshirt" && (
+          {(top === "tshirt" || top === "jersey") && (
             <>
               {isBlockyArm && (
                 <group position={[0, 0, 0]}>
@@ -485,7 +485,7 @@ function GarmentOverlay({
           )}
 
           {/* FULL ARM PADDING (HOODIE, SWEATER, JACKET) */}
-          {(top === "hoodie" || top === "sweater" || top === "jacket") && (isBlockyArm || isR15TopArm || isR15BottomArm) && (
+          {(top === "hoodie" || top === "zip_hoodie" || top === "sweater" || top === "jacket" || top === "formal_jacket" || top === "winter_coat") && (isBlockyArm || isR15TopArm || isR15BottomArm) && (
             <BodyPart
               material="shirt"
               args={[args[0] * 1.05, args[1] * 0.98, args[2] * 1.05]}
@@ -498,7 +498,7 @@ function GarmentOverlay({
           )}
 
           {/* HALF ARM PADDING (TSHIRT) */}
-          {top === "tshirt" && (
+          {(top === "tshirt" || top === "jersey") && (
             <>
               {isBlockyArm && (
                 <group position={[0, args[1]*0.25, 0]}>
@@ -543,7 +543,7 @@ function GarmentOverlay({
       )}
 
       {/* PANTS */}
-      {bottom === "pants" && (
+      {(bottom === "pants" || bottom === "jeans" || bottom === "joggers" || bottom === "cargo_pants") && (
         <>
           {(isBottomLeg || isTopLeg) && (
             <BodyPart
@@ -570,6 +570,7 @@ function GarmentOverlay({
               </RoundedBox>
             </group>
           )}
+          {bottom === "cargo_pants" && isTopLeg && <RoundedBox position={[partId.startsWith("left") ? -args[0] * .58 : args[0] * .58, 0, 0]} args={[args[0] * .32, args[1] * .38, args[2] * .75]} radius={.03} smoothness={8} castShadow><meshPhysicalMaterial map={maps.pants.side} roughness={.86} /></RoundedBox>}
         </>
       )}
 
