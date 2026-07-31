@@ -11,6 +11,8 @@ import type { AvatarCosmeticSlot, AvatarState } from "@/lib/editor/design-state"
 import { defaultAvatarState } from "@/lib/editor/design-state";
 import { getAvatarAssetById, getAvatarBaseModel, type AvatarRenderPart } from "@/lib/editor/assets";
 import { getSlotFit, resolveSlotPosition } from "@/lib/editor/avatar-slots";
+import type { PreviewSceneSpec } from "@/lib/ai/universal-outfit";
+import { disposeConstruction, materializeConstruction, verifyRenderedConstruction, type RenderedGeometryVerificationReport } from "@/lib/ai/rendered-construction";
 
 type ThreeTexture = ReturnType<typeof makeTextureFromZone>;
 type PreviewMode = "clothing" | "avatar";
@@ -41,6 +43,8 @@ type AvatarPreviewProps = {
   accessories?: { hair?: string; hat?: string; glasses?: string; beard?: string; backpack?: string };
   avatarState?: AvatarState;
   garment?: GarmentConfig;
+  previewScene?: PreviewSceneSpec | null;
+  onGeometryVerification?: (report: RenderedGeometryVerificationReport) => void;
   // When provided, the preview registers a function here that exports the
   // currently shown avatar (with outfit) as a binary .glb blob.
   exportRef?: MutableRefObject<(() => Promise<Blob>) | null>;
@@ -1105,7 +1109,13 @@ function CameraRig({ zoom, mode }: { zoom: number; mode: PreviewMode }) {
   return null;
 }
 
-function SceneContent({ maps, view, itemType, rotation, zoom, avatar, mode, animated = false, garment, customParts }: { maps: ClothingMaps | null; view: "front" | "back"; itemType: "shirt" | "pants"; rotation: number; zoom: number; avatar: AvatarState; mode: PreviewMode; animated?: boolean; garment?: GarmentConfig; customParts?: AvatarPreviewProps["customParts"] }) {
+function CanonicalConstruction({scene,onVerification}:{scene:PreviewSceneSpec;onVerification?:AvatarPreviewProps["onGeometryVerification"]}) {
+  const root=useMemo(()=>{const group=new THREE.Group(); group.name="canonical-construction"; scene.items.forEach(item=>group.add(materializeConstruction(item.construction))); return group;},[scene]);
+  useEffect(()=>{onVerification?.(verifyRenderedConstruction(scene.generationId,scene.items.map(i=>i.construction),root)); return()=>disposeConstruction(root);},[root,scene,onVerification]);
+  return <primitive object={root} data-testid="canonical-construction" />;
+}
+
+function SceneContent({ maps, view, itemType, rotation, zoom, avatar, mode, animated = false, garment, customParts, previewScene, onGeometryVerification }: { maps: ClothingMaps | null; view: "front" | "back"; itemType: "shirt" | "pants"; rotation: number; zoom: number; avatar: AvatarState; mode: PreviewMode; animated?: boolean; garment?: GarmentConfig; customParts?: AvatarPreviewProps["customParts"]; previewScene?:PreviewSceneSpec|null; onGeometryVerification?:AvatarPreviewProps["onGeometryVerification"] }) {
   const cameraTarget: [number, number, number] = mode === "clothing" ? [0, 1.2, 0] : [0, 1.15, 0];
   return (
     <>
@@ -1119,7 +1129,8 @@ function SceneContent({ maps, view, itemType, rotation, zoom, avatar, mode, anim
 
       <group name="avatar-root" rotation-y={rotation}>
         <IdleGroup enabled={animated}>
-          <RobloxAvatar maps={maps} view={view} itemType={itemType} avatar={avatar} mode={mode} garment={garment} customParts={customParts} />
+          <RobloxAvatar maps={maps} view={view} itemType={itemType} avatar={avatar} mode={mode} garment={previewScene ? undefined : garment} customParts={customParts} />
+          {previewScene ? <CanonicalConstruction scene={previewScene} onVerification={onGeometryVerification} /> : null}
         </IdleGroup>
       </group>
 
@@ -1210,7 +1221,7 @@ function PreviewFallback({ textureUrl }: { textureUrl?: string }) {
   );
 }
 
-export function AvatarPreview({ textureUrl, className, avatarType = "neutral", view: controlledView, onViewChange, itemType = "shirt", dimension, previewMode, studioMode = false, animated = false, avatarState, garment, customParts, exportRef }: AvatarPreviewProps) {
+export function AvatarPreview({ textureUrl, className, avatarType = "neutral", view: controlledView, onViewChange, itemType = "shirt", dimension, previewMode, studioMode = false, animated = false, avatarState, garment, customParts, exportRef, previewScene, onGeometryVerification }: AvatarPreviewProps) {
   const resolvedMode: PreviewMode = previewMode ?? (dimension === "3d" ? "avatar" : "clothing");
   const [internalView, setInternalView] = useState<"front" | "back">("front");
   const [zoom, setZoom] = useState(resolvedMode === "clothing" ? 3.6 : 4.9);
@@ -1245,7 +1256,7 @@ export function AvatarPreview({ textureUrl, className, avatarType = "neutral", v
         camera={{ position: [0, 1.3, zoom], fov: resolvedMode === "clothing" ? 34 : 38 }}
         className="w-full h-full"
       >
-        <SceneContent maps={maps} view={view} itemType={itemType} rotation={rotation} zoom={zoom} avatar={effectiveAvatar} mode={resolvedMode} animated={animated} garment={garment} customParts={customParts} />
+        <SceneContent maps={maps} view={view} itemType={itemType} rotation={rotation} zoom={zoom} avatar={effectiveAvatar} mode={resolvedMode} animated={animated} garment={garment} customParts={customParts} previewScene={previewScene} onGeometryVerification={onGeometryVerification} />
         {exportRef ? <ExportBridge exportRef={exportRef} /> : null}
       </Canvas>
     </WebGLBoundary>
