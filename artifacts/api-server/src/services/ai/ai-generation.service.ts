@@ -15,6 +15,7 @@ import { computeRetentionUntil } from "../../lib/ai-retention";
 import { hashPrompt, lookupDecision } from "../../lib/safety-gateway";
 import { aiValidationService } from "./ai-validation.service";
 import { buildFaithfulnessCorrection, evaluateOutfitFaithfulness } from "../../lib/outfit-faithfulness";
+import { modelItemsToUniversalOutfitSpec, universalOutfitSpecSchema } from "../../lib/universal-outfit";
 
 type GenerateInput = z.infer<typeof aiGenerateRequestSchema>;
 type StylizedInput = { prompt: string; avatarType?: string; bodyType?: string; style?: string };
@@ -144,10 +145,12 @@ export class AiGenerationService {
       '    "customParts": [{"name": "string", "shape": "horn|spike|orb|plate|band|snake|fin|blob|headcover", "attach": "forehead|head_top|face|neck|chest|belly|back|hips|left_shoulder|right_shoulder|left_hand|right_hand|left_leg|right_leg|left_foot|right_foot", "color": "#RRGGBB", "size": "small|medium|large"}],',
       '    "unsupported": ["string"],',
       '    "reason": "string"',
-      "  }",
+      "  },",
+      '  "universalItems": [{"id":"top-hoodie-01","category":"top|bottom|one_piece|footwear|hair|accessory","kind":"registry_kind","label":"child friendly label","color":"#RRGGBB","fit":"slim|regular|relaxed|oversized","size":"small|medium|large","material":"string","placement":"string"}]',
       "}",
       "",
-      "Outfit rule (strict): `outfit` lists EXACTLY the items the user asked for — every requested item, nothing extra, no substitutions.",
+      "CANONICAL ITEM RULE (strict): universalItems is REQUIRED and is the authoritative outfit. Emit one row per requested item using only registry kinds: tshirt, hoodie, zip_hoodie, jacket, varsity_jacket, winter_coat, football_jersey, formal_shirt, suit_jacket, jeans, joggers, cargo_pants, formal_trousers, shorts, dress, shoes, boots, cap, beanie, long_hair, short_hair, backpack, shoulder_bag, wings, crown, mask, belt. Stable IDs use lowercase hyphenated category-kind-number and must be unique. A dress is category one_piece with id prefix one-piece and replaces top and bottom. Unknown items remain explicit accessory rows so routing marks them unsupported; never substitute a hoodie.",
+      "Outfit rule (strict): `outfit` is non-authoritative artwork metadata and must describe the same items as universalItems.",
       "PLACEMENT rule (strict): every wish has a correct BODY LOCATION — head things (marshmallow head, pumpkin head, helmets, hair) belong in customParts/accessories/hair, NEVER painted on the clothes; wings/tails/backpacks are accessories on the body. topDescription/bottomDescription describe ONLY what the garment fabric itself looks like — plain colors, material, maybe ONE small tasteful chest motif. NEVER put a theme's face, eyes, mouth, melted/dripping parts, or the creature itself into the garment descriptions. Example: «marshmallow head» → customParts headcover white; topDescription: 'plain soft white sweater fabric' (NO drips, NO face). If the child did not describe the clothes, choose simple fabric colors that match the theme.",
       "The outfit plan is what the child SEES on the 3D avatar — when the child names ANY garment (skjorte, shirt, jakke, bukse, genser …) the matching outfit field MUST be set to that garment. skjorte/shirt WITHOUT 't-' still means top=tshirt (a shirt IS a top). Never answer with an all-none outfit while the reason says the child asked for a garment.",
       "LANGUAGE (strict): the prompt is written by a child in ANY language (Norwegian, English, Swedish, Spanish, Arabic, Ukrainian, ...) often with heavy typos — always interpret the intent regardless of language (e.g. 't-sjhortet' means t-skjorte, 'capps' means caps, 'marshmelo hed' means marshmallow head). Never refuse or misread a wish because of its language. Children often SPLIT compound garment words — 'cargo bukse'=cargobukse (bottom=pants), 'bobkel jakke'=boblejakke (top=jacket), 'hete gensr'=hettegenser (top=hoodie) — always join the pieces and map to the garment they form.",
@@ -269,6 +272,7 @@ export class AiGenerationService {
     this.logRawSchemaDiff(modelResult, input);
     const normalized = normalizeDesignPayload(input, modelResult);
     let design = aiValidationService.ensureDesign(normalized);
+    let modelItems = (modelResult as { universalItems?: unknown }).universalItems;
 
     // Safety net: a request must never come back with a COMPLETELY empty 3D
     // outfit (no top, no bottom, no accessories, no custom parts, no hair) —
@@ -291,14 +295,16 @@ export class AiGenerationService {
       this.logRawSchemaDiff(retryResult, input);
       const retryDesign = aiValidationService.ensureDesign(normalizeDesignPayload(input, retryResult));
       const retryOutfit = (retryDesign as { outfit?: OutfitLike }).outfit;
-      if (!isOutfitEmpty(retryOutfit)) design = retryDesign;
+      if (!isOutfitEmpty(retryOutfit)) { design = retryDesign; modelItems = (retryResult as { universalItems?: unknown }).universalItems; }
     }
     // Schema-valid model output may still omit requested pieces. Validate the
     // normalized plan against deterministic multilingual requirements, retry
     // once with exact corrections, and retain only a better-scoring result.
     const candidateOutfit = (design as { outfit?: OutfitLike }).outfit;
+    let faithfulness = candidateOutfit && !isOutfitEmpty(candidateOutfit) ? evaluateOutfitFaithfulness(input.prompt, candidateOutfit as Parameters<typeof evaluateOutfitFaithfulness>[1]) : null;
+    const repairHistory: Array<{ attempt: number; changedPaths: string[]; previousScore: number; resultingScore: number }> = [];
     if (!input.previousOutfit && candidateOutfit && !isOutfitEmpty(candidateOutfit)) {
-      const report = evaluateOutfitFaithfulness(input.prompt, candidateOutfit as Parameters<typeof evaluateOutfitFaithfulness>[1]);
+      const report = faithfulness!;
       if (!report.ok) {
         console.warn("ai.outfit_faithfulness_retry", { requirements: report.requirements, issueCount: report.issues.length, score: report.score });
         const retryResult = await this.askModel(`${this.buildPrompt(input, "generate")}\n\n${buildFaithfulnessCorrection(report)}`);
@@ -306,7 +312,8 @@ export class AiGenerationService {
         const retryOutfit = (retryDesign as { outfit?: OutfitLike }).outfit;
         if (retryOutfit && !isOutfitEmpty(retryOutfit)) {
           const retryReport = evaluateOutfitFaithfulness(input.prompt, retryOutfit as Parameters<typeof evaluateOutfitFaithfulness>[1]);
-          if (retryReport.score > report.score) design = retryDesign;
+          repairHistory.push({ attempt: 1, changedPaths: retryReport.score > report.score ? ["items"] : [], previousScore: report.score, resultingScore: retryReport.score });
+          if (retryReport.score > report.score) { design = retryDesign; modelItems = (retryResult as { universalItems?: unknown }).universalItems; faithfulness = retryReport; }
         }
       }
     }
@@ -314,10 +321,14 @@ export class AiGenerationService {
       ? await this.saveGeneration(userId, input.prompt, "generate", design, input.style ?? null)
       : randomUUID();
 
-    return aiDesignResponseSchema.parse({
-      meta: { generationId, status: "completed", warnings: [] },
+    if (!modelItems) throw new Error("AI response omitted canonical universalItems");
+    const outfitSpec = universalOutfitSpecSchema.parse(modelItemsToUniversalOutfitSpec({ generationId, prompt: input.prompt, style: design.style, palette: design.colorPalette, items: modelItems, faithfulness: faithfulness ? { score: faithfulness.score, issues: faithfulness.issues } : { score: 0, issues: ["No faithful outfit was produced"] }, repairHistory }));
+    return {
+      meta: { generationId, status: outfitSpec.quality.accepted ? "completed" : "degraded", warnings: outfitSpec.quality.failureReasons },
       result: design,
-    });
+      outfitSpec,
+      lifecycle: outfitSpec.items.every(item => item.unsupported.state) ? "unsupported" : outfitSpec.quality.accepted ? "complete" : "external_verification_required",
+    } as const;
   }
 
   async improveDesign(userId: string, instruction: string, source: unknown, mode: "improve" | "remix") {

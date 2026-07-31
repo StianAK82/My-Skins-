@@ -1,6 +1,7 @@
 import { test, expect, type Page } from "@playwright/test";
 import { mkdir } from "node:fs/promises";
 import { normalizeDesignPayload } from "../artifacts/api-server/src/lib/ai-normalize";
+import { legacyToUniversalOutfitSpec } from "../artifacts/api-server/src/lib/universal-outfit";
 
 test.beforeAll(async () => {
   await mkdir("test-results/screenshots", { recursive: true });
@@ -160,6 +161,8 @@ async function installApiFixtures(
             deprecated: false,
           },
           result,
+          outfitSpec: legacyToUniversalOutfitSpec({ generationId: "00000000-0000-4000-8000-000000000099", prompt: body.prompt, style: result.style, palette: result.colorPalette, outfit }),
+          lifecycle: "complete",
         },
       });
       return;
@@ -236,7 +239,7 @@ test("deterministic child workflows keep every requested item", async ({
     await page.locator("details input").fill(prompt);
     await page.locator("details button[type=submit]").click();
     const result = page.getByTestId("outfit-result");
-    await expect(result).toHaveAttribute("data-generation-state", "complete");
+    await expect(result).toHaveAttribute("data-generation-state", prompt.startsWith("Football") ? "external_verification_required" : "complete");
     const text = (await result.innerText()).toLowerCase();
     for (const item of expected) expect(text).toContain(item);
   }

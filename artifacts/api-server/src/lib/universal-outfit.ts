@@ -331,3 +331,106 @@ export function applyRevision(
   });
   return universalOutfitSpecSchema.parse(copy);
 }
+
+
+export type LegacyOutfitPlan = {
+  top: string; bottom: string; shoes: string; shoesColor?: string;
+  topDescription?: string; bottomDescription?: string;
+  hair: { style: string; color: string };
+  accessories: Array<{ kind: string; color: string; size?: "small" | "medium" | "large" }>;
+  customParts?: Array<{ name: string; shape: string; attach: string; color: string; size: "small" | "medium" | "large" }>;
+  unsupported: string[]; reason: string;
+};
+
+const canonicalKind = (category: OutfitItem["category"], kind: string) => {
+  if (category === "top") return ({ sweater: "tshirt", jacket: "jacket" } as Record<string, string>)[kind] ?? kind;
+  if (category === "bottom") return ({ pants: "joggers", skirt: "shorts" } as Record<string, string>)[kind] ?? kind;
+  if (category === "footwear") return kind === "sneakers" ? "shoes" : kind;
+  if (category === "hair") return kind === "long" ? "long_hair" : "short_hair";
+  if (category === "accessory") return kind === "bag" ? "shoulder_bag" : kind;
+  return kind;
+};
+
+/**
+ * @deprecated Compatibility boundary for model output created before UniversalOutfitSpec.
+ * Remove when the model prompt emits UniversalOutfitSpec and the final legacy aiOutfitSchema
+ * fixture/persisted generation has passed its retention deadline. Product code must consume
+ * only the returned UniversalOutfitSpec.
+ */
+export function legacyToUniversalOutfitSpec(input: {
+  generationId: string; prompt: string; language?: "en" | "no" | "unknown";
+  style: string; palette: string[]; outfit: LegacyOutfitPlan;
+  faithfulness?: { score: number; issues: string[] };
+  repairHistory?: UniversalOutfitSpec["repairHistory"];
+}): UniversalOutfitSpec {
+  const items: OutfitItem[] = [];
+  const add = (category: OutfitItem["category"], rawKind: string, color: string, size: OutfitItem["size"] = "medium", label = rawKind) => {
+    const kind = canonicalKind(category, rawKind);
+    const idPrefix = category === "one_piece" ? "one-piece" : category;
+    const id = `${idPrefix}-${kind.replaceAll("_", "-")}-${String(items.filter(i => i.category === category).length + 1).padStart(2, "0")}`;
+    const route = routeAsset({ kind, category, fit: "regular", size });
+    const supported = route.state === "resolved";
+    items.push({ id, category, kind, label, colors: [color.toUpperCase()], fit: "regular", silhouette: kind,
+      material: category === "footwear" ? "synthetic" : "fabric", constructionDetails: [], decorativeDetails: [], size,
+      placement: category === "top" || category === "one_piece" ? "torso" : category === "bottom" ? "legs" : category === "footwear" ? "feet" : category === "hair" ? "head" : "body",
+      layeringOrder: items.length, relationships: [], previewCapability: supported ? "supported" : "unsupported",
+      exportCapability: supported && category === "top" ? "classic_shirt" : supported && category === "bottom" ? "classic_pants" : "none",
+      fallback: { state: supported ? "none" : "unavailable", message: route.reason },
+      unsupported: { state: !supported, reason: route.reason } });
+  };
+  const color = (input.palette[0] ?? "#808080").toUpperCase();
+  const onePiece = input.outfit.top === "dress";
+  if (onePiece) add("one_piece", "dress", color);
+  else {
+    if (input.outfit.top !== "none") add("top", input.outfit.top, color);
+    if (input.outfit.bottom !== "none") add("bottom", input.outfit.bottom, input.palette[1] ?? color);
+  }
+  if (input.outfit.shoes !== "none") add("footwear", input.outfit.shoes, input.outfit.shoesColor ?? color);
+  if (input.outfit.hair.style !== "none") add("hair", input.outfit.hair.style, input.outfit.hair.color);
+  for (const a of input.outfit.accessories) add("accessory", a.kind, a.color, a.size ?? "medium");
+  for (const part of input.outfit.customParts ?? []) add("accessory", part.shape, part.color, part.size, part.name);
+  for (const label of input.outfit.unsupported) add("accessory", `unsupported-${items.length + 1}`, color, "medium", label);
+  const routeFailures = items.filter(i => i.unsupported.state).map(i => i.unsupported.reason ?? `${i.label} is unsupported`);
+  const faithfulnessFailures = input.faithfulness?.issues ?? [];
+  const failures = [...routeFailures, ...faithfulnessFailures];
+  const resolved = items.filter(i => !i.unsupported.state);
+  const base = routeFailures.length ? 70 : 94;
+  const dimensions = Object.fromEntries(qualityDimensions.map(k => [k, base])) as QualityDimensions;
+  dimensions.promptFaithfulness = input.faithfulness?.score ?? base;
+  dimensions.itemCompleteness = input.faithfulness?.score ?? base;
+  dimensions.colorCorrectness = input.faithfulness?.score ?? base;
+  if (!resolved.length) dimensions.previewStability = 0;
+  const quality = scoreOutfitQuality(dimensions, failures);
+  return universalOutfitSpecSchema.parse({ schemaVersion: "1.0", generationId: input.generationId,
+    promptLanguage: input.language ?? (/\b(og|med|gjør|bare|vingene|sekken)\b/i.test(input.prompt) ? "no" : "en"),
+    normalizedUserIntent: input.prompt.normalize("NFKC").trim(), styleDirection: input.style,
+    colorPalette: input.palette.map(c => c.toUpperCase()), items, onePieceBehavior: onePiece ? "replaces_top_and_bottom" : "not_applicable",
+    safetyState: "approved", rightsState: "pending", moderationState: "approved", revisionHistory: [],
+    validationEvidence: [
+      { validator: "universal-outfit-schema", passed: true, reasons: [] },
+      { validator: "asset-router", passed: routeFailures.length === 0, reasons: routeFailures },
+      { validator: "prompt-faithfulness", passed: faithfulnessFailures.length === 0, reasons: faithfulnessFailures },
+      { validator: "quality-gate", passed: quality.accepted, reasons: quality.failureReasons },
+    ], quality, repairHistory: input.repairHistory ?? [] });
+}
+
+export type PreviewSceneSpec = { generationId: string; registryVersion: string; items: Array<{ itemId: string; kind: string; category: OutfitItem["category"]; color: string; size: OutfitItem["size"]; implementation: string }> };
+export function toPreviewSceneSpec(spec: UniversalOutfitSpec): PreviewSceneSpec {
+  const parsed = universalOutfitSpecSchema.parse(spec);
+  return { generationId: parsed.generationId, registryVersion: "1", items: parsed.items.flatMap(item => {
+    const routed = routeAsset(item);
+    return routed.state === "resolved" && routed.manifest?.previewImplementation
+      ? [{ itemId: item.id, kind: item.kind, category: item.category, color: item.colors[0], size: item.size, implementation: routed.manifest.previewImplementation }]
+      : [];
+  }) };
+}
+
+
+export const modelOutfitItemsSchema = z.array(z.object({ id: z.string().regex(/^(top|bottom|one-piece|footwear|hair|accessory)-[a-z0-9-]+$/), category, kind: z.string().min(1), label: z.string().min(1), color: hex, fit: z.enum(["slim", "regular", "relaxed", "oversized"]), size, material: z.string().min(1), placement: z.string().min(1) }).strict()).max(24);
+/** Builds canonical product state directly from model item output; no legacy outfit participates. */
+export function modelItemsToUniversalOutfitSpec(input: { generationId: string; prompt: string; language?: "en" | "no" | "unknown"; style: string; palette: string[]; items: unknown; faithfulness: { score: number; issues: string[] }; repairHistory: UniversalOutfitSpec["repairHistory"] }): UniversalOutfitSpec {
+  const modelItems = modelOutfitItemsSchema.parse(input.items); const seen = new Set<string>();
+  const items: OutfitItem[] = modelItems.map((m, index) => { if (seen.has(m.id)) throw new Error(`Duplicate model item id: ${m.id}`); seen.add(m.id); const routed = routeAsset(m); const supported = routed.state === "resolved"; return { id: m.id, category: m.category, kind: m.kind, label: m.label, colors: [m.color], fit: m.fit, silhouette: m.kind, material: m.material, constructionDetails: [], decorativeDetails: [], size: m.size, placement: m.placement, layeringOrder: index, relationships: [], previewCapability: supported ? "supported" : "unsupported", exportCapability: supported && m.category === "top" ? "classic_shirt" : supported && m.category === "bottom" ? "classic_pants" : "none", fallback: { state: supported ? "none" : "unavailable", message: routed.reason }, unsupported: { state: !supported, reason: routed.reason } }; });
+  const routeFailures = items.filter(i => i.unsupported.state).map(i => i.unsupported.reason!); const failures = [...routeFailures, ...input.faithfulness.issues]; const dimensions = Object.fromEntries(qualityDimensions.map(k => [k, routeFailures.length ? 70 : 94])) as QualityDimensions; dimensions.promptFaithfulness = dimensions.itemCompleteness = dimensions.colorCorrectness = input.faithfulness.score; if (!items.some(i => !i.unsupported.state)) dimensions.previewStability = 0; const quality = scoreOutfitQuality(dimensions, failures);
+  return universalOutfitSpecSchema.parse({ schemaVersion: "1.0", generationId: input.generationId, promptLanguage: input.language ?? (/\b(og|med|gjør|bare)\b/i.test(input.prompt) ? "no" : "en"), normalizedUserIntent: input.prompt, styleDirection: input.style, colorPalette: input.palette, items, onePieceBehavior: items.some(i => i.category === "one_piece") ? "replaces_top_and_bottom" : "not_applicable", safetyState: "approved", rightsState: "pending", moderationState: "approved", revisionHistory: [], validationEvidence: [{ validator: "model-item-schema", passed: true, reasons: [] }, { validator: "prompt-faithfulness", passed: !input.faithfulness.issues.length, reasons: input.faithfulness.issues }, { validator: "asset-router", passed: !routeFailures.length, reasons: routeFailures }, { validator: "quality-gate", passed: quality.accepted, reasons: quality.failureReasons }], quality, repairHistory: input.repairHistory });
+}

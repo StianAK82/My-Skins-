@@ -6,6 +6,8 @@ import {
   routeAsset,
   scoreOutfitQuality,
   universalOutfitSpecSchema,
+  legacyToUniversalOutfitSpec,
+  toPreviewSceneSpec,
   type UniversalOutfitSpec,
 } from "./universal-outfit.ts";
 
@@ -152,4 +154,22 @@ test("one-piece and supported separate garments cannot coexist", () => {
       }),
     /one-piece replaces/,
   );
+});
+
+test("legacy model output crosses one deprecated boundary into the canonical routed pipeline", () => {
+  const spec = legacyToUniversalOutfitSpec({
+    generationId: "00000000-0000-4000-8000-000000000002", prompt: "Black zip hoodie and jeans", style: "streetwear", palette: ["#000000", "#202020"],
+    outfit: { top: "hoodie", bottom: "pants", shoes: "none", hair: { style: "none", color: "#000000" }, accessories: [], unsupported: [], reason: "requested" },
+  });
+  assert.deepEqual(universalOutfitSpecSchema.parse(spec), spec);
+  assert.equal(new Set(spec.items.map(i => i.id)).size, spec.items.length);
+  assert.ok(spec.validationEvidence.some(e => e.validator === "asset-router" && e.passed));
+  assert.equal(spec.quality.accepted, true);
+  const scene = toPreviewSceneSpec(spec);
+  assert.equal(scene.items.length, 2);
+  assert.deepEqual(scene.items.map(i => i.kind), ["hoodie", "joggers"]);
+});
+
+test("model items become UniversalOutfitSpec directly without legacy shape", async () => {
+  const { modelItemsToUniversalOutfitSpec } = await import("./universal-outfit"); const spec = modelItemsToUniversalOutfitSpec({ generationId: "00000000-0000-4000-8000-000000000003", prompt: "White hoodie", style: "clean", palette: ["#FFFFFF"], items: [{ id: "top-hoodie-01", category: "top", kind: "hoodie", label: "White hoodie", color: "#FFFFFF", fit: "regular", size: "medium", material: "cotton", placement: "torso" }], faithfulness: { score: 100, issues: [] }, repairHistory: [{ attempt: 1, changedPaths: ["items"], previousScore: 50, resultingScore: 100 }] }); assert.equal(spec.quality.accepted, true); assert.equal(spec.repairHistory.length, 1);
 });

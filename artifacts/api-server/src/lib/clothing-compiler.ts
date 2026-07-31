@@ -1,5 +1,6 @@
 import { createHash } from "crypto";
 import { createCanvas, loadImage, type SKRSContext2D, type Image } from "@napi-rs/canvas";
+import type { UniversalOutfitSpec } from "./universal-outfit";
 import { REQUIRED_COVERAGE_ZONES, TEMPLATE_SIZE, TEMPLATE_ZONES, type TemplateType, type ZoneRect } from "./clothing-templates";
 
 export const PIPELINE_VERSION = "classic-clothing/1";
@@ -56,6 +57,8 @@ export type CompiledArtifact = {
   width: number;
   height: number;
   byteSize: number;
+  generationId?: string;
+  itemIds?: string[];
 };
 
 export function artifactClassForTemplate(template: TemplateType): ArtifactClass {
@@ -352,6 +355,16 @@ export async function compileClassicClothing(spec: ClothingSpec): Promise<Compil
     height,
     byteSize: png.length,
   };
+}
+
+
+export type UniversalClassicDesigns = Partial<Record<"classic_shirt" | "classic_pants", DesignSpec>>;
+/** Canonical Classic entry point. */
+export async function compileUniversalOutfitSpec(outfit: UniversalOutfitSpec, designs: UniversalClassicDesigns): Promise<CompiledArtifact[]> {
+  if (!outfit.quality.accepted) throw new Error("QUALITY_GATE_REJECTED");
+  const eligible = outfit.items.filter(item => !item.unsupported.state && item.exportCapability !== "none"); const artifacts: CompiledArtifact[] = [];
+  for (const capability of ["classic_shirt", "classic_pants"] as const) { const itemIds = eligible.filter(item => item.exportCapability === capability).map(item => item.id); if (!itemIds.length) continue; const design = designs[capability]; if (!design) throw new Error(`MISSING_CANONICAL_DESIGN:${capability}`); const type: TemplateType = capability === "classic_shirt" ? "shirt" : "pants"; if (design.template !== type) throw new Error(`INVALID_CANONICAL_TEMPLATE:${capability}`); const artifact = await compileClassicClothing({ specId: `${outfit.generationId}:${itemIds.join(",")}`, type, design }); artifacts.push({ ...artifact, generationId: outfit.generationId, itemIds }); }
+  return artifacts;
 }
 
 // Derive required artifacts from a validated export plan — no global
