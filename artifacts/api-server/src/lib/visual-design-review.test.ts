@@ -1,88 +1,20 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import {
-  buildVisualReviewPrompt,
-  decideVisualReview,
-  visualDesignReviewSchema,
-  visualReviewRequestSchema,
-} from "./visual-design-review";
+import { buildVisualReviewPrompt, decideVisualReview, requiredVisualViews, visualDesignReviewSchema, visualReviewRequestSchema } from "./visual-design-review";
 
-const scores = (score: number) => ({
-  silhouette: score,
-  proportions: score,
-  construction: score,
-  materialRealism: score,
-  seamsAndDetails: score,
-  fitAndClipping: score,
-  promptFaithfulness: score,
-  commercialAppeal: score,
+const request = () => ({ generationId:"generation-1",attempt:1,prompt:"rune knight",outfitSummary:"top-armor-01:armor",itemIds:["top-armor-01"],classicExportValid:true,views:requiredVisualViews.map(view=>({view,imageUrl:"data:image/png;base64,AA=="})) });
+const observations = { selectedConceptVisible:true,heroElementVisible:true,silhouetteMatches:true,materialsReadable:true,frontBackCoherent:true,noCriticalClipping:true,noRequestedItemMissing:true,originalEnough:true,classicExportValid:true };
+
+test("visual review requires exactly five named browser views and stable item IDs",()=>{
+  assert.equal(visualReviewRequestSchema.safeParse(request()).success,true);
+  assert.equal(visualReviewRequestSchema.safeParse({...request(),views:request().views.slice(0,4)}).success,false);
+  assert.equal(visualReviewRequestSchema.safeParse({...request(),itemIds:[]}).success,false);
 });
-
-test("visual review requires front, side, and back evidence", () => {
-  const parsed = visualReviewRequestSchema.safeParse({
-    generationId: "generation-1",
-    attempt: 1,
-    prompt: "oversized hoodie",
-    outfitSummary: "hoodie with hood fold",
-    views: ["front", "side", "detail"].map((view) => ({
-      view,
-      imageUrl: "data:image/png;base64,AA==",
-    })),
-  });
-  assert.equal(parsed.success, false);
-  assert.match(parsed.error?.issues[0]?.message ?? "", /back/);
-});
-
-test("review prompt makes visual proof and real construction mandatory", () => {
-  const request = visualReviewRequestSchema.parse({
-    generationId: "generation-1",
-    attempt: 1,
-    prompt: "oversized hoodie",
-    outfitSummary: "item top-hoodie-01, hood fold and kangaroo pocket",
-    views: ["front", "side", "back"].map((view) => ({
-      view,
-      imageUrl: "data:image/png;base64,AA==",
-    })),
-  });
-  const prompt = buildVisualReviewPrompt(request);
-  assert.match(prompt, /Judge only visible evidence/);
-  assert.match(prompt, /plausibly be sewn/);
-  assert.match(prompt, /Commercial appeal/);
-});
-
-test("high scoring review passes while a critical defect fails closed", () => {
-  const clean = visualDesignReviewSchema.parse({
-    scores: scores(92),
-    defects: [],
-    repairs: [],
-    summary: "Ready",
-  });
-  assert.deepEqual(decideVisualReview(clean, 1), {
-    accepted: true,
-    decision: "accept",
-    score: 92,
-    threshold: 86,
-    attempt: 1,
-    repairs: [],
-    failureReasons: [],
-  });
-
-  const clipped = visualDesignReviewSchema.parse({
-    scores: scores(94),
-    defects: ["Hood clips through the hair"],
-    repairs: [
-      {
-        targetItemId: "top-hoodie-01",
-        targetGroup: "hood_shell",
-        issue: "Hood clips through the hair",
-        operation: "repair_clipping",
-        instruction: "Increase rear clearance without changing the body shell",
-        severity: "critical",
-      },
-    ],
-    summary: "Repair the hood",
-  });
-  assert.equal(decideVisualReview(clipped, 1).decision, "repair");
-  assert.equal(decideVisualReview(clipped, 1).accepted, false);
-  assert.equal(decideVisualReview(clipped, 3).decision, "manual_review");
+test("prompt bans numeric scoring and requires localized repairs",()=>{const prompt=buildVisualReviewPrompt(visualReviewRequestSchema.parse(request()));assert.match(prompt,/never return a numeric score/i);assert.match(prompt,/smallest affected existing group/i);});
+test("READY requires every categorical observation",()=>{
+  const ready=visualDesignReviewSchema.parse({status:"READY",observations,defects:[],repairs:[],summary:"All five views pass"});
+  assert.equal(decideVisualReview(ready,1).status,"READY");
+  const repair=visualDesignReviewSchema.parse({status:"NEEDS_REPAIR",observations:{...observations,heroElementVisible:false},defects:["Hero is hidden"],repairs:[{targetItemId:"top-armor-01",targetGroup:"hero:rune-core",issue:"Hero is hidden",operation:"adjust_proportions",instruction:"Enlarge only the rune core",severity:"major"}],summary:"Localized repair"});
+  assert.equal(decideVisualReview(repair,1).status,"NEEDS_REPAIR");
+  assert.equal(decideVisualReview(repair,3).status,"MANUAL_REVIEW");
 });

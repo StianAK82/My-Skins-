@@ -14,6 +14,12 @@ export const universalOutfitSpecSchema = z.object({
   items: z.array(itemSchema), revisionHistory: z.array(z.unknown()), validationEvidence: z.array(z.object({ validator: z.string(), passed: z.boolean(), reasons: z.array(z.string()) })),
   quality: z.object({ score: z.number(), threshold: z.number(), accepted: z.boolean(), dimensions: z.record(z.string(), z.number()), failureReasons: z.array(z.string()) }),
   repairHistory: z.array(z.unknown()),
+  creativeDirection: z.object({ selected: z.object({
+    id: z.string(), title: z.string(), story: z.string(),
+    silhouette: z.object({ primaryShape: z.string(), largeForms: z.array(z.string()), secondaryForms: z.array(z.string()), asymmetry: z.string() }).passthrough(),
+    heroElement: z.object({ name: z.string(), description: z.string(), bodyLocation: z.string(), memoryHook: z.string() }),
+    palette: z.array(z.string()), materials: z.array(z.string()), garmentDirection: z.array(z.string()), accessoryDirection: z.array(z.string()), textureDirection: z.array(z.string()),
+  }).passthrough() }).passthrough().optional(),
 }).passthrough();
 export type UniversalOutfitSpec = z.infer<typeof universalOutfitSpecSchema>;
 export type CanonicalLifecycle = "idle" | "generating" | "validating" | "repairing" | "routing" | "rendering" | "complete" | "error" | "unsupported" | "external_verification_required";
@@ -21,7 +27,8 @@ export type CanonicalLifecycle = "idle" | "generating" | "validating" | "repairi
 /** Rendering-only projection. It deliberately contains no product decisions. */
 export type PreviewSceneSpec = { generationId: string; items: Array<{ itemId: string; kind: string; category: string; color: string; material: string; size: string; placement: string; layeringOrder: number; construction: ConstructionItem }> };
 export function toPreviewSceneSpec(spec: UniversalOutfitSpec): PreviewSceneSpec {
-  return { generationId: spec.generationId, items: spec.items.filter(i => !i.unsupported.state && i.previewCapability !== "unsupported").map((i, index) => ({ itemId: i.id, kind: i.kind, category: i.category, color: i.colors[0], material: String(i.material ?? "cotton"), size: i.size, placement: String(i.placement ?? i.category), layeringOrder: Number(i.layeringOrder ?? index), construction: compileRenderedConstruction(i) })) };
+  const selected = spec.creativeDirection?.selected;
+  return { generationId: spec.generationId, items: spec.items.filter(i => !i.unsupported.state && i.previewCapability !== "unsupported").map((i, index) => ({ itemId: i.id, kind: i.kind, category: i.category, color: selected?.palette[index % Math.max(selected.palette.length, 1)] ?? i.colors[0], material: selected?.materials[index % Math.max(selected.materials.length, 1)] ?? String(i.material ?? "cotton"), size: i.size, placement: String(i.placement ?? i.category), layeringOrder: Number(i.layeringOrder ?? index), construction: compileRenderedConstruction({ ...i, colors: selected?.palette.length ? selected.palette : i.colors, material: selected?.materials[index % Math.max(selected.materials.length, 1)] ?? i.material, creative: selected }) })) };
 }
 
 export function toCreatePresentation(spec: UniversalOutfitSpec) {

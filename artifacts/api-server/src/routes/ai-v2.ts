@@ -119,13 +119,12 @@ router.post("/ai/visual-review", async (req, res): Promise<void> => {
       {
         generationId: parsed.data.generationId,
         attempt: parsed.data.attempt,
-        decision: gate.decision,
-        score: gate.score,
+        status: gate.status,
         repairCount: gate.repairs.length,
       },
       "ai.visual_review.completed",
     );
-    res.json({ generationId: parsed.data.generationId, review, gate });
+    res.json({ generationId: parsed.data.generationId, status: gate.status, defects: gate.defects, repairs: gate.repairs, review });
   } catch (err) {
     if (err instanceof z.ZodError || err instanceof SyntaxError)
       return schema422(req, res, err);

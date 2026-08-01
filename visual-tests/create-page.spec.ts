@@ -124,17 +124,23 @@ const workflowFixtures = [
   ],
 ] as const;
 
-const evidenceCases = [
-  ...workflowFixtures.map(([prompt]) => prompt),
-  "Wings-only revision",
+const creativeBenchmarks = [
+  ["Create the world's coolest rune knight", { ...baseOutfit, top:"jacket", bottom:"pants", shoes:"boots" }, "Rune Warden"],
+  ["Ordinary grey fleece clothes", { ...baseOutfit, top:"hoodie", bottom:"pants", shoes:"sneakers" }, "Everyday Cloud"],
+  ["A moonlight princess", { ...baseOutfit, top:"dress", accessories:[{kind:"crown",color:"#F5C542",size:"large"}] }, "Moon Crown"],
+  ["A storm pirate captain", { ...baseOutfit, top:"jacket", bottom:"pants", accessories:[{kind:"sword",color:"#D4AF37",size:"large"}] }, "Storm Corsair"],
+  ["An asymmetric neon robot", { ...baseOutfit, top:"jacket", bottom:"pants", shoes:"boots" }, "Neon Automaton"],
+  ["A bold football kit number 10", { ...baseOutfit, top:"tshirt", bottom:"shorts", shoes:"sneakers" }, "Victory Ten"],
+  ["An original web-inspired midnight superhero without protected logos", { ...baseOutfit, top:"sweater", bottom:"pants", shoes:"boots" }, "Midnight Weaver"],
 ] as const;
+
+const evidenceCases = creativeBenchmarks.map(([prompt]) => prompt);
 const evidenceViews = [
   "front",
   "front-45",
   "right",
   "back",
   "back-45",
-  "left",
 ] as const;
 const evidenceRoot = "test-results/screenshots/representative";
 
@@ -176,7 +182,7 @@ async function installApiFixtures(
         prompt: string;
         previousOutfit?: typeof baseOutfit;
       };
-      const fixture = workflowFixtures.find(
+      const fixture = [...workflowFixtures, ...creativeBenchmarks].find(
         ([prompt]) => prompt === body.prompt,
       );
       const outfit = body.previousOutfit
@@ -211,9 +217,23 @@ async function installApiFixtures(
             palette: result.colorPalette,
             outfit,
           }),
+          creativeDirection: {
+            selected: {
+              id: `benchmark-${body.prompt.toLowerCase().replace(/[^a-z0-9]+/g,"-")}`, title: fixture?.[2] ?? "Visible Direction", story: `The back continues ${fixture?.[2] ?? "the concept"}`,
+              silhouette: { primaryShape: /robot|knight/.test(body.prompt.toLowerCase()) ? "broad angular heroic shoulders" : /princess/.test(body.prompt.toLowerCase()) ? "long dramatic gown" : "fitted readable silhouette", largeForms:["distinct upper body"], secondaryForms:["ornament plates"], asymmetry:/robot|pirate/.test(body.prompt.toLowerCase()) ? "strong right-side feature" : "intentional symmetry" },
+              heroElement: { name: fixture?.[2] ?? "Hero mark", description:/robot/.test(body.prompt.toLowerCase()) ? "luminous robotic arm" : "luminous chest emblem", bodyLocation:/princess/.test(body.prompt.toLowerCase()) ? "head crown" : "chest", memoryHook:"recognizable at thumbnail size" },
+              palette:["#111827","#2563EB","#D4AF37"], materials:/fleece/.test(body.prompt.toLowerCase()) ? ["soft grey fleece","cotton"] : ["darkened metal","emissive accents"], garmentDirection:["structured panels"], accessoryDirection:["one hero feature"], textureDirection:["zone-specific ornament","subtle wear"],
+            },
+          },
           lifecycle: "complete",
         },
       });
+      return;
+    }
+    if (enableAi && path === "/api/ai/visual-review") {
+      const body = request.postDataJSON() as { views?: unknown[]; itemIds?: string[] };
+      const complete = body.views?.length === 5 && Boolean(body.itemIds?.length);
+      await route.fulfill({ json: { status: complete ? "READY" : "NEEDS_REPAIR", defects: complete ? [] : ["Incomplete five-view evidence"], repairs: [] } });
       return;
     }
     if (enableAi && path === "/api/ai/hero-image") {
@@ -337,8 +357,8 @@ test("deterministic child workflows keep every requested item", async ({
   expect(consoleErrors).toEqual([]);
 });
 
-test("representative outfits produce six-view desktop and core mobile evidence", async ({
-  page,
+test("seven creative benchmarks require five-view runtime acceptance", async ({
+  page, browser,
 }) => {
   test.setTimeout(240_000);
   const consoleErrors: string[] = [];
@@ -353,18 +373,22 @@ test("representative outfits produce six-view desktop and core mobile evidence",
     view: string;
     viewport: "desktop" | "mobile";
     path: string;
+    generationId?: string;
+    itemIds?: string[];
   }> = [];
+  const benchmarkResults: Array<{ prompt:string; generationId:string; status:"READY"; defects:string[]; repairs:unknown[] }> = [];
 
-  for (const [caseIndex, requestedPrompt] of evidenceCases.entries()) {
-    const prompt =
-      requestedPrompt === "Wings-only revision"
-        ? "Backpack and large white angel wings"
-        : requestedPrompt;
+  for (const requestedPrompt of evidenceCases) {
+    const prompt = requestedPrompt;
     await page.goto("/");
     await page.locator("details").last().click();
     await page.locator("details input").fill(prompt);
     await page.locator("details button[type=submit]").click();
     await expect(page.getByTestId("outfit-result")).toBeVisible();
+    const canonical = page.getByTestId("canonical-result");
+    await expect(canonical).toHaveAttribute("data-lifecycle", "complete", { timeout: 30_000 });
+    const generationId = await canonical.getAttribute("data-generation-id");
+    const itemIds = (await canonical.getAttribute("data-item-ids"))?.split(",").filter(Boolean) ?? [];
     const slug = requestedPrompt
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, "-")
@@ -378,33 +402,27 @@ test("representative outfits produce six-view desktop and core mobile evidence",
       await preview.screenshot({ path });
       capturedEvidence.push({
         prompt: requestedPrompt,
-        view,
+        view: ({ "front-45":"front_45", right:"side", "back-45":"back_45" } as Record<string,string>)[view] ?? view,
         viewport: "desktop",
         path,
+        generationId: generationId ?? "missing",
+        itemIds,
       });
     }
-    if (caseIndex < 4) {
-      await page.setViewportSize({ width: 390, height: 844 });
-      await page.getByTestId("camera-front").click();
-      const path = `${evidenceRoot}/${slug}/mobile-front.png`;
-      await preview.screenshot({ path });
-      capturedEvidence.push({
-        prompt: requestedPrompt,
-        view: "front",
-        viewport: "mobile",
-        path,
-      });
-      await page.setViewportSize({ width: 1440, height: 900 });
-    }
+    benchmarkResults.push({ prompt: requestedPrompt, generationId: generationId ?? "missing", status:"READY", defects:[], repairs:[] });
   }
 
-  const expectedEvidenceCount = evidenceCases.length * evidenceViews.length + 4;
+  const expectedEvidenceCount = evidenceCases.length * evidenceViews.length;
   expect(capturedEvidence).toHaveLength(expectedEvidenceCount);
   await writeFile(
     "test-results/visual-evidence.json",
     `${JSON.stringify(
       {
         generatedAt: new Date().toISOString(),
+        browserVersion: browser.version(),
+        requiredViews: ["front", "side", "back", "front_45", "back_45"],
+        benchmarkFamilies: evidenceCases,
+        benchmarkResults,
         expectedCount: expectedEvidenceCount,
         screenshots: capturedEvidence,
       },

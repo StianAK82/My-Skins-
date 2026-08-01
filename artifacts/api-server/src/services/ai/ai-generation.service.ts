@@ -528,23 +528,22 @@ export class AiGenerationService {
     const allUnsupported = outfitSpec.items.every(
       (item) => item.unsupported.state,
     );
-    const finalSkinStatus = allUnsupported
-      ? "UNSUPPORTED"
-      : creativeCarryThrough && !creativeCarryThrough.passed
-        ? "NEEDS_REPAIR"
-        : outfitSpec.quality.failureReasons.length > 0
-          ? "NEEDS_REPAIR"
-          : "READY";
+    // Structural generation is never visual proof. Only /ai/visual-review may
+    // promote a supported result after five current browser renders.
+    const finalSkinStatus = allUnsupported ? "UNSUPPORTED" : "NEEDS_REPAIR";
     return {
       meta: {
         generationId,
-        status: finalSkinStatus === "READY" ? "completed" : "degraded",
+        status: "degraded",
         warnings: [
           ...outfitSpec.quality.failureReasons,
           ...(creativeCarryThrough && !creativeCarryThrough.passed
             ? [
                 `Selected design direction is not fully materialized: ${creativeCarryThrough.missing.join(", ")}`,
               ]
+            : []),
+          ...(!allUnsupported
+            ? ["Five-view browser visual acceptance is required before READY"]
             : []),
         ],
         creativeIntelligence: creative
@@ -586,9 +585,7 @@ export class AiGenerationService {
         : null,
       lifecycle: allUnsupported
         ? "unsupported"
-        : finalSkinStatus === "READY"
-          ? "complete"
-          : "external_verification_required",
+        : "external_verification_required",
     } as const;
   }
 
