@@ -22,6 +22,17 @@ import {
   modelItemsToUniversalOutfitSpec,
   universalOutfitSpecSchema,
 } from "../../lib/universal-outfit";
+import {
+  buildConceptDivergencePrompt,
+  buildConceptSelectionPrompt,
+  buildCreativeCarryThroughCorrection,
+  buildCreativeDirectionForBuilder,
+  chooseCreativeStrategy,
+  conceptDivergenceSchema,
+  conceptSelectionSchema,
+  evaluateCreativeCarryThrough,
+  rankFinalists,
+} from "../../lib/creative-intelligence";
 
 type GenerateInput = z.infer<typeof aiGenerateRequestSchema>;
 type StylizedInput = {
@@ -96,7 +107,11 @@ function parseStrictJson(content: string): unknown {
 }
 
 export class AiGenerationService {
-  private buildPrompt(input: GenerateInput, mode: string): string {
+  private buildPrompt(
+    input: GenerateInput,
+    mode: string,
+    creativeDirection?: string,
+  ): string {
     const placementRule =
       input.itemType === "classic_shirt"
         ? 'For classic_shirt: leftSleeve/rightSleeve must be descriptive strings and leftLeg/rightLeg must be exactly "not_used".'
@@ -109,6 +124,7 @@ export class AiGenerationService {
       `style=${input.style ?? "generated-style"}`,
       `theme=${input.theme ?? "generated-theme"}`,
       "target=roblox",
+      ...(creativeDirection ? ["", creativeDirection] : []),
       "",
       "Schema requirements (all fields required):",
       "{",
@@ -163,7 +179,8 @@ export class AiGenerationService {
       "",
       "CANONICAL ITEM RULE (strict): universalItems is REQUIRED and is the authoritative outfit. Emit one row per requested item using only registry kinds: tshirt, hoodie, oversized_hoodie, zip_hoodie, sweatshirt, jacket, bomber_jacket, varsity_jacket, blazer, trench_coat, puffer_jacket, winter_coat, football_jersey, formal_shirt, suit_jacket, kimono, armor, jeans, joggers, cargo_pants, formal_trousers, shorts, dress, shoes, boots, cap, beanie, long_hair, short_hair, curly_hair, afro_hair, dreadlocks, ponytail_hair, anime_hair, roblox_hair, backpack, shoulder_bag, wings, crown, mask, belt, helmet, scarf, tail, horns, headphones, necklace, sword, cape. Stable IDs use lowercase hyphenated category-kind-number and must be unique. A dress is category one_piece with id prefix one-piece and replaces top and bottom. Unknown items remain explicit accessory rows so routing marks them unsupported; never substitute a hoodie.",
       "Outfit rule (strict): `outfit` is non-authoritative artwork metadata and must describe the same items as universalItems.",
-      "PLACEMENT rule (strict): every wish has a correct BODY LOCATION — head things (marshmallow head, pumpkin head, helmets, hair) belong in customParts/accessories/hair, NEVER painted on the clothes; wings/tails/backpacks are accessories on the body. topDescription/bottomDescription describe ONLY what the garment fabric itself looks like — plain colors, material, maybe ONE small tasteful chest motif. NEVER put a theme's face, eyes, mouth, melted/dripping parts, or the creature itself into the garment descriptions. Example: «marshmallow head» → customParts headcover white; topDescription: 'plain soft white sweater fabric' (NO drips, NO face). If the child did not describe the clothes, choose simple fabric colors that match the theme.",
+      "CREATIVE ENHANCEMENT rule: the Creative Direction may invent garment-integrated construction, ornament, materials, story details, and theme-defining accessories when the user gives creative freedom (for example 'make the coolest knight'). Preserve every explicit requirement. A request for one specific garment must remain one garment, but that garment should still receive the selected silhouette, hero element, and story details. Never add unrelated filler garments merely to make the JSON look complete.",
+      "PLACEMENT rule (strict): every wish has a correct BODY LOCATION — head things (marshmallow head, pumpkin head, helmets, hair) belong in customParts/accessories/hair, NEVER painted on the clothes; wings/tails/backpacks are accessories on the body. topDescription/bottomDescription describe ONLY the garment surface and construction: color blocking, materials, panels, seams, closures, trim, controlled wear, and a focused motif when the Creative Direction calls for it. NEVER put a theme's literal face, eyes, mouth, melted/dripping head parts, or the creature itself into garment descriptions. Example: «marshmallow head» → customParts headcover white; topDescription may describe coordinated soft white fabric but not the face or head. If the child did not describe the clothes, follow the selected Creative Direction rather than defaulting to an arbitrary generic garment.",
       "The outfit plan is what the child SEES on the 3D avatar — when the child names ANY garment (skjorte, shirt, jakke, bukse, genser …) the matching outfit field MUST be set to that garment. skjorte/shirt WITHOUT 't-' still means top=tshirt (a shirt IS a top). Never answer with an all-none outfit while the reason says the child asked for a garment.",
       "LANGUAGE (strict): the prompt is written by a child in ANY language (Norwegian, English, Swedish, Spanish, Arabic, Ukrainian, ...) often with heavy typos — always interpret the intent regardless of language (e.g. 't-sjhortet' means t-skjorte, 'capps' means caps, 'marshmelo hed' means marshmallow head). Never refuse or misread a wish because of its language. Children often SPLIT compound garment words — 'cargo bukse'=cargobukse (bottom=pants), 'bobkel jakke'=boblejakke (top=jacket), 'hete gensr'=hettegenser (top=hoodie) — always join the pieces and map to the garment they form.",
       "Write every child-facing string (`customParts[].name`, `unsupported` entries, `reason`) in the SAME language the child wrote in.",
@@ -272,6 +289,63 @@ export class AiGenerationService {
     throw lastError ?? new SyntaxError("AI returned non-JSON content");
   }
 
+  private async createCreativeDirection(input: GenerateInput) {
+    const strategy = chooseCreativeStrategy(input);
+    if (!strategy) return null;
+    const divergence = conceptDivergenceSchema.parse(
+      await this.askModel(
+        buildConceptDivergencePrompt({
+          prompt: input.prompt,
+          style: input.style,
+          theme: input.theme,
+          conceptCount: strategy.conceptCount,
+        }),
+      ),
+    );
+    if (divergence.concepts.length !== strategy.conceptCount)
+      throw new Error(
+        `Creative director returned ${divergence.concepts.length} concepts; expected ${strategy.conceptCount}`,
+      );
+    const selection = conceptSelectionSchema.parse(
+      await this.askModel(
+        buildConceptSelectionPrompt({
+          prompt: input.prompt,
+          concepts: divergence.concepts,
+          finalistCount: strategy.finalistCount,
+        }),
+      ),
+    );
+    if (selection.finalists.length !== strategy.finalistCount)
+      throw new Error(
+        `Creative jury returned ${selection.finalists.length} finalists; expected ${strategy.finalistCount}`,
+      );
+    const candidateIds = new Set(
+      divergence.concepts.map((concept) => concept.id),
+    );
+    const finalistIds = new Set<string>();
+    for (const finalist of selection.finalists) {
+      if (!candidateIds.has(finalist.id))
+        throw new Error(
+          `Creative jury invented unknown finalist ${finalist.id}`,
+        );
+      if (finalistIds.has(finalist.id))
+        throw new Error(`Creative jury duplicated finalist ${finalist.id}`);
+      finalistIds.add(finalist.id);
+    }
+    const ranked = rankFinalists(selection.finalists);
+    const winner = ranked[0];
+    if (!winner) throw new Error("Creative jury returned no winning concept");
+    return {
+      interpretedIntent: divergence.interpretedIntent,
+      audience: divergence.audience,
+      strategy,
+      conceptsGenerated: divergence.concepts.length,
+      finalists: ranked.map(({ concept }) => concept),
+      selected: winner.concept,
+      builderDirection: buildCreativeDirectionForBuilder(winner.concept),
+    };
+  }
+
   private async saveGeneration(
     userId: string,
     prompt: string,
@@ -298,9 +372,30 @@ export class AiGenerationService {
   }
 
   async generateDesign(userId: string | null, input: GenerateInput) {
-    const modelResult = await this.askModel(
-      this.buildPrompt(input, "generate"),
+    const creative = input.previousOutfit
+      ? null
+      : await this.createCreativeDirection(input);
+    let modelResult = await this.askModel(
+      this.buildPrompt(input, "generate", creative?.builderDirection),
     );
+    let creativeCarryThrough = creative
+      ? evaluateCreativeCarryThrough(creative.selected, modelResult)
+      : null;
+    if (creative) {
+      if (!creativeCarryThrough!.passed) {
+        console.warn("ai.creative_carry_through_retry", {
+          missing: creativeCarryThrough!.missing,
+          conceptId: creative.selected.id,
+        });
+        modelResult = await this.askModel(
+          `${this.buildPrompt(input, "generate", creative.builderDirection)}\n\n${buildCreativeCarryThroughCorrection(creative.selected, creativeCarryThrough!)}`,
+        );
+        creativeCarryThrough = evaluateCreativeCarryThrough(
+          creative.selected,
+          modelResult,
+        );
+      }
+    }
     this.logRawSchemaDiff(modelResult, input);
     const normalized = normalizeDesignPayload(input, modelResult);
     let design = aiValidationService.ensureDesign(normalized);
@@ -329,7 +424,7 @@ export class AiGenerationService {
     const outfit = (design as { outfit?: OutfitLike }).outfit;
     if (!input.previousOutfit && isOutfitEmpty(outfit)) {
       console.warn("ai.outfit_empty_retry", { prompt: input.prompt });
-      const correctivePrompt = `${this.buildPrompt(input, "generate")}\n\nIMPORTANT CORRECTION: your previous answer left the 3D outfit COMPLETELY empty (no top, no bottom, no accessories). That is always wrong — the child asked for a look. If the prompt names any figure, creature, profession or theme, fill outfit.top, outfit.bottom, outfit.shoes and the theme's iconic accessories per the rules above. If it names specific garments, set exactly those. Never return an all-none outfit.`;
+      const correctivePrompt = `${this.buildPrompt(input, "generate", creative?.builderDirection)}\n\nIMPORTANT CORRECTION: your previous answer left the 3D outfit COMPLETELY empty (no top, no bottom, no accessories). That is always wrong — the child asked for a look. If the prompt names any figure, creature, profession or theme, fill outfit.top, outfit.bottom, outfit.shoes and the theme's iconic accessories per the rules above. If it names specific garments, set exactly those. Never return an all-none outfit.`;
       const retryResult = await this.askModel(correctivePrompt);
       this.logRawSchemaDiff(retryResult, input);
       const retryDesign = aiValidationService.ensureDesign(
@@ -338,6 +433,7 @@ export class AiGenerationService {
       const retryOutfit = (retryDesign as { outfit?: OutfitLike }).outfit;
       if (!isOutfitEmpty(retryOutfit)) {
         design = retryDesign;
+        modelResult = retryResult;
         modelItems = (retryResult as { universalItems?: unknown })
           .universalItems;
       }
@@ -372,7 +468,7 @@ export class AiGenerationService {
           score: report.score,
         });
         const retryResult = await this.askModel(
-          `${this.buildPrompt(input, "generate")}\n\n${buildFaithfulnessCorrection(report)}`,
+          `${this.buildPrompt(input, "generate", creative?.builderDirection)}\n\n${buildFaithfulnessCorrection(report)}`,
         );
         const retryDesign = aiValidationService.ensureDesign(
           normalizeDesignPayload(input, retryResult),
@@ -391,6 +487,7 @@ export class AiGenerationService {
           });
           if (retryReport.score > report.score) {
             design = retryDesign;
+            modelResult = retryResult;
             modelItems = (retryResult as { universalItems?: unknown })
               .universalItems;
             faithfulness = retryReport;
@@ -398,6 +495,11 @@ export class AiGenerationService {
         }
       }
     }
+    if (creative)
+      creativeCarryThrough = evaluateCreativeCarryThrough(
+        creative.selected,
+        modelResult,
+      );
     const generationId = userId
       ? await this.saveGeneration(
           userId,
@@ -423,17 +525,68 @@ export class AiGenerationService {
         repairHistory,
       }),
     );
+    const allUnsupported = outfitSpec.items.every(
+      (item) => item.unsupported.state,
+    );
+    const finalSkinStatus = allUnsupported
+      ? "UNSUPPORTED"
+      : creativeCarryThrough && !creativeCarryThrough.passed
+        ? "NEEDS_REPAIR"
+        : outfitSpec.quality.failureReasons.length > 0
+          ? "NEEDS_REPAIR"
+          : "READY";
     return {
       meta: {
         generationId,
-        status: outfitSpec.quality.accepted ? "completed" : "degraded",
-        warnings: outfitSpec.quality.failureReasons,
+        status: finalSkinStatus === "READY" ? "completed" : "degraded",
+        warnings: [
+          ...outfitSpec.quality.failureReasons,
+          ...(creativeCarryThrough && !creativeCarryThrough.passed
+            ? [
+                `Selected design direction is not fully materialized: ${creativeCarryThrough.missing.join(", ")}`,
+              ]
+            : []),
+        ],
+        creativeIntelligence: creative
+          ? {
+              mode: creative.strategy.mode,
+              conceptsGenerated: creative.conceptsGenerated,
+              finalistsEvaluated: creative.finalists.length,
+              selectedConceptId: creative.selected.id,
+              selectedConceptTitle: creative.selected.title,
+            }
+          : null,
       },
       result: design,
       outfitSpec,
-      lifecycle: outfitSpec.items.every((item) => item.unsupported.state)
+      finalSkinStatus,
+      creativeDirection: creative
+        ? {
+            interpretedIntent: creative.interpretedIntent,
+            audience: creative.audience,
+            selected: {
+              id: creative.selected.id,
+              title: creative.selected.title,
+              story: creative.selected.story,
+              audienceInsight: creative.selected.audienceInsight,
+              silhouette: creative.selected.silhouette,
+              heroElement: creative.selected.heroElement,
+              palette: creative.selected.palette,
+              materials: creative.selected.materials,
+              garmentDirection: creative.selected.garmentDirection,
+              accessoryDirection: creative.selected.accessoryDirection,
+              textureDirection: creative.selected.textureDirection,
+              improvements: creative.selected.improvements,
+            },
+            finalists: creative.finalists.map((concept) => ({
+              id: concept.id,
+              title: concept.title,
+            })),
+          }
+        : null,
+      lifecycle: allUnsupported
         ? "unsupported"
-        : outfitSpec.quality.accepted
+        : finalSkinStatus === "READY"
           ? "complete"
           : "external_verification_required",
     } as const;

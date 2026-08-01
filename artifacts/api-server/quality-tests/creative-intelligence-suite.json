@@ -1,0 +1,102 @@
+{
+  "version": "1.0",
+  "purpose": "Multi-view evidence suite proving that selected creative direction changes the built result, not only its prose.",
+  "cases": [
+    {
+      "id": "creative-knight",
+      "prompt": "Lag verdens kuleste ridder",
+      "expectedMode": "exploratory",
+      "requiredEvidence": [
+        "silhouette",
+        "shoulder_form",
+        "helmet",
+        "cape",
+        "materials",
+        "color_blocking",
+        "ornament",
+        "hero_element",
+        "front_design",
+        "back_design"
+      ]
+    },
+    {
+      "id": "creative-ordinary-clothes",
+      "prompt": "Hvit hettegenser",
+      "expectedMode": "focused",
+      "requiredEvidence": [
+        "prompt_faithfulness",
+        "hood",
+        "front_design",
+        "back_design",
+        "material"
+      ]
+    },
+    {
+      "id": "creative-princess",
+      "prompt": "Lag en rå prinsesse",
+      "expectedMode": "exploratory",
+      "requiredEvidence": [
+        "silhouette",
+        "hero_element",
+        "storytelling",
+        "materials",
+        "front_design",
+        "back_design"
+      ]
+    },
+    {
+      "id": "creative-pirate",
+      "prompt": "Design an epic pirate",
+      "expectedMode": "exploratory",
+      "requiredEvidence": [
+        "silhouette",
+        "asymmetry",
+        "hero_element",
+        "storytelling",
+        "materials",
+        "front_design",
+        "back_design"
+      ]
+    },
+    {
+      "id": "creative-robot",
+      "prompt": "Create an awesome robot",
+      "expectedMode": "exploratory",
+      "requiredEvidence": [
+        "silhouette",
+        "large_forms",
+        "emissive_material",
+        "hero_element",
+        "front_design",
+        "back_design"
+      ]
+    },
+    {
+      "id": "creative-football-kit",
+      "prompt": "Blå fotballdrakt med hvite detaljer",
+      "expectedMode": "focused",
+      "requiredEvidence": [
+        "shirt",
+        "shorts",
+        "color_blocking",
+        "front_design",
+        "back_design",
+        "prompt_faithfulness"
+      ]
+    },
+    {
+      "id": "creative-original-spider-hero",
+      "prompt": "Lag en original edderkoppinspirert superhelt",
+      "expectedMode": "exploratory",
+      "requiredEvidence": [
+        "originality",
+        "silhouette",
+        "hero_element",
+        "front_design",
+        "back_design",
+        "no_protected_logo",
+        "no_exact_costume"
+      ]
+    }
+  ]
+}
