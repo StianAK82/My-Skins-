@@ -77,7 +77,17 @@ jobs:
           if (evidence.screenshots.length !== evidence.expectedCount) {
             throw new Error(`Expected ${evidence.expectedCount} screenshots, found ${evidence.screenshots.length}`);
           }
-          console.log(`Verified ${evidence.screenshots.length} representative screenshots`);
+          if (evidence.benchmarkFamilies.length !== 7 || evidence.expectedCount !== 35) throw new Error("Expected seven benchmark families and five views each");
+          if (!evidence.browserVersion) throw new Error("Browser version missing from manifest");
+          for (const shot of evidence.screenshots) {
+            if (!shot.generationId || !shot.itemIds?.length) throw new Error(`Unregistered evidence: ${shot.path}`);
+          }
+          for (const family of evidence.benchmarkFamilies) {
+            const views = new Set(evidence.screenshots.filter(shot => shot.prompt === family).map(shot => shot.view));
+            for (const required of evidence.requiredViews) if (!views.has(required)) throw new Error(`${family} missing ${required}`);
+          }
+          if (evidence.benchmarkResults.some(result => result.status !== "READY")) throw new Error("At least one benchmark did not pass runtime acceptance");
+          console.log(`Verified ${evidence.screenshots.length} benchmark screenshots in Chromium ${evidence.browserVersion}`);
           NODE
           missing=0
           while IFS= read -r screenshot; do

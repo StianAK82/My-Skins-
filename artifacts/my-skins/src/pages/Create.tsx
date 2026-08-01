@@ -3,13 +3,14 @@ import { aiGenerateDesign } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Cat, Crown, Fish, Flame, Gamepad2, Loader2, Mountain, Rocket, Shield, Skull, Sparkles, Trophy, Undo2, Upload, UserRound } from "lucide-react";
-import { AvatarPreview, type GarmentConfig } from "@/components/editor/AvatarPreview";
+import { AvatarPreview, type GarmentConfig, type VisualEvidenceCapture } from "@/components/editor/AvatarPreview";
 import { useDesignStore } from "@/lib/editor/design-state";
 import { classicTextureAiSchema, parseClassicTextureAiPlan } from "@/lib/editor/ai-schema";
 import { preloadOverlayImages, renderDesignToCanvas } from "@/lib/editor/renderer";
 import { buildAiAvatarLook } from "@/lib/editor/avatar-look";
 import { normalizeAiResponse } from "@/lib/ai/normalize-ai-response";
 import { universalOutfitSpecSchema, toCreatePresentation, toPreviewSceneSpec, toAvatarPreviewOutfit, reconcileCanonicalRevision, type UniversalOutfitSpec, type CanonicalLifecycle } from "@/lib/ai/universal-outfit";
+import { compileCreativeZoneArtwork } from "@/lib/ai/creative-visible-design";
 import {
   parsePendingOutfit,
   pickPantsColors,
@@ -299,6 +300,8 @@ export default function Create() {
   const offscreenCanvasRef = useRef<HTMLCanvasElement | null>(null);
   // 3D export: the AvatarPreview registers a «make .glb» function here.
   const glbExportRef = useRef<(() => Promise<Blob>) | null>(null);
+  const visualEvidenceRef = useRef<VisualEvidenceCapture | null>(null);
+  const reviewedGenerationRef = useRef<string | null>(null);
   const [glbBusy, setGlbBusy] = useState(false);
   const [show3dGuide, setShow3dGuide] = useState(false);
   const [lang, setLang] = useState<Lang>(() => detectLang());
@@ -324,6 +327,32 @@ export default function Create() {
   const [skinStatus, setSkinStatus] = useState<SkinStatus | null>(null);
   const [imageRenderNonce, setImageRenderNonce] = useState(0);
   const [robloxMe, setRobloxMe] = useState<RobloxMe | null>(null);
+  useEffect(() => {
+    if (!canonicalSpec || geometryState !== "geometry_accepted" || !previewTexture || reviewedGenerationRef.current === canonicalSpec.generationId) return;
+    const capture = visualEvidenceRef.current;
+    if (!capture) return;
+    reviewedGenerationRef.current = canonicalSpec.generationId;
+    let cancelled = false;
+    void (async () => {
+      setLifecycle("rendering");
+      try {
+        const views = await capture();
+        if (views.length !== 5) throw new Error("Incomplete five-view evidence");
+        const response = await apiPost<{ status: "READY"|"NEEDS_REPAIR"|"UNSUPPORTED"|"MANUAL_REVIEW"; defects: string[] }>("/ai/visual-review", {
+          generationId: canonicalSpec.generationId, attempt: 1, prompt: canonicalSpec.normalizedUserIntent,
+          outfitSummary: canonicalSpec.items.map(item => `${item.id}:${item.kind}`).join(", "), itemIds: canonicalSpec.items.map(item => item.id),
+          classicExportValid: /^data:image\/png/.test(previewTexture), views,
+        });
+        if (cancelled) return;
+        if (response.status !== 200) throw new Error("Visual review unavailable");
+        if (response.data.status === "READY") setLifecycle("complete");
+        else if (response.data.status === "UNSUPPORTED") setLifecycle("unsupported");
+        else setLifecycle("external_verification_required");
+        if (response.data.defects?.length) setAiError(response.data.defects.join(" · "));
+      } catch { if (!cancelled) setLifecycle("external_verification_required"); }
+    })();
+    return () => { cancelled = true; };
+  }, [canonicalSpec, geometryState, previewTexture]);
   // Files the user has already paid a credit for – kept around so a blocked
   // popup/download or a failed direct upload can always be retried for free.
   const [readyFiles, setReadyFiles] = useState<OutfitFiles | null>(null);
@@ -493,12 +522,15 @@ export default function Create() {
     setAiError("");
     setUploadStatus("");
     setAiPhase(t.phaseCreating);
+    reviewedGenerationRef.current = null;
     setOutfitItems(null);
     setUndoStack([]); // a brand-new skin starts a fresh history
     try {
-      const rawResponse = await aiGenerateDesign({ prompt: usedPrompt, itemType: "classic_shirt", style: "AI velger", theme: usedPrompt }) as unknown as { result: unknown; outfitSpec?: unknown; lifecycle?: CanonicalLifecycle };
+      const rawResponse = await aiGenerateDesign({ prompt: usedPrompt, itemType: "classic_shirt", style: "AI velger", theme: usedPrompt }) as unknown as { result: unknown; outfitSpec?: unknown; creativeDirection?: unknown; lifecycle?: CanonicalLifecycle };
       setLifecycle("validating");
-      const spec = universalOutfitSpecSchema.parse(rawResponse.outfitSpec);
+      // Join the API's selected direction to canonical state before projecting it
+      // into Three.js; otherwise creative intelligence is response-only metadata.
+      const spec = universalOutfitSpecSchema.parse({ ...(rawResponse.outfitSpec as object), creativeDirection: rawResponse.creativeDirection });
       setLifecycle("routing");
       const previewScene = toPreviewSceneSpec(spec);
       if (previewScene.items.length === 0 && spec.items.length > 0) setLifecycle("unsupported");
@@ -712,6 +744,11 @@ export default function Create() {
           });
         }
       }
+      // Materialize front/back/sleeves/legs independently. This is intentionally
+      // downstream of concept selection and upstream of the 585x559 renderer.
+      if (spec.creativeDirection?.selected) {
+        for (const layer of compileCreativeZoneArtwork(spec.creativeDirection.selected)) addLayer(layer);
+      }
 
       // Draw only the pieces that were asked for. A standalone motif is only added
       // when the prompt asks for one (logo, trykk, motiv, figur …) or is a themed skin.
@@ -764,7 +801,8 @@ export default function Create() {
         outfitRef.current = { pantsBase: pantsColors.base, pantsAccent: pantsColors.accent, fabricUrl: bottomUrl };
         if ((wantsTop && !topUrl) || (wantsBottom && !bottomUrl)) setAiError(t.errMotif);
       }
-      setLifecycle(spec.items.every(item => item.unsupported.state) ? "unsupported" : spec.quality.accepted ? "complete" : "external_verification_required");
+      if (spec.items.every(item => item.unsupported.state)) setLifecycle("unsupported");
+      else if (reviewedGenerationRef.current !== spec.generationId) setLifecycle("external_verification_required");
     } catch (error) {
       setLifecycle("error");
       const safety = safetyErrorMessage(error, t);
@@ -830,6 +868,7 @@ export default function Create() {
       const revisedSpec = canonicalSpec ? reconcileCanonicalRevision(canonicalSpec, candidateSpec, text) : candidateSpec;
       setLifecycle("routing");
       toPreviewSceneSpec(revisedSpec);
+      reviewedGenerationRef.current = null;
       setCanonicalSpec(revisedSpec);
       const response = normalizeAiResponse(res.data);
       const outfit = toAvatarPreviewOutfit(revisedSpec) as OutfitPlan;
@@ -932,7 +971,7 @@ export default function Create() {
       setReviseText("");
       // The revision succeeded – remember what it replaced so «Angre» can undo it.
       setUndoStack((stack) => [...stack.slice(-(UNDO_STACK_LIMIT - 1)), snapshot]);
-      setLifecycle(revisedSpec.quality.accepted ? "complete" : "external_verification_required");
+      setLifecycle("external_verification_required");
     } catch (error) {
       setLifecycle("error");
       const safety = safetyErrorMessage(error, t);
@@ -961,7 +1000,8 @@ export default function Create() {
     setGarmentConfig(snapshot.garmentConfig);
     setLastOutfit(snapshot.outfit);
     setCanonicalSpec(snapshot.canonicalSpec);
-    setLifecycle(snapshot.canonicalSpec?.quality.accepted ? "complete" : snapshot.canonicalSpec ? "external_verification_required" : "idle");
+    reviewedGenerationRef.current = null;
+    setLifecycle(snapshot.canonicalSpec ? "external_verification_required" : "idle");
     setSelectedHeadcover(null);
     lastPromptRef.current = snapshot.prompt;
     setOutfitItems(snapshot.outfitItems);
@@ -1138,6 +1178,7 @@ export default function Create() {
               onGeometryVerification={(report) => setGeometryState(report.passed ? "geometry_accepted" : report.measurements.length ? "geometry_limited" : "geometry_rejected")}
               customParts={displayedCustomParts}
               exportRef={glbExportRef}
+              visualEvidenceRef={visualEvidenceRef}
             />
           </div>
 
@@ -1175,7 +1216,7 @@ export default function Create() {
             </div>
           )}
           
-          {canonicalSpec && <div data-testid="canonical-result" data-generation-id={canonicalSpec.generationId} data-lifecycle={lifecycle} className="text-center text-sm font-semibold text-slate-600">{lifecycle === "complete" ? "✨ Klar!" : lifecycle === "unsupported" ? "Denne ideen kan vi ikke vise ennå." : lifecycle === "external_verification_required" ? "Vi må sjekke denne litt ekstra." : aiPhase}</div>}
+          {canonicalSpec && <div data-testid="canonical-result" data-generation-id={canonicalSpec.generationId} data-item-ids={canonicalSpec.items.map(item => item.id).join(",")} data-lifecycle={lifecycle} className="text-center text-sm font-semibold text-slate-600">{lifecycle === "complete" ? "✨ Klar!" : lifecycle === "unsupported" ? "Denne ideen kan vi ikke vise ennå." : lifecycle === "external_verification_required" ? "Vi må sjekke denne litt ekstra." : aiPhase}</div>}
           {canonicalSpec && <div data-testid="geometry-acceptance" data-state={geometryState} className="sr-only">{geometryState === "geometry_accepted" ? "Your outfit is ready." : geometryState === "geometry_limited" || geometryState === "geometry_rejected" ? "This part could not be shown correctly." : "I’m checking the outfit."}</div>}
           {outfitItems && (outfitItems.uploadable.length > 0 || outfitItems.previewOnly.length > 0 || outfitItems.unsupported.length > 0 || (outfitItems.changed?.length ?? 0) > 0) && (
             <div
