@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { aiGenerateDesign } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Sparkles, Upload, Loader2, Undo2 } from "lucide-react";
+import { Cat, Crown, Fish, Flame, Gamepad2, Loader2, Mountain, Rocket, Shield, Skull, Sparkles, Trophy, Undo2, Upload, UserRound } from "lucide-react";
 import { AvatarPreview, type GarmentConfig } from "@/components/editor/AvatarPreview";
 import { useDesignStore } from "@/lib/editor/design-state";
 import { classicTextureAiSchema, parseClassicTextureAiPlan } from "@/lib/editor/ai-schema";
@@ -76,6 +76,17 @@ function downloadPng(dataUrl: string, filename: string) {
 
 const API_BASE = `${import.meta.env.BASE_URL.replace(/\/$/, "")}/api`;
 const PENDING_SKIN_KEY = "mySkins.pendingSkin";
+const PENDING_ROBLOX_DELIVERY_KEY = "mySkins.pendingRobloxDelivery";
+const IDEA_ICONS = [Flame, UserRound, Crown, Sparkles, Trophy, Skull, Shield, Cat, Rocket, Fish, Mountain, Gamepad2] as const;
+
+function storePendingRobloxDelivery(files: OutfitFiles) {
+  window.localStorage.setItem(PENDING_ROBLOX_DELIVERY_KEY, JSON.stringify(files));
+}
+
+function readPendingRobloxDelivery(): OutfitFiles | null {
+  const value = window.localStorage.getItem(PENDING_ROBLOX_DELIVERY_KEY);
+  return value ? parsePendingOutfit(value) : null;
+}
 
 type SkinStatus = { remainingFree: number; freeLimit: number; paidCredits: number };
 
@@ -408,6 +419,15 @@ export default function Create() {
       window.history.replaceState({}, "", window.location.pathname);
     } else if (params.get("robloxLogin") === "ok") {
       window.history.replaceState({}, "", window.location.pathname);
+      const pendingDelivery = readPendingRobloxDelivery();
+      if (pendingDelivery) {
+        setReadyFiles(pendingDelivery);
+        setUploadStatus(tRef.current.sendingDirect);
+        void directUpload(pendingDelivery).then((result) => {
+          if (result.allOk) window.localStorage.removeItem(PENDING_ROBLOX_DELIVERY_KEY);
+          setUploadStatus(result.msg);
+        });
+      }
     }
     const paidSession = params.get("paid");
     if (!paidSession) return;
@@ -1012,7 +1032,12 @@ export default function Create() {
         setReadyFiles(files);
         if (robloxMe?.loggedIn) {
           setUploadStatus(t.sendingDirect);
-          setUploadStatus((await directUpload(files)).msg);
+          const result = await directUpload(files);
+          setUploadStatus(result.msg);
+        } else if (robloxMe?.configured) {
+          // Preserve already-paid files across OAuth so returning users are not charged twice.
+          storePendingRobloxDelivery(files);
+          window.location.href = `${API_BASE}/auth/roblox/login?returnTo=${encodeURIComponent(window.location.pathname)}`;
         } else {
           openRobloxWithFiles(files);
           setUploadStatus(t.uploadDoneMsg);
@@ -1078,7 +1103,9 @@ export default function Create() {
 
         <section className="w-full">
           <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
-            {t.ideas.map((idea) => (
+            {t.ideas.map((idea, index) => {
+              const IdeaIcon = IDEA_ICONS[index] ?? Sparkles;
+              return (
               <button
                 key={idea.label}
                 type="button"
@@ -1089,10 +1116,11 @@ export default function Create() {
                 }}
                 className="flex flex-col items-center gap-1 rounded-2xl border-2 border-slate-700 bg-slate-900/70 py-4 transition hover:border-emerald-400 hover:bg-slate-800 active:scale-95 disabled:opacity-40"
               >
-                <span className="text-4xl sm:text-5xl leading-none">{idea.emoji}</span>
+                <IdeaIcon aria-hidden="true" className="h-10 w-10 text-emerald-300 sm:h-12 sm:w-12" strokeWidth={1.7} />
                 <span className="text-sm font-semibold text-slate-200">{idea.label}</span>
               </button>
-            ))}
+              );
+            })}
           </div>
         </section>
 
