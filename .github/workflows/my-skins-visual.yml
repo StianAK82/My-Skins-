@@ -87,6 +87,22 @@ jobs:
             fi
           done < <(node -e 'const e=require("./test-results/visual-evidence.json"); for (const s of e.screenshots) console.log(s.path)')
           test "$missing" -eq 0
+      - name: Publish visual review summary
+        if: always()
+        run: |
+          if [ ! -f test-results/visual-evidence.json ]; then
+            echo "## Visual evidence was not produced" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          node - <<'NODE'
+          const { appendFileSync, readFileSync, writeFileSync } = require("node:fs");
+          const evidence = JSON.parse(readFileSync("test-results/visual-evidence.json", "utf8"));
+          const rows = evidence.screenshots.map((shot) =>
+            `<figure><img loading="lazy" src="${shot.path.replace(/^test-results\//, "")}" alt="${shot.prompt}, ${shot.view}, ${shot.viewport}"><figcaption>${shot.prompt} · ${shot.view} · ${shot.viewport}</figcaption></figure>`
+          ).join("\n");
+          writeFileSync("test-results/visual-evidence.html", `<!doctype html><meta charset="utf-8"><title>My Skins visual evidence</title><style>body{font:14px system-ui;background:#020617;color:#e2e8f0;margin:24px}main{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:20px}figure{margin:0;padding:12px;background:#0f172a;border-radius:12px}img{width:100%;height:auto}figcaption{padding-top:8px}</style><h1>My Skins visual evidence</h1><p>Commit ${process.env.GITHUB_SHA}; ${evidence.screenshots.length} screenshots.</p><main>${rows}</main>`);
+          appendFileSync(process.env.GITHUB_STEP_SUMMARY, `## Visual evidence\n\nGenerated **${evidence.screenshots.length} / ${evidence.expectedCount}** representative screenshots for commit \`${process.env.GITHUB_SHA}\`. Download **my-skins-screenshots** and open \`visual-evidence.html\` for the review gallery.\n`);
+          NODE
       - name: Upload screenshots
         if: always()
         uses: actions/upload-artifact@v4
@@ -95,6 +111,7 @@ jobs:
           path: |
             test-results/screenshots/**
             test-results/visual-evidence.json
+            test-results/visual-evidence.html
           if-no-files-found: error
           retention-days: 30
       - name: Upload screenshot diffs

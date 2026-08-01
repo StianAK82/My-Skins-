@@ -246,6 +246,15 @@ test("Create page loads with prompt presets and 3D preview canvas", async ({
   await expect(
     page.getByText("Dragon", { exact: false }).first(),
   ).toBeVisible();
+  // Use deterministic vector artwork instead of platform emoji. The latter
+  // rendered as empty tofu boxes in the first CI evidence set.
+  await expect(
+    page.getByRole("button", { name: "Dragon" }).locator("svg"),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Kitty" }).locator("svg"),
+  ).toBeVisible();
+  await expect(page.getByText(/Tap a picture/)).not.toContainText(/[👇✨]/u);
   await expect(page.locator("canvas").first()).toBeVisible({ timeout: 20_000 });
   expect(api.requested).toEqual(
     expect.arrayContaining([
