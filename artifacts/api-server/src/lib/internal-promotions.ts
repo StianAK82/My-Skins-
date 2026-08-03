@@ -65,7 +65,7 @@ export class PromotionError extends Error {
       stage: this.stage,
       retryable: this.retryable,
       message: genericPromotionMessage(),
-      diagnosticCode: this.diagnosticCode,
+      diagnosticCode: "PROMOTION_REJECTED",
     };
   }
 }
@@ -105,7 +105,7 @@ export class InternalPromotionService {
     }
     return serializable(async (c) => {
       const replay = await c.query(
-        `SELECT r.redemption_id,r.promotion_code_id,r.selected_mode,r.ledger_transaction_ids,c.normalized_code_hash
+        `SELECT r.redemption_id,r.promotion_code_id,r.selected_mode,r.ledger_transaction_ids,c.normalized_code_hash,c.allowed_asset_mode
         FROM internal_promotion_redemptions r JOIN internal_promotion_campaigns c USING(promotion_code_id) WHERE r.idempotency_key=$1`,
         [input.idempotencyKey],
       );
@@ -113,7 +113,8 @@ export class InternalPromotionService {
         const row = replay.rows[0];
         if (
           row.normalized_code_hash !== hash ||
-          row.selected_mode !== (input.selectedMode ?? null) ||
+          row.selected_mode !==
+            (input.selectedMode ?? row.allowed_asset_mode) ||
           row.promotion_code_id == null
         )
           throw new PromotionError(

@@ -4,27 +4,83 @@
 
 Implemented for internal testing. Stripe, Roblox, Marketplace, and production 3D remain out of scope and disabled.
 
-## 2–5. Gaps, migration, campaign, and redemption models
+## 2. Existing promo gaps found
 
-Legacy promotion tables store raw checkout-discount codes and do not grant ledger credits. Migration `0007` adds hashed, versioned internal campaigns, bounded counters, eligibility, mode, JSON grant definitions, expiry, audit metadata, and idempotent redemptions linked to ledger transaction IDs. The legacy disposition is documented in `docs/implementation/promotion-code-migration.md`.
+Legacy tables store raw checkout-discount codes, are not ledger grants, and lack atomic idempotency. They remain isolated and unmounted.
 
-## 6–12. Security and atomic flow
+## 3. Database migration
 
-Codes are trimmed, NFKC-normalized, uppercased, strictly ASCII validated, length bounded, and HMAC-SHA-256 hashed with `PROMOTION_CODE_PEPPER`. Redemption requires authentication and rate limiting, then uses serializable isolation and a campaign row lock. It validates windows, campaign/user limits, user/domain eligibility, selected mode, and configuration before appending every grant and the redemption atomically. Customer errors are generic; audit logs contain IDs and diagnostic codes, never raw codes. Campaign expiry and grant expiry are separate. `EITHER` bundles resolve all `SELECTED` entries to one stored mode.
+Migration `0007` adds versioned hashed campaigns and redemptions with database checks, unique hash/idempotency constraints, ledger-ID linkage, and indexes.
 
-## 13–16. Administration, API, UI, and migration
+## 4. Campaign model
 
-Allowlisted server admins can create, activate, disable, inspect metrics, and reverse campaigns/redemptions. Reversal appends `CHARGEBACK_REVERSAL` ledger entries. Customer APIs are `POST /api/promotions/redeem` and `GET /api/promotions/redemptions/recent`. Create exposes child-friendly code redemption and refreshes the authoritative entitlement summary. `INTERNAL_PROMOTIONS_ENABLED` is validated at startup together with pepper and admin configuration.
+Campaigns contain configuration version, hash/mask, safe descriptions, windows, counters/limits, allowed mode/users/domains, grant definitions, credit lifetime, creator, disable time, and bounded metadata.
 
-## 17–19. Tests
+## 5. Redemption model
 
-Unit tests cover normalization, Unicode handling, hashing, selectable bundles, generic errors, and admin authorization; 229 repository unit tests pass across API and UI. Migration/accounting tests cover append-only ledger behavior, and 23 repository integration tests pass. Browser fixtures cover successful redemption and balance refresh without Stripe or live providers; eight tests are discovered, but the seven deterministic browser cases cannot launch locally because Chromium is unavailable. Exact command outcomes are reported in the final response.
+Redemptions persist campaign, user, idempotency key, selected mode, status, request correlation, time, and every ledger transaction ID.
+
+## 6. Normalization and hashing
+
+Codes are trimmed, NFKC-normalized, uppercased, strictly ASCII validated, length bounded, and HMAC-SHA-256 hashed with `PROMOTION_CODE_PEPPER`. Raw codes are never logged or persisted by the server.
+
+## 7. Atomic redemption flow
+
+After authentication/rate limiting, redemption uses serializable isolation and locks the campaign. It validates limits, windows, eligibility, mode, and grants before inserting all ledger rows, redemption, and projection update in one commit.
+
+## 8. Ledger grants
+
+Every award is a `PROMOTION` row in `entitlement_transactions`; neither user/profile credit columns nor a second balance system are used.
+
+## 9. 2D/3D selectable grants
+
+Grant entries name a real ledger `creditType` and optional asset-mode restriction. `EITHER` campaigns require one stored selection and consistently map matching generation/export/delivery entries to that mode.
+
+## 10. Expiry handling
+
+Campaign expiry controls redemption. Absolute or lifetime-based credit expiry is written to each ledger row, and the existing balance derivation excludes expired grants without deleting them.
+
+## 11. Limits and concurrency
+
+The locked campaign projection enforces total limits; per-user counts and unique idempotency are checked under the same lock. Replays return the original ledger grants and cannot switch hash or mode.
+
+## 12. Rate limiting
+
+The authenticated route limits user/IP attempts and emits generic customer errors. Production should additionally enforce distributed edge limits.
+
+## 13. Admin tooling
+
+Explicitly allowlisted server admins can create/activate/disable campaigns, inspect safe metrics, grant support credits, and append reversals. Startup validates the pepper and allowlist when promotions are enabled.
+
+## 14. API changes
+
+Customer APIs are `POST /api/promotions/redeem` and `GET /api/promotions/redemptions/recent`; internal administration routes require server-side authorization.
+
+## 15. UI changes
+
+Create exposes child-friendly code redemption, uses a durable hashed-code request key for refresh-safe retries, sends the selected preview mode, and refreshes authoritative entitlements after success.
+
+## 16. Legacy migration
+
+The full isolate/deprecate/removal decisions are in `docs/implementation/promotion-code-migration.md`; there is only one mounted customer redemption system.
+
+## 17. Unit-test results
+
+Core tests cover normalization/Unicode, hashing, grant validation, selectable modes, expiry, campaign windows/limits, generic errors, and admin authorization. The repository unit command passes 237 tests (174 API and 63 UI).
+
+## 18. Integration-test results
+
+Repository integration now passes 28 tests, including transaction/migration contract checks for serializable locking, insertion order, unique replay, versioned hashed storage, and append-only reversal. A live PostgreSQL concurrency harness remains required for production verification.
+
+## 19. Browser-test results
+
+Deterministic fixtures cover successful redemption and authoritative balance refresh without Stripe or live AI. Chromium remains unavailable locally; CI is configured to install it.
 
 ## 20. Remaining limitations
 
-Database concurrency and final-slot tests require the PostgreSQL CI/staging harness. The in-process limiter complements campaign/user database constraints but production distributed abuse protection should also use the edge gateway. Chromium evidence depends on CI because the local browser binary is unavailable.
+Apply migration `0007` and run concurrent/final-slot/restart scenarios against staging PostgreSQL. Add distributed gateway throttling and operational alerts before production exposure.
 
-## 21. Commit
+## 21. Commit hash
 
 Recorded in Git history; embedding a commit's own hash would change that hash.
 

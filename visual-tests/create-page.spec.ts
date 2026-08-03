@@ -125,50 +125,13 @@ const workflowFixtures = [
 ] as const;
 
 const creativeBenchmarks = [
-  [
-    "Create the world's coolest rune knight",
-    { ...baseOutfit, top: "jacket", bottom: "pants", shoes: "boots" },
-    "Rune Warden",
-  ],
-  [
-    "Ordinary grey fleece clothes",
-    { ...baseOutfit, top: "hoodie", bottom: "pants", shoes: "sneakers" },
-    "Everyday Cloud",
-  ],
-  [
-    "A moonlight princess",
-    {
-      ...baseOutfit,
-      top: "dress",
-      accessories: [{ kind: "crown", color: "#F5C542", size: "large" }],
-    },
-    "Moon Crown",
-  ],
-  [
-    "A storm pirate captain",
-    {
-      ...baseOutfit,
-      top: "jacket",
-      bottom: "pants",
-      accessories: [{ kind: "sword", color: "#D4AF37", size: "large" }],
-    },
-    "Storm Corsair",
-  ],
-  [
-    "An asymmetric neon robot",
-    { ...baseOutfit, top: "jacket", bottom: "pants", shoes: "boots" },
-    "Neon Automaton",
-  ],
-  [
-    "A bold football kit number 10",
-    { ...baseOutfit, top: "tshirt", bottom: "shorts", shoes: "sneakers" },
-    "Victory Ten",
-  ],
-  [
-    "An original web-inspired midnight superhero without protected logos",
-    { ...baseOutfit, top: "sweater", bottom: "pants", shoes: "boots" },
-    "Midnight Weaver",
-  ],
+  ["Create the world's coolest rune knight", { ...baseOutfit, top:"jacket", bottom:"pants", shoes:"boots" }, "Rune Warden"],
+  ["Ordinary grey fleece clothes", { ...baseOutfit, top:"hoodie", bottom:"pants", shoes:"sneakers" }, "Everyday Cloud"],
+  ["A moonlight princess", { ...baseOutfit, top:"dress", accessories:[{kind:"crown",color:"#F5C542",size:"large"}] }, "Moon Crown"],
+  ["A storm pirate captain", { ...baseOutfit, top:"jacket", bottom:"pants", accessories:[{kind:"sword",color:"#D4AF37",size:"large"}] }, "Storm Corsair"],
+  ["An asymmetric neon robot", { ...baseOutfit, top:"jacket", bottom:"pants", shoes:"boots" }, "Neon Automaton"],
+  ["A bold football kit number 10", { ...baseOutfit, top:"tshirt", bottom:"shorts", shoes:"sneakers" }, "Victory Ten"],
+  ["An original web-inspired midnight superhero without protected logos", { ...baseOutfit, top:"sweater", bottom:"pants", shoes:"boots" }, "Midnight Weaver"],
 ] as const;
 
 const evidenceCases = creativeBenchmarks.map(([prompt]) => prompt);
@@ -215,26 +178,11 @@ async function installApiFixtures(
       return;
     }
     if (path === "/api/entitlements/generation-summary") {
-      await route.fulfill({
-        json: {
-          freeFirst: "available",
-          availableGenerationCredits: { "2D": 1, "3D": 1 },
-          currentlyReserved: 0,
-          canGenerate: { "2D": true, "3D": true },
-          recentActivity: [],
-        },
-      });
+      await route.fulfill({ json: { freeFirst: "available", availableGenerationCredits: { "2D": 1, "3D": 1 }, currentlyReserved: 0, canGenerate: { "2D": true, "3D": true }, recentActivity: [] } });
       return;
     }
     if (path === "/api/promotions/redeem") {
-      await route.fulfill({
-        json: {
-          success: true,
-          message: "Your free skin credit is ready.",
-          grantedCredits: [{ creditType: "GENERATION_3D", quantity: 1 }],
-          redemptionId: "promo-redemption-fixture",
-        },
-      });
+      await route.fulfill({ json: { success: true, message: "Your free skin credit is ready.", grantedCredits: [{ creditType: "GENERATION_3D", quantity: 1 }], redemptionId: "promo-redemption-fixture" } });
       return;
     }
     if (path === "/api/auth/roblox/me") {
@@ -270,9 +218,7 @@ async function installApiFixtures(
           meta: {
             generationId: "fixture",
             status: "degraded",
-            warnings: [
-              "Five-view browser visual acceptance is required before READY",
-            ],
+            warnings: ["Five-view browser visual acceptance is required before READY"],
             deprecated: false,
           },
           result,
@@ -285,38 +231,10 @@ async function installApiFixtures(
           }),
           creativeDirection: {
             selected: {
-              id: `benchmark-${body.prompt.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`,
-              title: fixture?.[2] ?? "Visible Direction",
-              story: `The back continues ${fixture?.[2] ?? "the concept"}`,
-              silhouette: {
-                primaryShape: /robot|knight/.test(body.prompt.toLowerCase())
-                  ? "broad angular heroic shoulders"
-                  : /princess/.test(body.prompt.toLowerCase())
-                    ? "long dramatic gown"
-                    : "fitted readable silhouette",
-                largeForms: ["distinct upper body"],
-                secondaryForms: ["ornament plates"],
-                asymmetry: /robot|pirate/.test(body.prompt.toLowerCase())
-                  ? "strong right-side feature"
-                  : "intentional symmetry",
-              },
-              heroElement: {
-                name: fixture?.[2] ?? "Hero mark",
-                description: /robot/.test(body.prompt.toLowerCase())
-                  ? "luminous robotic arm"
-                  : "luminous chest emblem",
-                bodyLocation: /princess/.test(body.prompt.toLowerCase())
-                  ? "head crown"
-                  : "chest",
-                memoryHook: "recognizable at thumbnail size",
-              },
-              palette: ["#111827", "#2563EB", "#D4AF37"],
-              materials: /fleece/.test(body.prompt.toLowerCase())
-                ? ["soft grey fleece", "cotton"]
-                : ["darkened metal", "emissive accents"],
-              garmentDirection: ["structured panels"],
-              accessoryDirection: ["one hero feature"],
-              textureDirection: ["zone-specific ornament", "subtle wear"],
+              id: `benchmark-${body.prompt.toLowerCase().replace(/[^a-z0-9]+/g,"-")}`, title: fixture?.[2] ?? "Visible Direction", story: `The back continues ${fixture?.[2] ?? "the concept"}`,
+              silhouette: { primaryShape: /robot|knight/.test(body.prompt.toLowerCase()) ? "broad angular heroic shoulders" : /princess/.test(body.prompt.toLowerCase()) ? "long dramatic gown" : "fitted readable silhouette", largeForms:["distinct upper body"], secondaryForms:["ornament plates"], asymmetry:/robot|pirate/.test(body.prompt.toLowerCase()) ? "strong right-side feature" : "intentional symmetry" },
+              heroElement: { name: fixture?.[2] ?? "Hero mark", description:/robot/.test(body.prompt.toLowerCase()) ? "luminous robotic arm" : "luminous chest emblem", bodyLocation:/princess/.test(body.prompt.toLowerCase()) ? "head crown" : "chest", memoryHook:"recognizable at thumbnail size" },
+              palette:["#111827","#2563EB","#D4AF37"], materials:/fleece/.test(body.prompt.toLowerCase()) ? ["soft grey fleece","cotton"] : ["darkened metal","emissive accents"], garmentDirection:["structured panels"], accessoryDirection:["one hero feature"], textureDirection:["zone-specific ornament","subtle wear"],
             },
           },
           finalSkinStatus: "NEEDS_REPAIR",
@@ -333,19 +251,9 @@ async function installApiFixtures(
         });
         return;
       }
-      const body = request.postDataJSON() as {
-        views?: unknown[];
-        itemIds?: string[];
-      };
-      const complete =
-        body.views?.length === 5 && Boolean(body.itemIds?.length);
-      await route.fulfill({
-        json: {
-          status: complete ? "READY" : "NEEDS_REPAIR",
-          defects: complete ? [] : ["Incomplete five-view evidence"],
-          repairs: [],
-        },
-      });
+      const body = request.postDataJSON() as { views?: unknown[]; itemIds?: string[] };
+      const complete = body.views?.length === 5 && Boolean(body.itemIds?.length);
+      await route.fulfill({ json: { status: complete ? "READY" : "NEEDS_REPAIR", defects: complete ? [] : ["Incomplete five-view evidence"], repairs: [] } });
       return;
     }
     if (enableAi && path === "/api/ai/hero-image") {
@@ -404,35 +312,23 @@ test("Create page loads with prompt presets and 3D preview canvas", async ({
   });
 });
 
-test("free-first balance and 2D/3D choice use child-friendly server state", async ({
-  page,
-}) => {
+test("free-first balance and 2D/3D choice use child-friendly server state", async ({ page }) => {
   const api = await installApiFixtures(page);
   await page.goto("/");
-  await expect(page.getByTestId("generation-credit-message")).toHaveText(
-    "Your first skin is free.",
-  );
+  await expect(page.getByTestId("generation-credit-message")).toHaveText("Your first skin is free.");
   const previewType = page.getByLabel("Preview type");
   await expect(previewType.getByRole("button", { name: "2D" })).toBeVisible();
   await expect(previewType.getByRole("button", { name: "3D" })).toBeVisible();
   assertApiIsolation(api);
 });
 
-test("promotion redemption refreshes the authoritative child-friendly balance", async ({
-  page,
-}) => {
+test("promotion redemption refreshes the authoritative child-friendly balance", async ({ page }) => {
   const api = await installApiFixtures(page);
   await page.goto("/");
   await page.getByLabel("Do you have a code?").fill("FREE3DPREVIEW");
   await page.getByRole("button", { name: "Use code" }).click();
-  await expect(page.getByRole("status")).toHaveText(
-    "Your free skin credit is ready.",
-  );
-  expect(
-    api.requested.filter(
-      (path) => path === "/api/entitlements/generation-summary",
-    ).length,
-  ).toBeGreaterThan(1);
+  await expect(page.getByRole("status")).toHaveText("Your free skin credit is ready.");
+  expect(api.requested.filter((path) => path === "/api/entitlements/generation-summary").length).toBeGreaterThan(1);
   assertApiIsolation(api);
 });
 
@@ -533,8 +429,7 @@ test("a terminal result remains visible when visual review is unavailable", asyn
 });
 
 test("seven creative benchmarks require five-view runtime acceptance", async ({
-  page,
-  browser,
+  page, browser,
 }) => {
   test.setTimeout(240_000);
   const consoleErrors: string[] = [];
@@ -555,13 +450,7 @@ test("seven creative benchmarks require five-view runtime acceptance", async ({
     generationId?: string;
     itemIds?: string[];
   }> = [];
-  const benchmarkResults: Array<{
-    prompt: string;
-    generationId: string;
-    status: "READY";
-    defects: string[];
-    repairs: unknown[];
-  }> = [];
+  const benchmarkResults: Array<{ prompt:string; generationId:string; status:"READY"; defects:string[]; repairs:unknown[] }> = [];
 
   for (const requestedPrompt of evidenceCases) {
     const prompt = requestedPrompt;
@@ -571,14 +460,9 @@ test("seven creative benchmarks require five-view runtime acceptance", async ({
     await page.locator("details button[type=submit]").click();
     await expect(page.getByTestId("outfit-result")).toBeVisible();
     const canonical = page.getByTestId("canonical-result");
-    await expect(canonical).toHaveAttribute("data-lifecycle", "complete", {
-      timeout: 30_000,
-    });
+    await expect(canonical).toHaveAttribute("data-lifecycle", "complete", { timeout: 30_000 });
     const generationId = await canonical.getAttribute("data-generation-id");
-    const itemIds =
-      (await canonical.getAttribute("data-item-ids"))
-        ?.split(",")
-        .filter(Boolean) ?? [];
+    const itemIds = (await canonical.getAttribute("data-item-ids"))?.split(",").filter(Boolean) ?? [];
     const slug = requestedPrompt
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, "-")
@@ -592,27 +476,14 @@ test("seven creative benchmarks require five-view runtime acceptance", async ({
       await preview.screenshot({ path });
       capturedEvidence.push({
         prompt: requestedPrompt,
-        view:
-          (
-            {
-              "front-45": "front_45",
-              right: "side",
-              "back-45": "back_45",
-            } as Record<string, string>
-          )[view] ?? view,
+        view: ({ "front-45":"front_45", right:"side", "back-45":"back_45" } as Record<string,string>)[view] ?? view,
         viewport: "desktop",
         path,
         generationId: generationId ?? "missing",
         itemIds,
       });
     }
-    benchmarkResults.push({
-      prompt: requestedPrompt,
-      generationId: generationId ?? "missing",
-      status: "READY",
-      defects: [],
-      repairs: [],
-    });
+    benchmarkResults.push({ prompt: requestedPrompt, generationId: generationId ?? "missing", status:"READY", defects:[], repairs:[] });
   }
 
   const expectedEvidenceCount = evidenceCases.length * evidenceViews.length;

@@ -24,6 +24,7 @@ export const internalPromotionCampaignsTable = pgTable(
   "internal_promotion_campaigns",
   {
     promotionCodeId: uuid("promotion_code_id").primaryKey().defaultRandom(),
+    configurationVersion: integer("configuration_version").notNull().default(1),
     normalizedCodeHash: text("normalized_code_hash").notNull(),
     maskedDisplayLabel: text("masked_display_label"),
     campaignName: text("campaign_name").notNull(),

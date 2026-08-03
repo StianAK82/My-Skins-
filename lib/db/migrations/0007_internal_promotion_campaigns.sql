@@ -3,6 +3,7 @@ CREATE TYPE promotion_redemption_status AS ENUM ('COMPLETED','REVERSED');
 
 CREATE TABLE internal_promotion_campaigns (
   promotion_code_id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  configuration_version integer NOT NULL DEFAULT 1 CHECK (configuration_version>0),
   normalized_code_hash text NOT NULL UNIQUE CHECK (length(normalized_code_hash)=64),
   masked_display_label text,
   campaign_name text NOT NULL,
@@ -43,4 +44,3 @@ CREATE TABLE internal_promotion_redemptions (
   UNIQUE(promotion_code_id,user_id,idempotency_key)
 );
 CREATE INDEX internal_promotion_redemptions_campaign_user_idx ON internal_promotion_redemptions(promotion_code_id,user_id);
-

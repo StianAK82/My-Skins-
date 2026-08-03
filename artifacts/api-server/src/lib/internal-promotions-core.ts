@@ -4,10 +4,17 @@ import { z } from "zod";
 export const promotionModeSchema = z.enum(["TWO_D", "THREE_D"]);
 export const promotionGrantSchema = z
   .object({
-    family: z.enum(["GENERATION", "EXPORT", "ROBLOX_DELIVERY"]),
-    mode: z.enum(["TWO_D", "THREE_D", "SELECTED"]),
+    creditType: z.enum([
+      "GENERATION_2D",
+      "GENERATION_3D",
+      "EXPORT_2D",
+      "EXPORT_3D",
+      "ROBLOX_DELIVERY_2D",
+      "ROBLOX_DELIVERY_3D",
+    ]),
     quantity: z.number().int().min(1).max(100),
     expiresAt: z.string().datetime().optional(),
+    assetModeRestriction: z.enum(["TWO_D", "THREE_D", "EITHER"]).optional(),
   })
   .strict();
 export const promotionGrantsSchema = z
@@ -17,6 +24,36 @@ export const promotionGrantsSchema = z
 
 export type PromotionMode = z.infer<typeof promotionModeSchema>;
 export type PromotionGrant = z.infer<typeof promotionGrantSchema>;
+export type CampaignRejection =
+  | "PROMO_DISABLED"
+  | "PROMO_NOT_STARTED"
+  | "PROMO_EXPIRED"
+  | "PROMO_TOTAL_LIMIT_REACHED"
+  | "PROMO_USER_LIMIT_REACHED";
+export function evaluatePromotionCampaign(input: {
+  active: boolean;
+  disabledAt?: Date | null;
+  startsAt?: Date | null;
+  expiresAt?: Date | null;
+  maximumTotalRedemptions?: number | null;
+  currentRedemptions: number;
+  maximumRedemptionsPerUser: number;
+  userRedemptions: number;
+  now?: Date;
+}): CampaignRejection | null {
+  const now = input.now ?? new Date();
+  if (!input.active || input.disabledAt) return "PROMO_DISABLED";
+  if (input.startsAt && now < input.startsAt) return "PROMO_NOT_STARTED";
+  if (input.expiresAt && now >= input.expiresAt) return "PROMO_EXPIRED";
+  if (
+    input.maximumTotalRedemptions != null &&
+    input.currentRedemptions >= input.maximumTotalRedemptions
+  )
+    return "PROMO_TOTAL_LIMIT_REACHED";
+  if (input.userRedemptions >= input.maximumRedemptionsPerUser)
+    return "PROMO_USER_LIMIT_REACHED";
+  return null;
+}
 
 export function normalizePromotionCode(value: string): string {
   const normalized = value.trim().normalize("NFKC").toUpperCase();
@@ -42,10 +79,21 @@ export function resolvePromotionGrants(
   selectedMode?: PromotionMode,
 ) {
   return promotionGrantsSchema.parse(grants).map((grant) => {
-    const mode = grant.mode === "SELECTED" ? selectedMode : grant.mode;
-    if (!mode) throw new Error("PROMO_MODE_REQUIRED");
+    if (grant.assetModeRestriction === "EITHER" && !selectedMode)
+      throw new Error("PROMO_MODE_REQUIRED");
+    const mode =
+      grant.assetModeRestriction === "EITHER"
+        ? selectedMode
+        : grant.assetModeRestriction;
+    if (mode && selectedMode && mode !== selectedMode)
+      throw new Error("PROMO_MODE_NOT_ALLOWED");
     return {
-      creditType: `${grant.family}_${mode === "TWO_D" ? "2D" : "3D"}` as const,
+      creditType: mode
+        ? grant.creditType.replace(
+            /_(?:2D|3D)$/,
+            mode === "TWO_D" ? "_2D" : "_3D",
+          )
+        : grant.creditType,
       quantity: grant.quantity,
       expiresAt: grant.expiresAt ? new Date(grant.expiresAt) : undefined,
     };
