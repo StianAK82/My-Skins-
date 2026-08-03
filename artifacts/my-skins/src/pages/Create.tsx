@@ -1138,7 +1138,7 @@ export default function Create() {
             ))}
           </div>
           <h1 className="text-4xl font-bold tracking-tight">My Skins</h1>
-          <p className="text-lg text-slate-300">{t.tagline}</p>
+          <p data-testid="create-tagline" className="text-lg text-slate-300">{t.tagline}</p>
         </header>
 
         <section className="w-full">
@@ -1218,7 +1218,7 @@ export default function Create() {
           
           {canonicalSpec && <div data-testid="canonical-result" data-generation-id={canonicalSpec.generationId} data-item-ids={canonicalSpec.items.map(item => item.id).join(",")} data-lifecycle={lifecycle} className="text-center text-sm font-semibold text-slate-600">{lifecycle === "complete" ? "✨ Klar!" : lifecycle === "unsupported" ? "Denne ideen kan vi ikke vise ennå." : lifecycle === "external_verification_required" ? "Vi må sjekke denne litt ekstra." : aiPhase}</div>}
           {canonicalSpec && <div data-testid="geometry-acceptance" data-state={geometryState} className="sr-only">{geometryState === "geometry_accepted" ? "Your outfit is ready." : geometryState === "geometry_limited" || geometryState === "geometry_rejected" ? "This part could not be shown correctly." : "I’m checking the outfit."}</div>}
-          {outfitItems && (outfitItems.uploadable.length > 0 || outfitItems.previewOnly.length > 0 || outfitItems.unsupported.length > 0 || (outfitItems.changed?.length ?? 0) > 0) && (
+          {outfitItems && (
             <div
               className="mt-4 rounded-xl border border-slate-700 bg-slate-900/60 p-4 space-y-3 text-sm"
               data-testid="outfit-result"

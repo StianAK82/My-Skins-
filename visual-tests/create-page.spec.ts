@@ -152,8 +152,12 @@ type ApiFixtureState = {
 
 async function installApiFixtures(
   page: Page,
-  enableAi = false,
+  options: {
+    enableAi?: boolean;
+    visualReview?: "ready" | "unavailable";
+  } = {},
 ): Promise<ApiFixtureState> {
+  const { enableAi = false, visualReview = "unavailable" } = options;
   const state: ApiFixtureState = {
     requested: [],
     unexpected: [],
@@ -205,8 +209,8 @@ async function installApiFixtures(
         json: {
           meta: {
             generationId: "fixture",
-            status: "completed",
-            warnings: [],
+            status: "degraded",
+            warnings: ["Five-view browser visual acceptance is required before READY"],
             deprecated: false,
           },
           result,
@@ -225,12 +229,20 @@ async function installApiFixtures(
               palette:["#111827","#2563EB","#D4AF37"], materials:/fleece/.test(body.prompt.toLowerCase()) ? ["soft grey fleece","cotton"] : ["darkened metal","emissive accents"], garmentDirection:["structured panels"], accessoryDirection:["one hero feature"], textureDirection:["zone-specific ornament","subtle wear"],
             },
           },
-          lifecycle: "complete",
+          finalSkinStatus: "NEEDS_REPAIR",
+          lifecycle: "external_verification_required",
         },
       });
       return;
     }
     if (enableAi && path === "/api/ai/visual-review") {
+      if (visualReview === "unavailable") {
+        await route.fulfill({
+          status: 503,
+          json: { error: "Visual review intentionally unavailable in fixture" },
+        });
+        return;
+      }
       const body = request.postDataJSON() as { views?: unknown[]; itemIds?: string[] };
       const complete = body.views?.length === 5 && Boolean(body.itemIds?.length);
       await route.fulfill({ json: { status: complete ? "READY" : "NEEDS_REPAIR", defects: complete ? [] : ["Incomplete five-view evidence"], repairs: [] } });
@@ -274,7 +286,10 @@ test("Create page loads with prompt presets and 3D preview canvas", async ({
   await expect(
     page.getByRole("button", { name: "Kitty" }).locator("svg"),
   ).toBeVisible();
-  await expect(page.getByText(/Tap a picture/)).not.toContainText(/[👇✨]/u);
+  await expect(page.getByTestId("create-tagline")).toHaveText(
+    "Tap a picture – and we'll make your skin!",
+  );
+  await expect(page.getByTestId("create-tagline")).not.toContainText(/[👇✨]/u);
   await expect(page.locator("canvas").first()).toBeVisible({ timeout: 20_000 });
   expect(api.requested).toEqual(
     expect.arrayContaining([
@@ -309,7 +324,10 @@ test("deterministic child workflows keep every requested item", async ({
   page.on("console", (message) => {
     if (message.type() === "error") consoleErrors.push(message.text());
   });
-  const api = await installApiFixtures(page, true);
+  const api = await installApiFixtures(page, {
+    enableAi: true,
+    visualReview: "ready",
+  });
 
   for (const [prompt, , expected] of workflowFixtures) {
     await page.goto("/");
@@ -357,6 +375,31 @@ test("deterministic child workflows keep every requested item", async ({
   expect(consoleErrors).toEqual([]);
 });
 
+test("a terminal result remains visible when visual review is unavailable", async ({
+  page,
+}) => {
+  const api = await installApiFixtures(page, {
+    enableAi: true,
+    visualReview: "unavailable",
+  });
+  await page.goto("/");
+  await page.locator("details").last().click();
+  await page.locator("details input").fill("White hoodie");
+  await page.locator("details button[type=submit]").click();
+
+  const result = page.getByTestId("outfit-result");
+  await expect(result).toBeVisible();
+  await expect(result).toHaveAttribute(
+    "data-generation-state",
+    "external_verification_required",
+  );
+  await expect(page.getByTestId("canonical-result")).toHaveAttribute(
+    "data-lifecycle",
+    "external_verification_required",
+  );
+  assertApiIsolation(api);
+});
+
 test("seven creative benchmarks require five-view runtime acceptance", async ({
   page, browser,
 }) => {
@@ -367,7 +410,10 @@ test("seven creative benchmarks require five-view runtime acceptance", async ({
     if (message.type() === "error") consoleErrors.push(message.text());
   });
   page.on("pageerror", (error) => pageErrors.push(error.message));
-  const api = await installApiFixtures(page, true);
+  const api = await installApiFixtures(page, {
+    enableAi: true,
+    visualReview: "ready",
+  });
   const capturedEvidence: Array<{
     prompt: string;
     view: string;
