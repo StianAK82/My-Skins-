@@ -177,6 +177,14 @@ async function installApiFixtures(
       });
       return;
     }
+    if (path === "/api/entitlements/generation-summary") {
+      await route.fulfill({ json: { freeFirst: "available", availableGenerationCredits: { "2D": 1, "3D": 1 }, currentlyReserved: 0, canGenerate: { "2D": true, "3D": true }, recentActivity: [] } });
+      return;
+    }
+    if (path === "/api/promotions/redeem") {
+      await route.fulfill({ json: { success: true, message: "Your free skin credit is ready.", grantedCredits: [{ creditType: "GENERATION_3D", quantity: 1 }], redemptionId: "promo-redemption-fixture" } });
+      return;
+    }
     if (path === "/api/auth/roblox/me") {
       await route.fulfill({ json: { loggedIn: false, configured: false } });
       return;
@@ -302,6 +310,26 @@ test("Create page loads with prompt presets and 3D preview canvas", async ({
     path: "test-results/screenshots/create-page.png",
     fullPage: true,
   });
+});
+
+test("free-first balance and 2D/3D choice use child-friendly server state", async ({ page }) => {
+  const api = await installApiFixtures(page);
+  await page.goto("/");
+  await expect(page.getByTestId("generation-credit-message")).toHaveText("Your first skin is free.");
+  const previewType = page.getByLabel("Preview type");
+  await expect(previewType.getByRole("button", { name: "2D" })).toBeVisible();
+  await expect(previewType.getByRole("button", { name: "3D" })).toBeVisible();
+  assertApiIsolation(api);
+});
+
+test("promotion redemption refreshes the authoritative child-friendly balance", async ({ page }) => {
+  const api = await installApiFixtures(page);
+  await page.goto("/");
+  await page.getByLabel("Do you have a code?").fill("FREE3DPREVIEW");
+  await page.getByRole("button", { name: "Use code" }).click();
+  await expect(page.getByRole("status")).toHaveText("Your free skin credit is ready.");
+  expect(api.requested.filter((path) => path === "/api/entitlements/generation-summary").length).toBeGreaterThan(1);
+  assertApiIsolation(api);
 });
 
 test("Create page works on a narrow mobile viewport", async ({ page }) => {

@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { aiGenerateDesign } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Cat, Crown, Fish, Flame, Gamepad2, Loader2, Mountain, Rocket, Shield, Skull, Sparkles, Trophy, Undo2, Upload, UserRound } from "lucide-react";
@@ -78,6 +77,7 @@ function downloadPng(dataUrl: string, filename: string) {
 const API_BASE = `${import.meta.env.BASE_URL.replace(/\/$/, "")}/api`;
 const PENDING_SKIN_KEY = "mySkins.pendingSkin";
 const PENDING_ROBLOX_DELIVERY_KEY = "mySkins.pendingRobloxDelivery";
+const PROMOTION_REQUEST_KEYS = "mySkins.promotionRequestKeys";
 const IDEA_ICONS = [Flame, UserRound, Crown, Sparkles, Trophy, Skull, Shield, Cat, Rocket, Fish, Mountain, Gamepad2] as const;
 
 function storePendingRobloxDelivery(files: OutfitFiles) {
@@ -90,6 +90,7 @@ function readPendingRobloxDelivery(): OutfitFiles | null {
 }
 
 type SkinStatus = { remainingFree: number; freeLimit: number; paidCredits: number };
+type GenerationEntitlementSummary = { freeFirst: "available"|"reserved"|"consumed"|"unavailable"; availableGenerationCredits: { "2D": number; "3D": number }; currentlyReserved: number; canGenerate: { "2D": boolean; "3D": boolean } };
 
 async function apiGet<T>(path: string): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, { credentials: "include" });
@@ -106,6 +107,19 @@ async function apiPost<T>(path: string, body?: unknown): Promise<{ status: numbe
   });
   const data = (await res.json().catch(() => ({}))) as T;
   return { status: res.status, data };
+}
+
+async function promotionRequestKey(code: string): Promise<string> {
+  const normalized = code.trim().normalize("NFKC").toUpperCase();
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(normalized));
+  const fingerprint = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+  let keys: Record<string, string> = {};
+  try { keys = JSON.parse(window.localStorage.getItem(PROMOTION_REQUEST_KEYS) ?? "{}"); } catch { /* replace malformed local cache */ }
+  const existing = keys[fingerprint];
+  if (existing) return existing;
+  const created = crypto.randomUUID();
+  window.localStorage.setItem(PROMOTION_REQUEST_KEYS, JSON.stringify({ ...keys, [fingerprint]: created }));
+  return created;
 }
 
 // Maps a SafetyGateway error code (from the API) to the child-friendly message
@@ -230,7 +244,7 @@ function diffOutfits(prev: OutfitPlan, next: OutfitPlan, t: Dict): string[] {
   if (prev.shoes !== next.shoes) changes.push(`${t.fieldShoes}: ${name(prev.shoes)} → ${name(next.shoes)}`);
   if (prev.hair.style !== next.hair.style) changes.push(`${t.fieldHair}: ${name(prev.hair.style)} → ${name(next.hair.style)}`);
   else if (next.hair.style !== "none" && prev.hair.color !== next.hair.color) changes.push(t.itemNewColor(t.fieldHair));
-  
+
   const prevAcc = new Map(prev.accessories.map((a) => [a.kind, `${a.color}:${a.size}`]));
   const nextAcc = new Map(next.accessories.map((a) => [a.kind, `${a.color}:${a.size}`]));
   for (const [kind] of prevAcc.entries()) if (!nextAcc.has(kind)) changes.push(t.removed(name(kind)));
@@ -325,6 +339,12 @@ export default function Create() {
   const [uploadStatus, setUploadStatus] = useState<string>("");
   const [uploadBusy, setUploadBusy] = useState(false);
   const [skinStatus, setSkinStatus] = useState<SkinStatus | null>(null);
+  const [generationCredits, setGenerationCredits] = useState<GenerationEntitlementSummary | null>(null);
+  const [generationMode, setGenerationMode] = useState<"2D"|"3D">("3D");
+  const [promotionCode, setPromotionCode] = useState("");
+  const [promotionMessage, setPromotionMessage] = useState("");
+  const [promotionBusy, setPromotionBusy] = useState(false);
+  const activeGenerationIdRef = useRef<string | null>(null);
   const [imageRenderNonce, setImageRenderNonce] = useState(0);
   const [robloxMe, setRobloxMe] = useState<RobloxMe | null>(null);
   useEffect(() => {
@@ -349,7 +369,8 @@ export default function Create() {
         else if (response.data.status === "UNSUPPORTED") setLifecycle("unsupported");
         else setLifecycle("external_verification_required");
         if (response.data.defects?.length) setAiError(response.data.defects.join(" · "));
-      } catch { if (!cancelled) setLifecycle("external_verification_required"); }
+        void apiGet<GenerationEntitlementSummary>("/entitlements/generation-summary").then(setGenerationCredits).catch(() => undefined);
+      } catch { if (!cancelled) setLifecycle("external_verification_required"); void apiGet<GenerationEntitlementSummary>("/entitlements/generation-summary").then(setGenerationCredits).catch(() => undefined); }
     })();
     return () => { cancelled = true; };
   }, [canonicalSpec, geometryState, previewTexture]);
@@ -394,6 +415,7 @@ export default function Create() {
     } catch {
       /* ignore – status is informational */
     }
+    try { setGenerationCredits(await apiGet<GenerationEntitlementSummary>("/entitlements/generation-summary")); } catch { setGenerationCredits(null); }
   }, []);
 
   const refreshRobloxMe = useCallback(async () => {
@@ -403,6 +425,19 @@ export default function Create() {
       /* ignore – login is optional */
     }
   }, []);
+
+  const redeemPromotion = async () => {
+    if (!promotionCode.trim() || promotionBusy) return;
+    setPromotionBusy(true);
+    const response = await apiPost("/promotions/redeem", {
+      code: promotionCode,
+      idempotencyKey: await promotionRequestKey(promotionCode),
+      selectedMode: generationMode === "2D" ? "TWO_D" : "THREE_D",
+    });
+    setPromotionMessage(response.status === 200 ? "Your free skin credit is ready." : "This code cannot be used.");
+    if (response.status === 200) { setPromotionCode(""); await refreshStatus(); }
+    setPromotionBusy(false);
+  };
 
   // Upload the whole outfit straight to the logged-in Roblox account.
   // Returns a status message; falls back to manual downloads if anything fails.
@@ -526,7 +561,11 @@ export default function Create() {
     setOutfitItems(null);
     setUndoStack([]); // a brand-new skin starts a fresh history
     try {
-      const rawResponse = await aiGenerateDesign({ prompt: usedPrompt, itemType: "classic_shirt", style: "AI velger", theme: usedPrompt }) as unknown as { result: unknown; outfitSpec?: unknown; creativeDirection?: unknown; lifecycle?: CanonicalLifecycle };
+      const generationId = crypto.randomUUID();
+      activeGenerationIdRef.current = generationId;
+      const start = await apiPost<unknown>("/ai/generate", { prompt: usedPrompt, itemType: "classic_shirt", style: "AI velger", theme: usedPrompt, clientRequestId: crypto.randomUUID(), generationId, idempotencyKey: crypto.randomUUID(), requestedMode: generationMode });
+      if (start.status !== 200) { const issue = start.data as { code?: string; message?: string }; const error = new Error(issue.message ?? "generation failed") as Error & { status?:number; code?:string }; error.status=start.status; error.code=issue.code; throw error; }
+      const rawResponse = start.data as { result: unknown; outfitSpec?: unknown; creativeDirection?: unknown; lifecycle?: CanonicalLifecycle };
       setLifecycle("validating");
       // Join the API's selected direction to canonical state before projecting it
       // into Three.js; otherwise creative intelligence is response-only metadata.
@@ -646,7 +685,7 @@ export default function Create() {
       // Apply outfit accessories and hair if available
       if (outfit) {
         const unsupportedItems: string[] = [...(outfit.unsupported ?? [])];
-        
+
         // Hair mapping
         if (outfit.hair.style !== "none") {
           const hairAssetId = HAIR_ASSET_MAP[outfit.hair.style];
@@ -756,9 +795,9 @@ export default function Create() {
       setAiPhase(t.phaseDrawing);
       const skipped = { status: 0, data: {} as { imageUrl?: string } };
       const [top, bottom, hero] = await Promise.all([
-        wantsTop ? apiPost<{ imageUrl?: string }>("/ai/hero-image", { prompt: (outfit.topDescription ?? usedPrompt).slice(0, 600), kind: "garment-top" }) : Promise.resolve(skipped),
-        wantsBottom ? apiPost<{ imageUrl?: string }>("/ai/hero-image", { prompt: (outfit.bottomDescription ?? usedPrompt).slice(0, 600), kind: "garment-bottom" }) : Promise.resolve(skipped),
-        wantsMotif ? apiPost<{ imageUrl?: string }>("/ai/hero-image", { prompt: usedPrompt }) : Promise.resolve(skipped),
+        wantsTop ? apiPost<{ imageUrl?: string }>("/ai/hero-image", { generationId, prompt: (outfit.topDescription ?? usedPrompt).slice(0, 600), kind: "garment-top" }) : Promise.resolve(skipped),
+        wantsBottom ? apiPost<{ imageUrl?: string }>("/ai/hero-image", { generationId, prompt: (outfit.bottomDescription ?? usedPrompt).slice(0, 600), kind: "garment-bottom" }) : Promise.resolve(skipped),
+        wantsMotif ? apiPost<{ imageUrl?: string }>("/ai/hero-image", { generationId, prompt: usedPrompt }) : Promise.resolve(skipped),
       ]);
 
       const topUrl = top.status === 200 ? top.data.imageUrl : undefined;
@@ -815,6 +854,7 @@ export default function Create() {
         setAiError(t.errGeneric);
       }
     } finally {
+      void refreshStatus();
       generateLockRef.current = false;
       setAiLoading(false);
       setAiPhase("");
@@ -855,6 +895,10 @@ export default function Create() {
         style: "AI velger",
         theme: text,
         previousOutfit: lastOutfit,
+        clientRequestId: crypto.randomUUID(),
+        generationId: crypto.randomUUID(),
+        idempotencyKey: crypto.randomUUID(),
+        requestedMode: generationMode,
       });
       if (res.status !== 200) {
         const err = new Error(`revise failed ${res.status}`) as Error & { status?: number; code?: string };
@@ -924,8 +968,8 @@ export default function Create() {
         setAiPhase(t.phaseDrawingNew);
         const skipped = { status: 0, data: {} as { imageUrl?: string } };
         const [top, bottom] = await Promise.all([
-          topChanged && outfit.top !== "none" ? apiPost<{ imageUrl?: string }>("/ai/hero-image", { prompt: (outfit.topDescription ?? combinedPrompt).slice(0, 600), kind: "garment-top" }) : Promise.resolve(skipped),
-          bottomChanged && outfit.bottom !== "none" ? apiPost<{ imageUrl?: string }>("/ai/hero-image", { prompt: (outfit.bottomDescription ?? combinedPrompt).slice(0, 600), kind: "garment-bottom" }) : Promise.resolve(skipped),
+          topChanged && outfit.top !== "none" ? apiPost<{ imageUrl?: string }>("/ai/hero-image", { generationId: candidateSpec.generationId, prompt: (outfit.topDescription ?? combinedPrompt).slice(0, 600), kind: "garment-top" }) : Promise.resolve(skipped),
+          bottomChanged && outfit.bottom !== "none" ? apiPost<{ imageUrl?: string }>("/ai/hero-image", { generationId: candidateSpec.generationId, prompt: (outfit.bottomDescription ?? combinedPrompt).slice(0, 600), kind: "garment-bottom" }) : Promise.resolve(skipped),
         ]);
         if (topChanged) {
           for (const layer of layersNow().filter((l) => l.name === "AI-overdel")) deleteLayer(layer.id);
@@ -1215,7 +1259,7 @@ export default function Create() {
               </div>
             </div>
           )}
-          
+
           {canonicalSpec && <div data-testid="canonical-result" data-generation-id={canonicalSpec.generationId} data-item-ids={canonicalSpec.items.map(item => item.id).join(",")} data-lifecycle={lifecycle} className="text-center text-sm font-semibold text-slate-600">{lifecycle === "complete" ? "✨ Klar!" : lifecycle === "unsupported" ? "Denne ideen kan vi ikke vise ennå." : lifecycle === "external_verification_required" ? "Vi må sjekke denne litt ekstra." : aiPhase}</div>}
           {canonicalSpec && <div data-testid="geometry-acceptance" data-state={geometryState} className="sr-only">{geometryState === "geometry_accepted" ? "Your outfit is ready." : geometryState === "geometry_limited" || geometryState === "geometry_rejected" ? "This part could not be shown correctly." : "I’m checking the outfit."}</div>}
           {outfitItems && (
@@ -1255,7 +1299,7 @@ export default function Create() {
                   </div>
                 </div>
               )}
-              
+
               {outfitItems.previewOnly.length > 0 && (
                 <div>
                   <div className="flex items-center gap-2 mb-2">
@@ -1272,7 +1316,7 @@ export default function Create() {
                   </div>
                 </div>
               )}
-              
+
               {outfitItems.unsupported.length > 0 && (
                 <div>
                   <div className="flex items-center gap-2 mb-2">
@@ -1419,11 +1463,21 @@ export default function Create() {
                 className="h-12 bg-slate-900 border-slate-700 text-base"
                 disabled={aiLoading}
               />
-              <Button type="submit" size="lg" className="h-12 px-6" disabled={aiLoading || !prompt.trim()}>
+              <div className="flex gap-1" aria-label="Preview type"><Button type="button" variant={generationMode === "2D" ? "default" : "outline"} onClick={() => setGenerationMode("2D")}>2D</Button><Button type="button" variant={generationMode === "3D" ? "default" : "outline"} onClick={() => setGenerationMode("3D")}>3D</Button></div>
+              <Button type="submit" size="lg" className="h-12 px-6" disabled={aiLoading || !prompt.trim() || generationCredits?.canGenerate[generationMode] === false}>
                 <Sparkles className="mr-2 h-5 w-5" />
                 {t.createButton}
               </Button>
             </form>
+            {generationCredits ? <p className="mt-2 text-center text-sm text-slate-300" data-testid="generation-credit-message">{generationCredits.freeFirst === "available" ? "Your first skin is free." : generationCredits.availableGenerationCredits[generationMode] > 0 ? `You have ${generationCredits.availableGenerationCredits[generationMode]} skins left.` : generationCredits.currentlyReserved > 0 ? "We are fixing your skin. You will not be charged again." : "You need more skin credits."}</p> : null}
+            <div className="mt-4 rounded-xl border border-slate-700 p-3">
+              <label htmlFor="promotion-code" className="mb-2 block text-sm font-semibold text-slate-200">Do you have a code?</label>
+              <div className="flex gap-2">
+                <Input id="promotion-code" value={promotionCode} onChange={(event) => setPromotionCode(event.target.value)} maxLength={80} autoComplete="off" />
+                <Button type="button" onClick={() => void redeemPromotion()} disabled={promotionBusy || !promotionCode.trim()}>Use code</Button>
+              </div>
+              {promotionMessage ? <p className="mt-2 text-sm text-slate-300" role="status">{promotionMessage}</p> : null}
+            </div>
           </details>
         </section>
       </div>

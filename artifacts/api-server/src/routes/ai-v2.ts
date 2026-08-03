@@ -22,6 +22,10 @@ import {
   visualDesignReviewSchema,
   visualReviewRequestSchema,
 } from "../lib/visual-design-review";
+import {
+  EntitlementError,
+  generationEntitlements,
+} from "../lib/generation-entitlements";
 
 const router: IRouter = Router();
 
@@ -53,7 +57,25 @@ function schema422(req: any, res: any, err: z.ZodError | SyntaxError) {
 }
 
 router.post("/ai/generate", async (req, res): Promise<void> => {
-  const authed = req.isAuthenticated();
+  const requestId = String(
+    req.id ?? req.headers["x-request-id"] ?? "request-unknown",
+  );
+  if (!req.isAuthenticated()) {
+    res
+      .status(401)
+      .json(
+        new EntitlementError(
+          "AUTH_REQUIRED",
+          requestId,
+          req.body?.generationId,
+          "authentication",
+          false,
+          "Please sign in to make your first skin.",
+          "SESSION_REQUIRED",
+        ).toJSON(),
+      );
+    return;
+  }
   const parsed = aiGenerateRequestSchema.safeParse(req.body);
   if (!parsed.success) {
     res
@@ -61,21 +83,131 @@ router.post("/ai/generate", async (req, res): Promise<void> => {
       .json({ error: "Invalid request", details: parsed.error.flatten() });
     return;
   }
+  if (
+    !parsed.data.clientRequestId ||
+    !parsed.data.generationId ||
+    !parsed.data.idempotencyKey ||
+    !parsed.data.requestedMode
+  ) {
+    res
+      .status(400)
+      .json({
+        code: "CREDIT_RESERVATION_FAILED",
+        requestId,
+        generationId: parsed.data.generationId,
+        stage: "validation",
+        retryable: false,
+        message: "This skin request is missing safe request details.",
+        diagnosticCode: "MISSING_IDEMPOTENCY_FIELDS",
+      });
+    return;
+  }
 
   try {
-    const result = await aiGenerationService.generateDesign(
-      authed ? getUserId(req) : null,
-      parsed.data,
-    );
-    res.json(result);
-  } catch (err) {
-    if (err instanceof z.ZodError) {
-      req.log.error({ issues: err.issues }, "ai.v2.generate.schema_invalid");
+    await generationEntitlements.ensureFreeFirstEntitlement(getUserId(req));
+    const reservation = await generationEntitlements.reserveGenerationCredit({
+      userId: getUserId(req),
+      clientRequestId: parsed.data.clientRequestId,
+      idempotencyKey: parsed.data.idempotencyKey,
+      generationId: parsed.data.generationId,
+      requestedMode: parsed.data.requestedMode,
+      requestId,
+    });
+    if (reservation.existing) {
+      const replay = await generationEntitlements.getGenerationReplay(
+        getUserId(req),
+        parsed.data.generationId,
+      );
+      if (replay?.state === "COMPLETED") {
+        res.json(replay.response);
+        return;
+      }
+      if (replay?.state === "FAILED") {
+        res.status(422).json(replay.safeError);
+        return;
+      }
+      res
+        .status(409)
+        .json(
+          new EntitlementError(
+            "GENERATION_IN_PROGRESS",
+            requestId,
+            parsed.data.generationId,
+            "generation",
+            true,
+            "Your skin is still being made.",
+            "RESERVATION_ALREADY_ACTIVE",
+          ).toJSON(),
+        );
+      return;
     }
-    if (err instanceof z.ZodError || err instanceof SyntaxError)
-      return schema422(req, res, err);
+    const result = await aiGenerationService.generateDesign(
+      getUserId(req),
+      parsed.data,
+      parsed.data.generationId,
+    );
+    if (result.finalSkinStatus === "UNSUPPORTED") {
+      await generationEntitlements.releaseGenerationCredit(
+        getUserId(req),
+        parsed.data.generationId,
+        "UNSUPPORTED",
+        requestId,
+      );
+    }
+    const response = {
+      ...result,
+      reservationId: reservation.reservationId,
+      requestedMode: parsed.data.requestedMode,
+    };
+    await generationEntitlements.completeGeneration(
+      getUserId(req),
+      parsed.data.generationId,
+      response,
+    );
+    res.json(response);
+  } catch (err) {
+    if (err instanceof EntitlementError) {
+      res
+        .status(err.code === "NO_GENERATION_CREDITS" ? 402 : 409)
+        .json(err.toJSON());
+      return;
+    }
+    await generationEntitlements
+      .releaseGenerationCredit(
+        getUserId(req),
+        parsed.data.generationId,
+        err instanceof z.ZodError ? "INVALID_SCHEMA" : "PROVIDER_FAILURE",
+        requestId,
+      )
+      .catch(() => undefined);
+    const safeError = {
+      code: "GENERATION_FAILED",
+      requestId,
+      generationId: parsed.data.generationId,
+      stage:
+        err instanceof z.ZodError || err instanceof SyntaxError
+          ? "structured_validation"
+          : "provider",
+      retryable: true,
+      message: "This try did not use a credit. Please try again.",
+      diagnosticCode:
+        err instanceof z.ZodError
+          ? "INVALID_GENERATION_SCHEMA"
+          : err instanceof SyntaxError
+            ? "INVALID_PROVIDER_OUTPUT"
+            : "GENERATION_PROVIDER_FAILED",
+    };
+    await generationEntitlements
+      .failGeneration(getUserId(req), parsed.data.generationId, safeError)
+      .catch(() => undefined);
+    if (err instanceof z.ZodError)
+      req.log.error({ issues: err.issues }, "ai.v2.generate.schema_invalid");
     req.log.error({ err }, "ai.v2.generate.failed");
-    res.status(500).json({ error: "AI generation failed" });
+    res
+      .status(
+        err instanceof z.ZodError || err instanceof SyntaxError ? 422 : 502,
+      )
+      .json(safeError);
   }
 });
 
@@ -83,16 +215,35 @@ router.post("/ai/visual-review", async (req, res): Promise<void> => {
   if (!ensureAuthenticated(req, res)) return;
   const parsed = visualReviewRequestSchema.safeParse(req.body);
   if (!parsed.success) {
-    res
-      .status(400)
-      .json({
-        error: "Invalid visual review request",
-        details: parsed.error.flatten(),
-      });
+    res.status(400).json({
+      error: "Invalid visual review request",
+      details: parsed.error.flatten(),
+    });
     return;
   }
 
   try {
+    const requestId = String(req.id ?? "request-unknown");
+    const reservation = await generationEntitlements.getReservationByGeneration(
+      getUserId(req),
+      parsed.data.generationId,
+    );
+    if (!reservation || reservation.status !== "ACTIVE") {
+      res
+        .status(409)
+        .json(
+          new EntitlementError(
+            "GENERATION_ALREADY_EXISTS",
+            requestId,
+            parsed.data.generationId,
+            "visual_review",
+            false,
+            "This skin cannot be reviewed again.",
+            "NO_ACTIVE_RESERVATION",
+          ).toJSON(),
+        );
+      return;
+    }
     const completion = await openai.chat.completions.create({
       model: "gpt-5.2",
       max_completion_tokens: 4_096,
@@ -115,6 +266,22 @@ router.post("/ai/visual-review", async (req, res): Promise<void> => {
       content.match(/```(?:json)?\s*([\s\S]*?)\s*```/i)?.[1] ?? content;
     const review = visualDesignReviewSchema.parse(JSON.parse(json));
     const gate = decideVisualReview(review, parsed.data.attempt);
+    if (gate.status === "READY")
+      await generationEntitlements.captureGenerationCredit(
+        getUserId(req),
+        parsed.data.generationId,
+        requestId,
+      );
+    else if (
+      ["UNSUPPORTED", "MANUAL_REVIEW"].includes(gate.status) ||
+      (gate.status === "NEEDS_REPAIR" && parsed.data.attempt >= 2)
+    )
+      await generationEntitlements.releaseGenerationCredit(
+        getUserId(req),
+        parsed.data.generationId,
+        gate.status,
+        requestId,
+      );
     req.log.info(
       {
         generationId: parsed.data.generationId,
@@ -124,8 +291,26 @@ router.post("/ai/visual-review", async (req, res): Promise<void> => {
       },
       "ai.visual_review.completed",
     );
-    res.json({ generationId: parsed.data.generationId, status: gate.status, defects: gate.defects, repairs: gate.repairs, review });
+    res.json({
+      generationId: parsed.data.generationId,
+      status: gate.status,
+      defects: gate.defects,
+      repairs: gate.repairs,
+      review,
+    });
   } catch (err) {
+    await generationEntitlements
+      .releaseGenerationCredit(
+        getUserId(req),
+        parsed.data.generationId,
+        "EXTERNAL_VERIFICATION_UNAVAILABLE",
+        String(req.id ?? "request-unknown"),
+      )
+      .catch(() => undefined);
+    if (err instanceof EntitlementError) {
+      res.status(409).json(err.toJSON());
+      return;
+    }
     if (err instanceof z.ZodError || err instanceof SyntaxError)
       return schema422(req, res, err);
     req.log.error(
@@ -142,10 +327,12 @@ const heroImageRequestSchema = z.object({
     .enum(["motif", "fabric", "garment-top", "garment-bottom"])
     .optional()
     .default("motif"),
+  generationId: z.string().regex(/^[A-Za-z0-9:_-]{8,200}$/),
 });
 
 // Generates the actual artwork described in the prompt (gpt-image-1, transparent PNG).
 router.post("/ai/hero-image", async (req, res): Promise<void> => {
+  if (!ensureAuthenticated(req, res)) return;
   const parsed = heroImageRequestSchema.safeParse(req.body);
   if (!parsed.success) {
     res
@@ -155,6 +342,26 @@ router.post("/ai/hero-image", async (req, res): Promise<void> => {
   }
 
   try {
+    const reservation = await generationEntitlements.getReservationByGeneration(
+      getUserId(req),
+      parsed.data.generationId,
+    );
+    if (!reservation || reservation.status !== "ACTIVE") {
+      res
+        .status(402)
+        .json(
+          new EntitlementError(
+            "NO_GENERATION_CREDITS",
+            String(req.id ?? "request-unknown"),
+            parsed.data.generationId,
+            "image_generation",
+            false,
+            "You need more skin credits.",
+            "IMAGE_WITHOUT_ACTIVE_RESERVATION",
+          ).toJSON(),
+        );
+      return;
+    }
     const kind = parsed.data.kind;
     const isFabric = kind === "fabric";
     const isGarment = kind === "garment-top" || kind === "garment-bottom";
@@ -278,6 +485,34 @@ router.post("/ai/hero-image", async (req, res): Promise<void> => {
     res.status(500).json({ error: "Image generation failed" });
   }
 });
+
+// These former standalone provider entry points could bypass the logical-generation
+// reservation. Complete redesigns now start at /ai/generate; localized repair and
+// image work carry the original generationId through the protected endpoints.
+router.use(
+  [
+    "/ai/improve",
+    "/ai/remix",
+    "/ai/generate-idea",
+    "/ai/generate-modules",
+    "/ai/generate-palette",
+    "/ai/generate-layout",
+    "/ai/generate-stylized-outfit",
+  ],
+  (_req, res) => {
+    res.setHeader("Deprecation", "true");
+    res
+      .status(410)
+      .json({
+        code: "GENERATION_ALREADY_EXISTS",
+        message: "Start a new design with /api/ai/generate.",
+        stage: "route_migration",
+        retryable: false,
+        requestId: "deprecated-route",
+        diagnosticCode: "UNRESERVED_PROVIDER_ROUTE_DISABLED",
+      });
+  },
+);
 
 router.post("/ai/improve", async (req, res): Promise<void> => {
   if (!ensureAuthenticated(req, res)) return;

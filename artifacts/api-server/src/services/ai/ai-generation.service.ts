@@ -352,8 +352,9 @@ export class AiGenerationService {
     type: string,
     result: unknown,
     style: string | null = null,
+    requestedGenerationId?: string,
   ) {
-    const generationId = randomUUID();
+    const generationId = requestedGenerationId ?? randomUUID();
     // `prompt` is already the SafetyGateway-normalized safe form (the gateway
     // rewrites req.body in place). Store its hash + policy decision alongside.
     const decision = lookupDecision(prompt);
@@ -371,7 +372,7 @@ export class AiGenerationService {
     return generationId;
   }
 
-  async generateDesign(userId: string | null, input: GenerateInput) {
+  async generateDesign(userId: string | null, input: GenerateInput, requestedGenerationId?: string) {
     const creative = input.previousOutfit
       ? null
       : await this.createCreativeDirection(input);
@@ -507,6 +508,7 @@ export class AiGenerationService {
           "generate",
           design,
           input.style ?? null,
+          requestedGenerationId,
         )
       : randomUUID();
 

@@ -9,7 +9,7 @@
     "start": "node --enable-source-maps ./dist/index.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "tsx --test src/lib/*.test.ts",
-    "test:integration": "tsx --test src/lib/clothing-pipeline.test.ts src/lib/roblox-publish-pipeline.test.ts src/lib/roblox-upload.test.ts"
+    "test:integration": "tsx --test src/lib/clothing-pipeline.test.ts src/lib/roblox-publish-pipeline.test.ts src/lib/roblox-upload.test.ts src/lib/internal-promotions.integration.test.ts"
   },
   "dependencies": {
     "@google-cloud/storage": "^7.21.0",
