@@ -1,0 +1,30 @@
+name: My Skins staging provider verification
+
+on:
+  workflow_dispatch:
+
+jobs:
+  real-provider-review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: staging
+    env:
+      RUN_STAGING_VISUAL_REVIEW: "true"
+      STAGING_BASE_URL: ${{ secrets.STAGING_BASE_URL }}
+      STAGING_SESSION_COOKIE: ${{ secrets.STAGING_SESSION_COOKIE }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.1
+          run_install: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+      - name: Require staging secrets
+        run: test -n "$STAGING_BASE_URL" && test -n "$STAGING_SESSION_COOKIE"
+      - name: Run real-provider visual review
+        run: pnpm exec playwright test --config=playwright.staging.config.ts
