@@ -6,14 +6,14 @@
 
 ## 2. Audited generation entry points / protection map
 
-| Route | Caller | Expensive call | Auth | Entitlement | Action |
-|---|---|---:|---:|---:|---|
-| `POST /api/ai/generate` | `Create.tsx` | text model/concept/repair | yes | reserve first | canonical new generation |
-| `POST /api/ai/hero-image` | `Create.tsx` materialization | image + moderation model | yes | active generation required | included in original reservation |
-| `POST /api/ai/visual-review` | five-view Create effect | vision model | yes | active generation required | capture only READY; release terminal/unavailable |
-| improve/remix/idea/modules/palette/layout/stylized | legacy clients | text model | formerly inconsistent | no safe binding | provider handlers isolated with 410; redesign uses canonical start |
-| generate-outfit/remix-outfit | mounted legacy router | none (already 410) | yes | not applicable | remain deprecated |
-| history | Create/diagnostics | none | yes | no | read-only |
+| Route                                              | Caller                       |            Expensive call |                  Auth |                Entitlement | Action                                                             |
+| -------------------------------------------------- | ---------------------------- | ------------------------: | --------------------: | -------------------------: | ------------------------------------------------------------------ |
+| `POST /api/ai/generate`                            | `Create.tsx`                 | text model/concept/repair |                   yes |              reserve first | canonical new generation                                           |
+| `POST /api/ai/hero-image`                          | `Create.tsx` materialization |  image + moderation model |                   yes | active generation required | included in original reservation                                   |
+| `POST /api/ai/visual-review`                       | five-view Create effect      |              vision model |                   yes | active generation required | capture only READY; release terminal/unavailable                   |
+| improve/remix/idea/modules/palette/layout/stylized | legacy clients               |                text model | formerly inconsistent |            no safe binding | provider handlers isolated with 410; redesign uses canonical start |
+| generate-outfit/remix-outfit                       | mounted legacy router        |        none (already 410) |                   yes |             not applicable | remain deprecated                                                  |
+| history                                            | Create/diagnostics           |                      none |                   yes |                         no | read-only                                                          |
 
 Trace: Create creates server-safe correlation identifiers → `/api/ai/generate` validates/authenticates → serializable reservation → `AiGenerationService` → model provider → protected hero images → external visual review → READY capture or release.
 
@@ -31,7 +31,7 @@ Generation validates safe 8–200 character correlation keys. Under `SERIALIZABL
 
 Only external-review categorical `READY` appends CAPTURE. Unsupported results, provider/schema failures and external-review unavailability release. Terminal review states release; nonterminal repairs keep and reuse the reservation. Finalization locks the reservation and is idempotent, so duplicate capture/release cannot cross-finalize. Reservations expire after 15 minutes; `reconcileAbandonedReservations` releases expired active records with a safe reason. Deployment must schedule this method from its task runner (known limitation below).
 
-Unique keys plus row locking prevent concurrent free grants, request replay, double reservation and duplicate finalization. A repeated active request returns `GENERATION_IN_PROGRESS` without a provider call.
+Unique keys plus row locking prevent concurrent free grants, request replay, double reservation and duplicate finalization. A repeated active request returns `GENERATION_IN_PROGRESS` without a provider call. Completed and failed responses are persisted in `generation_request_results`, so a replay after refresh or server restart returns the original safe outcome without reserving or invoking providers again.
 
 ## 15. Protected routes and providers
 
@@ -45,16 +45,15 @@ Server feature flags default Stripe purchase, Roblox OAuth, Roblox delivery, Mar
 
 ## 19–21. Test results
 
-Implementation run: frozen install, typecheck, unit (219 passing across API and UI), repository integration (23 passing), combined test, package build, application build, Playwright discovery (7 tests) and diff checks passed. Playwright execution could not start its five deterministic Chromium tests because the managed Chromium executable was absent; installation was attempted and all configured CDN mirrors returned HTTP 403. The real-provider staging case was correctly skipped by configuration. CI installs Chromium with dependencies and executes the same suite. Normal PR tests do not invoke live AI.
+Implementation run: frozen install, typecheck, unit (222 passing across API and UI), repository integration (23 passing), combined test, package build, application build, Playwright discovery (7 tests) and diff checks passed. Playwright execution could not start its six deterministic Chromium tests because the managed Chromium executable was absent; installation was attempted and all configured CDN mirrors returned HTTP 403. The real-provider staging case was correctly skipped by configuration. CI installs Chromium with dependencies and executes the same suite. Normal PR tests do not invoke live AI.
 
 ## 22. Known limitations
 
-* The reconciler method is implemented but must be connected to the deployment scheduler/startup task.
-* A replay while work is active is provider-safe and returns in-progress; durable replay of the complete prior HTTP payload after process loss still needs a generation-response projection.
-* Database-backed concurrency/integration coverage requires the deployment PostgreSQL harness; repository integration tests in this environment do not apply migration `0006` against a live PostgreSQL instance.
-* Local screenshot evidence could not be refreshed because Chromium was unavailable and browser downloads were denied with HTTP 403; CI is configured to install and run Chromium.
-* The current visual pipeline normally categorizes structural output as `NEEDS_REPAIR`; therefore free credits release unless real external review reaches READY.
-* This does not close unrelated P0/P1 launch blockers and does not make the product launch-ready.
+- The reconciler method is implemented but must be connected to the deployment scheduler/startup task.
+- Database-backed concurrency/integration coverage requires the deployment PostgreSQL harness; repository integration tests in this environment do not apply migration `0006` against a live PostgreSQL instance.
+- Local screenshot evidence could not be refreshed because Chromium was unavailable and browser downloads were denied with HTTP 403; CI is configured to install and run Chromium.
+- The current visual pipeline normally categorizes structural output as `NEEDS_REPAIR`; therefore free credits release unless real external review reaches READY.
+- This does not close unrelated P0/P1 launch blockers and does not make the product launch-ready.
 
 ## 23. Commit
 

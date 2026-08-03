@@ -57,6 +57,22 @@ CREATE TABLE generation_credit_reservations (
 CREATE UNIQUE INDEX generation_one_active_reservation ON generation_credit_reservations(generation_id) WHERE status='ACTIVE';
 CREATE UNIQUE INDEX generation_request_once_per_user ON generation_credit_reservations(user_id, client_request_id);
 
+-- Durable idempotency projection. The provider response is stored outside the
+-- accounting ledger so replay never adds transactions or invokes a provider.
+CREATE TABLE generation_request_results (
+  generation_id text PRIMARY KEY REFERENCES generation_credit_reservations(generation_id) ON DELETE RESTRICT,
+  user_id varchar NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+  state text NOT NULL CHECK (state IN ('IN_PROGRESS','COMPLETED','FAILED')),
+  response jsonb,
+  safe_error jsonb,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  completed_at timestamptz,
+  CHECK ((state='IN_PROGRESS' AND response IS NULL AND safe_error IS NULL AND completed_at IS NULL) OR
+         (state='COMPLETED' AND response IS NOT NULL AND safe_error IS NULL AND completed_at IS NOT NULL) OR
+         (state='FAILED' AND response IS NULL AND safe_error IS NOT NULL AND completed_at IS NOT NULL))
+);
+CREATE INDEX generation_request_results_user_idx ON generation_request_results(user_id, created_at DESC);
+
 -- Ledger rows are immutable. Corrections are appended as reversal transactions.
 CREATE FUNCTION reject_entitlement_mutation() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN
   RAISE EXCEPTION 'entitlement ledger is append-only';
