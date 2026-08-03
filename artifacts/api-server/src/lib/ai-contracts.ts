@@ -195,6 +195,10 @@ export const aiGenerateRequestSchema = z.object({
   // Revision mode: the previous outfit plan. When present, `prompt` is a change
   // request («gjør vingene større») and the AI must only patch the mentioned fields.
   previousOutfit: aiOutfitSchema.optional(),
+  clientRequestId: z.string().regex(/^[A-Za-z0-9:_-]{8,200}$/).optional(),
+  generationId: z.string().regex(/^[A-Za-z0-9:_-]{8,200}$/).optional(),
+  idempotencyKey: z.string().regex(/^[A-Za-z0-9:_-]{8,200}$/).optional(),
+  requestedMode: z.enum(["2D", "3D"]).optional(),
 }).strict();
 
 export const stylizedOutfitPieceSchema = z.object({

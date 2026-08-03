@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { aiGenerateDesign } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Cat, Crown, Fish, Flame, Gamepad2, Loader2, Mountain, Rocket, Shield, Skull, Sparkles, Trophy, Undo2, Upload, UserRound } from "lucide-react";
@@ -90,6 +89,7 @@ function readPendingRobloxDelivery(): OutfitFiles | null {
 }
 
 type SkinStatus = { remainingFree: number; freeLimit: number; paidCredits: number };
+type GenerationEntitlementSummary = { freeFirst: "available"|"reserved"|"consumed"|"unavailable"; availableGenerationCredits: { "2D": number; "3D": number }; currentlyReserved: number; canGenerate: { "2D": boolean; "3D": boolean } };
 
 async function apiGet<T>(path: string): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, { credentials: "include" });
@@ -325,6 +325,9 @@ export default function Create() {
   const [uploadStatus, setUploadStatus] = useState<string>("");
   const [uploadBusy, setUploadBusy] = useState(false);
   const [skinStatus, setSkinStatus] = useState<SkinStatus | null>(null);
+  const [generationCredits, setGenerationCredits] = useState<GenerationEntitlementSummary | null>(null);
+  const [generationMode, setGenerationMode] = useState<"2D"|"3D">("3D");
+  const activeGenerationIdRef = useRef<string | null>(null);
   const [imageRenderNonce, setImageRenderNonce] = useState(0);
   const [robloxMe, setRobloxMe] = useState<RobloxMe | null>(null);
   useEffect(() => {
@@ -349,7 +352,8 @@ export default function Create() {
         else if (response.data.status === "UNSUPPORTED") setLifecycle("unsupported");
         else setLifecycle("external_verification_required");
         if (response.data.defects?.length) setAiError(response.data.defects.join(" · "));
-      } catch { if (!cancelled) setLifecycle("external_verification_required"); }
+        void apiGet<GenerationEntitlementSummary>("/entitlements/generation-summary").then(setGenerationCredits).catch(() => undefined);
+      } catch { if (!cancelled) setLifecycle("external_verification_required"); void apiGet<GenerationEntitlementSummary>("/entitlements/generation-summary").then(setGenerationCredits).catch(() => undefined); }
     })();
     return () => { cancelled = true; };
   }, [canonicalSpec, geometryState, previewTexture]);
@@ -394,6 +398,7 @@ export default function Create() {
     } catch {
       /* ignore – status is informational */
     }
+    try { setGenerationCredits(await apiGet<GenerationEntitlementSummary>("/entitlements/generation-summary")); } catch { setGenerationCredits(null); }
   }, []);
 
   const refreshRobloxMe = useCallback(async () => {
@@ -526,7 +531,11 @@ export default function Create() {
     setOutfitItems(null);
     setUndoStack([]); // a brand-new skin starts a fresh history
     try {
-      const rawResponse = await aiGenerateDesign({ prompt: usedPrompt, itemType: "classic_shirt", style: "AI velger", theme: usedPrompt }) as unknown as { result: unknown; outfitSpec?: unknown; creativeDirection?: unknown; lifecycle?: CanonicalLifecycle };
+      const generationId = crypto.randomUUID();
+      activeGenerationIdRef.current = generationId;
+      const start = await apiPost<unknown>("/ai/generate", { prompt: usedPrompt, itemType: "classic_shirt", style: "AI velger", theme: usedPrompt, clientRequestId: crypto.randomUUID(), generationId, idempotencyKey: crypto.randomUUID(), requestedMode: generationMode });
+      if (start.status !== 200) { const issue = start.data as { code?: string; message?: string }; const error = new Error(issue.message ?? "generation failed") as Error & { status?:number; code?:string }; error.status=start.status; error.code=issue.code; throw error; }
+      const rawResponse = start.data as { result: unknown; outfitSpec?: unknown; creativeDirection?: unknown; lifecycle?: CanonicalLifecycle };
       setLifecycle("validating");
       // Join the API's selected direction to canonical state before projecting it
       // into Three.js; otherwise creative intelligence is response-only metadata.
@@ -756,9 +765,9 @@ export default function Create() {
       setAiPhase(t.phaseDrawing);
       const skipped = { status: 0, data: {} as { imageUrl?: string } };
       const [top, bottom, hero] = await Promise.all([
-        wantsTop ? apiPost<{ imageUrl?: string }>("/ai/hero-image", { prompt: (outfit.topDescription ?? usedPrompt).slice(0, 600), kind: "garment-top" }) : Promise.resolve(skipped),
-        wantsBottom ? apiPost<{ imageUrl?: string }>("/ai/hero-image", { prompt: (outfit.bottomDescription ?? usedPrompt).slice(0, 600), kind: "garment-bottom" }) : Promise.resolve(skipped),
-        wantsMotif ? apiPost<{ imageUrl?: string }>("/ai/hero-image", { prompt: usedPrompt }) : Promise.resolve(skipped),
+        wantsTop ? apiPost<{ imageUrl?: string }>("/ai/hero-image", { generationId, prompt: (outfit.topDescription ?? usedPrompt).slice(0, 600), kind: "garment-top" }) : Promise.resolve(skipped),
+        wantsBottom ? apiPost<{ imageUrl?: string }>("/ai/hero-image", { generationId, prompt: (outfit.bottomDescription ?? usedPrompt).slice(0, 600), kind: "garment-bottom" }) : Promise.resolve(skipped),
+        wantsMotif ? apiPost<{ imageUrl?: string }>("/ai/hero-image", { generationId, prompt: usedPrompt }) : Promise.resolve(skipped),
       ]);
 
       const topUrl = top.status === 200 ? top.data.imageUrl : undefined;
@@ -815,6 +824,7 @@ export default function Create() {
         setAiError(t.errGeneric);
       }
     } finally {
+      void refreshStatus();
       generateLockRef.current = false;
       setAiLoading(false);
       setAiPhase("");
@@ -855,6 +865,10 @@ export default function Create() {
         style: "AI velger",
         theme: text,
         previousOutfit: lastOutfit,
+        clientRequestId: crypto.randomUUID(),
+        generationId: crypto.randomUUID(),
+        idempotencyKey: crypto.randomUUID(),
+        requestedMode: generationMode,
       });
       if (res.status !== 200) {
         const err = new Error(`revise failed ${res.status}`) as Error & { status?: number; code?: string };
@@ -924,8 +938,8 @@ export default function Create() {
         setAiPhase(t.phaseDrawingNew);
         const skipped = { status: 0, data: {} as { imageUrl?: string } };
         const [top, bottom] = await Promise.all([
-          topChanged && outfit.top !== "none" ? apiPost<{ imageUrl?: string }>("/ai/hero-image", { prompt: (outfit.topDescription ?? combinedPrompt).slice(0, 600), kind: "garment-top" }) : Promise.resolve(skipped),
-          bottomChanged && outfit.bottom !== "none" ? apiPost<{ imageUrl?: string }>("/ai/hero-image", { prompt: (outfit.bottomDescription ?? combinedPrompt).slice(0, 600), kind: "garment-bottom" }) : Promise.resolve(skipped),
+          topChanged && outfit.top !== "none" ? apiPost<{ imageUrl?: string }>("/ai/hero-image", { generationId: candidateSpec.generationId, prompt: (outfit.topDescription ?? combinedPrompt).slice(0, 600), kind: "garment-top" }) : Promise.resolve(skipped),
+          bottomChanged && outfit.bottom !== "none" ? apiPost<{ imageUrl?: string }>("/ai/hero-image", { generationId: candidateSpec.generationId, prompt: (outfit.bottomDescription ?? combinedPrompt).slice(0, 600), kind: "garment-bottom" }) : Promise.resolve(skipped),
         ]);
         if (topChanged) {
           for (const layer of layersNow().filter((l) => l.name === "AI-overdel")) deleteLayer(layer.id);
@@ -1419,11 +1433,13 @@ export default function Create() {
                 className="h-12 bg-slate-900 border-slate-700 text-base"
                 disabled={aiLoading}
               />
-              <Button type="submit" size="lg" className="h-12 px-6" disabled={aiLoading || !prompt.trim()}>
+              <div className="flex gap-1" aria-label="Preview type"><Button type="button" variant={generationMode === "2D" ? "default" : "outline"} onClick={() => setGenerationMode("2D")}>2D</Button><Button type="button" variant={generationMode === "3D" ? "default" : "outline"} onClick={() => setGenerationMode("3D")}>3D</Button></div>
+              <Button type="submit" size="lg" className="h-12 px-6" disabled={aiLoading || !prompt.trim() || generationCredits?.canGenerate[generationMode] === false}>
                 <Sparkles className="mr-2 h-5 w-5" />
                 {t.createButton}
               </Button>
             </form>
+            {generationCredits ? <p className="mt-2 text-center text-sm text-slate-300" data-testid="generation-credit-message">{generationCredits.freeFirst === "available" ? "Your first skin is free." : generationCredits.availableGenerationCredits[generationMode] > 0 ? `You have ${generationCredits.availableGenerationCredits[generationMode]} skins left.` : generationCredits.currentlyReserved > 0 ? "We are fixing your skin. You will not be charged again." : "You need more skin credits."}</p> : null}
           </details>
         </section>
       </div>

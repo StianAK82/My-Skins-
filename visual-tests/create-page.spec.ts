@@ -177,6 +177,10 @@ async function installApiFixtures(
       });
       return;
     }
+    if (path === "/api/entitlements/generation-summary") {
+      await route.fulfill({ json: { freeFirst: "available", availableGenerationCredits: { "2D": 1, "3D": 1 }, currentlyReserved: 0, canGenerate: { "2D": true, "3D": true }, recentActivity: [] } });
+      return;
+    }
     if (path === "/api/auth/roblox/me") {
       await route.fulfill({ json: { loggedIn: false, configured: false } });
       return;
@@ -302,6 +306,16 @@ test("Create page loads with prompt presets and 3D preview canvas", async ({
     path: "test-results/screenshots/create-page.png",
     fullPage: true,
   });
+});
+
+test("free-first balance and 2D/3D choice use child-friendly server state", async ({ page }) => {
+  const api = await installApiFixtures(page);
+  await page.goto("/");
+  await expect(page.getByTestId("generation-credit-message")).toHaveText("Your first skin is free.");
+  const previewType = page.getByLabel("Preview type");
+  await expect(previewType.getByRole("button", { name: "2D" })).toBeVisible();
+  await expect(previewType.getByRole("button", { name: "3D" })).toBeVisible();
+  assertApiIsolation(api);
 });
 
 test("Create page works on a narrow mobile viewport", async ({ page }) => {
