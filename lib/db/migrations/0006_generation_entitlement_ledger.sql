@@ -29,7 +29,7 @@ CREATE TABLE entitlement_transactions (
   reversed_by_transaction_id uuid REFERENCES entitlement_transactions(transaction_id),
   metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
   CHECK (expires_at IS NULL OR expires_at > created_at),
-  CHECK (reversed_by_transaction_id IS NULL OR status = 'REVERSED'),
+  CHECK (reversed_by_transaction_id IS NULL OR transaction_type IN ('CHARGEBACK_REVERSAL','SUPPORT_ADJUSTMENT')),
   CHECK (octet_length(metadata::text) <= 4096)
 );
 CREATE UNIQUE INDEX entitlement_one_free_first_per_user ON entitlement_transactions(user_id) WHERE transaction_type='FREE_FIRST_SKIN';

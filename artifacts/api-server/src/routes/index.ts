@@ -13,6 +13,7 @@ import shareRouter from "./share";
 import paymentsRouter from "./payments";
 import billingRouter from "./billing";
 import entitlementsRouter from "./entitlements";
+import promotionsRouter from "./promotions";
 import { safetyGatewayMiddleware } from "../middlewares/safety-gateway.middleware";
 import { serverFeatureFlags } from "../lib/feature-flags";
 
@@ -45,5 +46,6 @@ router.use(shareRouter);
 router.use(paymentsRouter);
 router.use(billingRouter);
 router.use(entitlementsRouter);
+router.use(promotionsRouter);
 
 export default router;

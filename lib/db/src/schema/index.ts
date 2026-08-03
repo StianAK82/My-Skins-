@@ -23,3 +23,4 @@ export * from "./promo_codes";
 export * from "./promo_code_redemptions";
 export * from "./artifact_objects";
 export * from "./generation_entitlements";
+export * from "./internal_promotions";

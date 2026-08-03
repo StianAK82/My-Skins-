@@ -1,4 +1,7 @@
 import app from "./app";
+import { validateFeatureConfiguration } from "./lib/feature-flags";
+
+validateFeatureConfiguration();
 import { startAiRetentionSweeper } from "./lib/ai-retention";
 import { logger } from "./lib/logger";
 
